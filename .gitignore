@@ -1,0 +1,9 @@
+# ## Linux
+.*
+!.gitignore
+/dist/
+
+# ## Python
+*.py[cod]
+*.egg
+*.egg-info

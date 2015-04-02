@@ -1,0 +1,4 @@
+include AUTHORS
+include cli/koji-containerbuild.conf
+include LICENSE
+include docs/schema.sql

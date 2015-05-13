@@ -5,7 +5,7 @@
 
 Name:           koji-containerbuild
 Version:        0.1.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
 
@@ -92,5 +92,9 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed May 13 2015 Pavol Babincak <pbabinca@redhat.com> 0.1.0-2
+- Bump Release instead of Version (pbabinca@redhat.com)
+- Use BuildArch noarch (pbabinca@redhat.com)
+
 * Mon May 04 2015 Pavol Babincak <pbabinca@redhat.com> 0.1.0-1
 - first public release

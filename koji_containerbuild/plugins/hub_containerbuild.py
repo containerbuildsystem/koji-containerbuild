@@ -38,6 +38,17 @@ logger = logging.getLogger('koji.plugins')
 
 @export
 def buildContainer(src, target, opts=None, priority=None, channel='container'):
+    """Create a container build task
+
+    target: the build target
+    priority: the amount to increase (or decrease) the task priority, relative
+              to the default priority; higher values mean lower priority; only
+              admins have the right to specify a negative priority here
+    channel: the channel to allocate the task to (defaults to the "container"
+             channel)
+
+    Returns the task ID
+    """
     if not opts:
         opts = {}
     taskOpts = {}

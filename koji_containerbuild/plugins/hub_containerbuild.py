@@ -37,7 +37,7 @@ logger = logging.getLogger('koji.plugins')
 
 
 @export
-def buildContainer(src, target, opts=None, priority=None, channel=None):
+def buildContainer(src, target, opts=None, priority=None, channel='container'):
     if not opts:
         opts = {}
     taskOpts = {}

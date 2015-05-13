@@ -4,8 +4,8 @@
 %define module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.1.0
-Release:        2%{?dist}
+Version:        0.1.1
+Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
 
@@ -92,6 +92,11 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed May 13 2015 Pavol Babincak <pbabinca@redhat.com> 0.1.1-1
+- Documentation for buildContainer task (pbabinca@redhat.com)
+- In buildContainer task use "container" channel by default
+  (pbabinca@redhat.com)
+
 * Wed May 13 2015 Pavol Babincak <pbabinca@redhat.com> 0.1.0-2
 - Bump Release instead of Version (pbabinca@redhat.com)
 - Use BuildArch noarch (pbabinca@redhat.com)

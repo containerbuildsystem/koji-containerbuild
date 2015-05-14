@@ -30,7 +30,9 @@ import koji
 from koji.context import context
 from koji.plugin import export, export_in
 
-kojihub = inspect.getmodule(sys._getframe(2)).kojihub
+sys.path.insert(0, '/usr/share/koji-hub/')
+import kojihub
+#kojihub = inspect.getmodule(sys._getframe(2)).kojihub
 
 #logger = logging.getLogger('koji.plugins.containerbuild')
 logger = logging.getLogger('koji.plugins')

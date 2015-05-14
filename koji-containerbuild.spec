@@ -13,6 +13,7 @@ License:        LGPLv2
 URL:            https://github.com/release-engineering/${name}
 Source0:        %{name}-%{version}.tar.gz
 BuildArch:      noarch
+BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildRequires:  python
 BuildRequires:  python-setuptools

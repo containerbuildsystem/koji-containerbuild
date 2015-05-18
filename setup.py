@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name="koji-containerbuild",
-    version="0.1.1",
+    version="0.1.2",
     author="Pavol Babincak",
     author_email="pbabinca@redhat.com",
     description="Container build support for Koji buildsystem",

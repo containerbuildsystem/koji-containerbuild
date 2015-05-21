@@ -73,7 +73,29 @@ class CreateContainerTask(BaseTaskHandler):
             assert self._osbs
         return self._osbs
 
-    def handler(self, src, target_info, build_tag, arch):
+
+    def _rpm_package_info(self, parts):
+        if len(parts) < 8:
+            self.logger.error("Too few number of fields in the list"
+                              " of rpms: %r", parts)
+            return
+        rpm = {
+            'name': parts[0],
+            'version': parts[1],
+            'release': parts[2],
+            'arch': parts[3],
+            'size': int(parts[5]),
+            'sigmd5': parts[6],
+            'buildtime': int(parts[7])
+        }
+
+        if parts[4] == '(none)':
+            rpm['epoch'] = None
+        else:
+            rpm['epoch'] = int(parts[4])
+        return rpm
+
+    def handler(self, src, target_info, build_tag, arch, scratch=False):
         this_task = self.session.getTaskInfo(self.id)
         self.logger.debug("This task: %r", this_task)
         owner_info = self.session.getUser(this_task['owner'])
@@ -111,17 +133,43 @@ class CreateContainerTask(BaseTaskHandler):
                           build_json)
         logs = self._download_logs(build.build_id)
 
+        rpmlist = []
+        try:
+            rpm_packages = build_json['metadata']['annotations']['rpm-packages']
+        except (KeyError, TypeError), error:
+            self.logger.error("Build response miss rpm-package: %s" % error)
+            rpm_packages = ''
+        for package in rpm_packages.split('\n'):
+            parts = package.split(',')
+            rpm_info = self._rpm_package_info(parts)
+            if not rpm_info:
+                continue
+            rpmlist.append(rpm_info)
+
+        repo_info = self.session.getRepo(target_info['build_tag'])
+        # TODO: copied from image build
+        # TODO: hack to make this work for now, need to refactor
+        if scratch:
+            br = kojid.BuildRoot(self.session, self.options, build_tag, arch,
+                                 self.id, repo_id=repo_info['id'])
+            br.markExternalRPMs(rpmlist)
+            # TODO: I'm not sure if this is ok
+            br.expire()
+
+        containerdata = {
+            'arch': arch,
+            'task_id': self.id,
+            'logs': logs,
+            'osbs_build_id': build.build_id,
+            'rpmlist': rpmlist,
+        }
+
         # upload the build output
-        for filename in logs:
+        for filename in containerdata['logs']:
             build_log = os.path.join(self.workdir, filename)
             self.uploadFile(build_log)
 
-        imgdata = {
-            'task_id': self.id,
-            'logs': logs,
-            'osbs_build_id': build.build_id
-        }
-        return imgdata
+        return containerdata
 
 
 class BuildContainerTask(BaseTaskHandler):
@@ -162,14 +210,15 @@ class BuildContainerTask(BaseTaskHandler):
                                                          release=release,
                                                          epoch=0))
 
-    def runBuilds(self, src, target_info, build_tag, arches):
+    def runBuilds(self, src, target_info, build_tag, arches, scratch=False):
         subtasks = {}
         for arch in arches:
             subtasks[arch] = self.session.host.subtask(method='createContainer',
                                                        arglist=[src,
                                                                 target_info,
                                                                 build_tag,
-                                                                arch],
+                                                                arch,
+                                                                scratch],
                                                        label='container',
                                                        parent=self.id)
         self.logger.debug("Got image subtasks: %r", (subtasks))
@@ -228,7 +277,7 @@ class BuildContainerTask(BaseTaskHandler):
 
         if not self.opts.get('scratch'):
             # scratch builds do not get imported
-            raise NotImplementedError("Non-scratch container builds support isn't finished yet")
+            #raise NotImplementedError("Non-scratch container builds support isn't finished yet")
 
             name = opts.get('name')
             version = opts.get('version')
@@ -251,29 +300,28 @@ class BuildContainerTask(BaseTaskHandler):
                                       "target": target}
             if not SCM.is_scm_url(src):
                 raise koji.BuildError('Invalid source specification: %s' % src)
-            results = self.runBuilds(src, target_info, build_tag, archlist)
+            results = self.runBuilds(src, target_info, build_tag, archlist,
+                                     opts.get('scratch', False))
             results_xmlrpc = {}
             for task_id, result in results.items():
                 # get around an xmlrpc limitation, use arches for keys instead
                 results_xmlrpc[str(task_id)] = result
+            for result in results.values():
+                self._raise_if_image_failed(result['osbs_build_id'])
             if opts.get('scratch'):
                 # scratch builds do not get imported
                 self.session.host.moveContainerToScratch(self.id,
                                                          results_xmlrpc)
             else:
-                raise NotImplementedError("Non-scratch container builds support isn't finished yet")
                 self.session.host.completeContainerBuild(self.id,
                                                          bld_info['id'],
                                                          results_xmlrpc)
-            for result in results.values():
-                self._raise_if_image_failed(result['osbs_build_id'])
         except (SystemExit, ServerExit, KeyboardInterrupt):
             # we do not trap these
             raise
         except:
             if not self.opts.get('scratch'):
                 # scratch builds do not get imported
-                raise NotImplementedError("Non-scratch container builds support isn't finished yet")
                 if bld_info:
                     self.session.host.failBuild(self.id, bld_info['id'])
             # reraise the exception

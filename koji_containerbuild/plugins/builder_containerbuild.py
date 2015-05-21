@@ -123,6 +123,20 @@ class BuildContainerTask(BaseTaskHandler):
     # method.
     _taskWeight = 0.2
 
+    def __init__(self, id, method, params, session, options, workdir=None):
+        BaseTaskHandler.__init__(self, id, method, params, session, options,
+                                 workdir)
+        self._osbs = None
+
+    def osbs(self):
+        """Handler of OSBS object"""
+        if not self._osbs:
+            os_conf = Configuration()
+            build_conf = Configuration()
+            self._osbs = OSBS(os_conf, build_conf)
+            assert self._osbs
+        return self._osbs
+
     def initContainerBuild(self, name, version, release, target_info, opts):
         """create a build object for this container build"""
         pkg_cfg = self.session.getPackageConfig(target_info['dest_tag_name'],

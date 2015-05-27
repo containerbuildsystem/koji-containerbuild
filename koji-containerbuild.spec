@@ -4,7 +4,7 @@
 %define module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.1.2
+Version:        0.2.0
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -93,6 +93,26 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed May 27 2015 Pavol Babincak <pbabinca@redhat.com> 0.2.0-1
+- Explicitly list code which are hack around database constraints
+  (pbabinca@redhat.com)
+- refactor: remove not used code and move comment to better position
+  (pbabinca@redhat.com)
+- Get name from name of the basename repository for non-scratch builds
+  (pbabinca@redhat.com)
+- Extend SCM object with get_component() and get_git_uri() and use it
+  (pbabinca@redhat.com)
+- Use logger to write logs and not sys.stderr.write (pbabinca@redhat.com)
+- Use container_archives not image_archives table (pbabinca@redhat.com)
+- Use attributes of BuildResponse object to query responses
+  (pbabinca@redhat.com)
+- Connect to osbs logger to print more debug info via own logger
+  (pbabinca@redhat.com)
+- Improve rpm_packages listings (pbabinca@redhat.com)
+- Support non-scratch builds with listing of the contents (pbabinca@redhat.com)
+- builderplugin: import kojid binary as kojid module (pbabinca@redhat.com)
+- builderplugin: Use single handler to OSBS object (pbabinca@redhat.com)
+
 * Mon May 18 2015 Pavol Babincak <pbabinca@redhat.com> 0.1.2-1
 - add BuildRoot tag (needed for rhel<6) (mikem@redhat.com)
 - use alternate method to import kojihub (mikem@redhat.com)

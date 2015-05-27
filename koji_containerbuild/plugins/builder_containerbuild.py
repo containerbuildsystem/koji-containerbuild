@@ -49,6 +49,24 @@ class ContainerError(koji.GenericError):
     faultCode = 2001
 
 
+# TODO: push this to upstream koji
+class My_SCM(SCM):
+    def get_component(self):
+        component = os.path.basename(self.repository)
+        if self.repository.endswith('.git'):
+            # If we're referring to a bare repository for the main module,
+            # assume we need to do the same for the common module
+            component = os.path.basename(self.repository[:-4])
+        return component
+
+    def get_git_uri(self):
+        scheme = self.scheme
+        if '+' in scheme:
+            scheme = scheme.split('+')[1]
+        git_uri = '%s%s%s' % (scheme, self.host, self.repository)
+        return git_uri
+
+
 class CreateContainerTask(BaseTaskHandler):
     Methods = ['createContainer']
     _taskWeight = 2.0
@@ -114,20 +132,10 @@ class CreateContainerTask(BaseTaskHandler):
         owner_info = self.session.getUser(this_task['owner'])
         self.logger.debug("Started by %s", owner_info['name'])
 
-        scm = SCM(src)
+        scm = My_SCM(src)
         scm.assert_allowed(self.options.allowed_scms)
-
-        # stolen from koji.daemon
-        scheme = scm.scheme
-        if '+' in scheme:
-            scheme = scheme.split('+')[1]
-        git_uri = '%s%s%s' % (scheme, scm.host, scm.repository)
-        component = os.path.basename(scm.repository)
-        if scm.repository.endswith('.git'):
-            # If we're referring to a bare repository for the main module,
-            # assume we need to do the same for the common module
-            component = os.path.basename(scm.repository[:-4])
-        # /stolen from koji.daemon
+        git_uri = scm.get_git_uri()
+        component = scm.get_component()
 
         build_response = self.osbs().create_build(
             git_uri=git_uri,

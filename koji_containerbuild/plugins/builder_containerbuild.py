@@ -23,10 +23,15 @@ containers."""
 # Authors:
 #       Pavol Babincak <pbabinca@redhat.com>
 import os
+import logging
 
 import koji
 from koji.daemon import SCM
 from koji.tasks import ServerExit, BaseTaskHandler
+import osbs
+import osbs.core
+import osbs.api
+import osbs.http
 from osbs.api import OSBS
 from osbs.conf import Configuration
 
@@ -67,6 +72,14 @@ class CreateContainerTask(BaseTaskHandler):
     def osbs(self):
         """Handler of OSBS object"""
         if not self._osbs:
+            osbs.logger = logging.getLogger("%s.osbs" % self.logger.name)
+            osbs.core.logger = logging.getLogger("%s.osbs.core" %
+                                                 self.logger.name)
+            osbs.api.logger = logging.getLogger("%s.osbs.api" %
+                                                self.logger.name)
+            osbs.http.logger = logging.getLogger("%s.osbs.http" %
+                                                 self.logger.name)
+            osbs.logger.debug("osbs logger installed")
             os_conf = Configuration()
             build_conf = Configuration()
             self._osbs = OSBS(os_conf, build_conf)

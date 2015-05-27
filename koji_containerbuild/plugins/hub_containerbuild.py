@@ -228,7 +228,7 @@ def import_archive(filepath, buildinfo, type, typeInfo, buildroot_id=None):
     insert.execute()
 
     if type == 'container':
-        insert = kojihub.InsertProcessor('image_archives')
+        insert = kojihub.InsertProcessor('container_archives')
         insert.set(archive_id=archive_id)
         insert.set(arch=typeInfo['arch'])
         insert.execute()

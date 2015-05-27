@@ -290,7 +290,7 @@ def importContainerInternal(task_id, build_id, containerdata):
     q = """INSERT INTO container_listing (container_id,rpm_id)
            VALUES (%(container_id)i,%(rpm_id)i)"""
     for archive in archives:
-        sys.stderr.write('working on archive %s' % archive)
+        logger.info('working on archive %s' % archive)
         if archive['filename'].endswith('xml'):
             continue
         logger.info('associating installed rpms with %s' % archive['id'])

@@ -191,6 +191,7 @@ def import_archive(filepath, buildinfo, type, typeInfo, buildroot_id=None):
         archiveinfo['filename'] = filename
         archivetype = kojihub.get_archive_type(filename, strict=True)
     else:
+        #XXX: hack, see above
         archiveinfo['filename'] = ''
         archivetype = kojihub.get_archive_type(type_name='container',
                                                strict=True)
@@ -199,6 +200,7 @@ def import_archive(filepath, buildinfo, type, typeInfo, buildroot_id=None):
     if filepath:
         archiveinfo['size'] = os.path.getsize(filepath)
     else:
+        #XXX: hack, see above
         archiveinfo['size'] = 0
 
     if filepath:
@@ -213,6 +215,7 @@ def import_archive(filepath, buildinfo, type, typeInfo, buildroot_id=None):
         archiveinfo['checksum'] = m.hexdigest()
         archiveinfo['checksum_type'] = koji.CHECKSUM_TYPES['md5']
     else:
+        #XXX: hack, see above
         archiveinfo['checksum'] = ''
         archiveinfo['checksum_type'] = 0
 

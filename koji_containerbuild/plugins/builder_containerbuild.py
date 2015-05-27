@@ -135,11 +135,15 @@ class CreateContainerTask(BaseTaskHandler):
 
         rpmlist = []
         try:
-            rpm_packages = build_json['metadata']['annotations']['rpm-packages']
+            rpm_packages = response.get_rpm_packages()
         except (KeyError, TypeError), error:
             self.logger.error("Build response miss rpm-package: %s" % error)
             rpm_packages = ''
+        if rpm_packages is None:
+            rpm_packages = ''
         for package in rpm_packages.split('\n'):
+            if len(package.strip()) == 0:
+                continue
             parts = package.split(',')
             rpm_info = self._rpm_package_info(parts)
             if not rpm_info:

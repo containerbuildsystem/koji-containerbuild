@@ -104,7 +104,6 @@ class CreateContainerTask(BaseTaskHandler):
             assert self._osbs
         return self._osbs
 
-
     def _rpm_package_info(self, parts):
         if len(parts) < 8:
             self.logger.error("Too few number of fields in the list"
@@ -199,7 +198,6 @@ class CreateContainerTask(BaseTaskHandler):
 
 
 class BuildContainerTask(BaseTaskHandler):
-
     Methods = ['buildContainer']
     # We mostly just wait on other tasks. Same value as for regular 'build'
     # method.
@@ -301,10 +299,8 @@ class BuildContainerTask(BaseTaskHandler):
         archlist = self.getArchList(build_tag)
         data['task_id'] = self.id
 
+        # scratch builds do not get imported
         if not self.opts.get('scratch'):
-            # scratch builds do not get imported
-            #raise NotImplementedError("Non-scratch container builds support isn't finished yet")
-
             name = opts.get('name')
             version = opts.get('version')
             release = opts.get('release')

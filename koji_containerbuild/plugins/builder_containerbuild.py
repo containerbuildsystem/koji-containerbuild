@@ -310,7 +310,10 @@ class BuildContainerTask(BaseTaskHandler):
             release = opts.get('release')
 
             if not name:
-                raise koji.BuildError('Name needs to be specified for non-scratch container builds')
+                scm = My_SCM(src)
+                name = scm.get_component()
+                if not name:
+                    raise koji.BuildError('Name needs to be specified for non-scratch container builds')
             if not version:
                 raise koji.BuildError('Version needs to be specified for non-scratch container builds')
             if not release:

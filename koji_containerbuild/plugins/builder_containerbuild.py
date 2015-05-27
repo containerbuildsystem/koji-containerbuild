@@ -129,7 +129,7 @@ class CreateContainerTask(BaseTaskHandler):
             component = os.path.basename(scm.repository[:-4])
         # /stolen from koji.daemon
 
-        build = self.osbs().create_build(
+        build_response = self.osbs().create_build(
             git_uri=git_uri,
             git_ref=scm.revision,
             user=owner_info['name'],
@@ -137,14 +137,15 @@ class CreateContainerTask(BaseTaskHandler):
             target=target_info['name'],
             architecture=arch,
         )
-        self.logger.debug("OSBS build id: %s", build.build_id)
+        build_id = build_response.build_id
+        self.logger.debug("OSBS build id: %r", build_id)
 
-        self.logger.info("Waiting for osbs build_id: %s to finish.",
-                         build.build_id)
-        build_json = self.osbs().wait_for_build_to_finish(build.build_id)
-        self.logger.debug("OSBS build finished. Build json response: %s.",
-                          build_json)
-        logs = self._download_logs(build.build_id)
+        self.logger.info("Waiting for osbs build_id: %s to finish.", build_id)
+        response = self.osbs().wait_for_build_to_finish(build_id)
+        self.logger.debug("OSBS build finished with status: %s. Build "
+                          "response: %s.", response.status,
+                          response.json)
+        logs = self._download_logs(build_id)
 
         rpmlist = []
         try:
@@ -177,7 +178,7 @@ class CreateContainerTask(BaseTaskHandler):
             'arch': arch,
             'task_id': self.id,
             'logs': logs,
-            'osbs_build_id': build.build_id,
+            'osbs_build_id': build_id,
             'rpmlist': rpmlist,
         }
 

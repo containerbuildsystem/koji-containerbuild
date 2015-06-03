@@ -5,7 +5,7 @@
 
 Name:           koji-containerbuild
 Version:        0.2.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
 
@@ -92,6 +92,10 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed Jun 03 2015 Pavol Babincak <pbabinca@redhat.com> 0.2.0-2
+- Don't require python-distutils. distutils is part of python-libs pkg
+  (pbabinca@redhat.com)
+
 * Wed May 27 2015 Pavol Babincak <pbabinca@redhat.com> 0.2.0-1
 - Explicitly list code which are hack around database constraints
   (pbabinca@redhat.com)

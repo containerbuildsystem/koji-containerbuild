@@ -218,22 +218,19 @@ class BuildContainerTask(BaseTaskHandler):
             assert self._osbs
         return self._osbs
 
-    def initContainerBuild(self, name, version, release, target_info, opts):
-        """create a build object for this container build"""
+    def check_whitelist(self, name, target_info):
+        """Check if container name is whitelisted in destination tag
+
+        Raises with koji.BuildError if package is not whitelisted or blocked.
+        """
         pkg_cfg = self.session.getPackageConfig(target_info['dest_tag_name'],
                                                 name)
         self.logger.debug("%r" % pkg_cfg)
-        if not opts.get('skip_tag') and not opts.get('scratch'):
-            # Make sure package is on the list for this tag
-            if pkg_cfg is None:
-                raise koji.BuildError("package (container) %s not in list for tag %s" % (name, target_info['dest_tag_name']))
-            elif pkg_cfg['blocked']:
-                raise koji.BuildError("package (container)  %s is blocked for tag %s" % (name, target_info['dest_tag_name']))
-        return self.session.host.initImageBuild(self.id,
-                                                    dict(name=name,
-                                                            version=version,
-                                                            release=release,
-                                                            epoch=0))
+        # Make sure package is on the list for this tag
+        if pkg_cfg is None:
+            raise koji.BuildError("package (container) %s not in list for tag %s" % (name, target_info['dest_tag_name']))
+        elif pkg_cfg['blocked']:
+            raise koji.BuildError("package (container)  %s is blocked for tag %s" % (name, target_info['dest_tag_name']))
 
     def runBuilds(self, src, target_info, arches, scratch=False):
         subtasks = {}
@@ -317,9 +314,13 @@ class BuildContainerTask(BaseTaskHandler):
                 if not release:
                     raise koji.BuildError('Release was not specified and failed to get one')
 
-            bld_info = self.initContainerBuild(name, version, release,
-                                               target_info, opts)
-
+            if not opts.get('skip_tag'):
+                self.check_whitelist(data['name'], target_info)
+            bld_info = self.session.host.initImageBuild(self.id,
+                                                        dict(name=name,
+                                                                version=version,
+                                                                release=release,
+                                                                epoch=0))
         try:
             self.extra_information = {"src": src, "data": data,
                                       "target": target}

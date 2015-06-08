@@ -125,7 +125,7 @@ class CreateContainerTask(BaseTaskHandler):
             rpm['epoch'] = int(parts[4])
         return rpm
 
-    def handler(self, src, target_info, build_tag, arch, scratch=False):
+    def handler(self, src, target_info, arch, scratch=False):
         this_task = self.session.getTaskInfo(self.id)
         self.logger.debug("This task: %r", this_task)
         owner_info = self.session.getUser(this_task['owner'])
@@ -175,7 +175,8 @@ class CreateContainerTask(BaseTaskHandler):
         # TODO: copied from image build
         # TODO: hack to make this work for now, need to refactor
         if scratch:
-            br = kojid.BuildRoot(self.session, self.options, build_tag, arch,
+            br = kojid.BuildRoot(self.session, self.options,
+                                 target_info['build_tag'], arch,
                                  self.id, repo_id=repo_info['id'])
             br.markExternalRPMs(rpmlist)
             # TODO: I'm not sure if this is ok
@@ -234,13 +235,12 @@ class BuildContainerTask(BaseTaskHandler):
                                                          release=release,
                                                          epoch=0))
 
-    def runBuilds(self, src, target_info, build_tag, arches, scratch=False):
+    def runBuilds(self, src, target_info, arches, scratch=False):
         subtasks = {}
         for arch in arches:
             subtasks[arch] = self.session.host.subtask(method='createContainer',
                                                        arglist=[src,
                                                                 target_info,
-                                                                build_tag,
                                                                 arch,
                                                                 scratch],
                                                        label='container',
@@ -325,7 +325,7 @@ class BuildContainerTask(BaseTaskHandler):
                                       "target": target}
             if not SCM.is_scm_url(src):
                 raise koji.BuildError('Invalid source specification: %s' % src)
-            results = self.runBuilds(src, target_info, build_tag, archlist,
+            results = self.runBuilds(src, target_info, archlist,
                                      opts.get('scratch', False))
             results_xmlrpc = {}
             for task_id, result in results.items():

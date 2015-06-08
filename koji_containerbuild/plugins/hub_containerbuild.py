@@ -22,7 +22,6 @@
 
 import os
 import sys
-import inspect
 import logging
 import warnings
 
@@ -30,9 +29,10 @@ import koji
 from koji.context import context
 from koji.plugin import export
 
-sys.path.insert(0, '/usr/share/koji-hub/')
+koji_hub_path = '/usr/share/koji-hub/'
+sys.path.insert(0, koji_hub_path)
 import kojihub
-#kojihub = inspect.getmodule(sys._getframe(2)).kojihub
+
 #logger = logging.getLogger('koji.plugins.containerbuild')
 logger = logging.getLogger('koji.plugins')
 

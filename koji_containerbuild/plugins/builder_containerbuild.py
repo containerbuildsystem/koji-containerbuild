@@ -173,6 +173,7 @@ class CreateContainerTask(BaseTaskHandler):
             rpm_packages = ''
         if rpm_packages is None:
             rpm_packages = ''
+        self.logger.debug("List of rpms: %s", rpm_packages)
         for package in rpm_packages.split('\n'):
             if len(package.strip()) == 0:
                 continue

@@ -4,8 +4,8 @@
 %define module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.2.0
-Release:        2%{?dist}
+Version:        0.3.0
+Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
 
@@ -92,6 +92,21 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Mon Jun 08 2015 Pavol Babincak <pbabinca@redhat.com> 0.3.0-1
+- Remove code which always overwrote release (pbabinca@redhat.com)
+- Removed not used imports (pbabinca@redhat.com)
+- Import kojipath from path set via variable not from inspection
+  (pbabinca@redhat.com)
+- More debug info: list rpm_packages (pbabinca@redhat.com)
+- Mock image tarball as we don't get this from the buildsystem (yet)
+  (pbabinca@redhat.com)
+- Pull getting task options to separate method (pbabinca@redhat.com)
+- Pull package (image) whitelist check into separate method
+  (pbabinca@redhat.com)
+- Reuse image tables and methods for container builds (pbabinca@redhat.com)
+- Don't pass build_tag as separate argument to createContainer task
+  (pbabinca@redhat.com)
+
 * Wed Jun 03 2015 Pavol Babincak <pbabinca@redhat.com> 0.2.0-2
 - Don't require python-distutils. distutils is part of python-libs pkg
   (pbabinca@redhat.com)

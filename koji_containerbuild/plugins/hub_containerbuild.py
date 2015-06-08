@@ -20,10 +20,8 @@
 # Authors:
 #       Pavol Babincak <pbabinca@redhat.com>
 
-import os
 import sys
 import logging
-import warnings
 
 import koji
 from koji.context import context

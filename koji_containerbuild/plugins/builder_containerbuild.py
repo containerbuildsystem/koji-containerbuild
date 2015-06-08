@@ -23,6 +23,7 @@ containers."""
 # Authors:
 #       Pavol Babincak <pbabinca@redhat.com>
 import os
+import os.path
 import logging
 
 import koji
@@ -87,6 +88,15 @@ class CreateContainerTask(BaseTaskHandler):
         self.logger.debug("Logs written to: %s" % build_log)
         return ['build.log']
 
+    def _mock_tarball(self, arch):
+        output_filename = "%s-%s.tar" % ('image', arch)
+        image_tar = os.path.join(self.workdir, output_filename)
+        outfile = open(image_tar, 'w')
+        outfile.write('foo')
+        outfile.close()
+        self.logger.debug("Mock tarball written to: %s" % image_tar)
+        return [output_filename]
+
     def osbs(self):
         """Handler of OSBS object"""
         if not self._osbs:
@@ -125,7 +135,7 @@ class CreateContainerTask(BaseTaskHandler):
             rpm['epoch'] = int(parts[4])
         return rpm
 
-    def handler(self, src, target_info, arch, scratch=False):
+    def handler(self, src, target_info, arch, output_template, scratch=False):
         this_task = self.session.getTaskInfo(self.id)
         self.logger.debug("This task: %r", this_task)
         owner_info = self.session.getUser(this_task['owner'])
@@ -153,6 +163,7 @@ class CreateContainerTask(BaseTaskHandler):
                           "response: %s.", response.status,
                           response.json)
         logs = self._download_logs(build_id)
+        files = self._mock_tarball(arch)
 
         rpmlist = []
         try:
@@ -188,12 +199,21 @@ class CreateContainerTask(BaseTaskHandler):
             'logs': logs,
             'osbs_build_id': build_id,
             'rpmlist': rpmlist,
+            'files': [],
         }
 
         # upload the build output
         for filename in containerdata['logs']:
             build_log = os.path.join(self.workdir, filename)
             self.uploadFile(build_log)
+
+        if len(files) != 1:
+            raise ContainerError("There should be only one container file but "
+                                 "it isn't(%d): %s" % len(files), files)
+        for filename in files:
+            full_path = os.path.join(self.workdir, filename)
+            self.uploadFile(full_path, remoteName=output_template)
+            containerdata['files'].append(os.path.basename(output_template))
 
         return containerdata
 
@@ -232,13 +252,15 @@ class BuildContainerTask(BaseTaskHandler):
         elif pkg_cfg['blocked']:
             raise koji.BuildError("package (container)  %s is blocked for tag %s" % (name, target_info['dest_tag_name']))
 
-    def runBuilds(self, src, target_info, arches, scratch=False):
+    def runBuilds(self, src, target_info, arches, output_template,
+                  scratch=False):
         subtasks = {}
         for arch in arches:
             subtasks[arch] = self.session.host.subtask(method='createContainer',
                                                        arglist=[src,
                                                                 target_info,
                                                                 arch,
+                                                                output_template,
                                                                 scratch],
                                                        label='container',
                                                        parent=self.id)
@@ -280,9 +302,17 @@ class BuildContainerTask(BaseTaskHandler):
             raise koji.BuildError("No matching arches were found")
         return archdict.keys()
 
-    def getRelease(self, name, ver):
-        """return the next available release number for an N-V"""
-        return self.session.getNextRelease(dict(name=name, version=ver))
+    def _getOutputImageTemplate(self, **kwargs):
+        output_template = 'image.tar'
+        have_all_fields = True
+        for field in ['name', 'version', 'release', 'arch']:
+            if field not in kwargs:
+                self.logger.info("Missing var for output image name: %s",
+                                 field)
+                have_all_fields = False
+        if have_all_fields:
+            output_template = "%(name)s-%(version)s-%(release)s-%(arch)s.tar" % kwargs
+        return output_template
 
     def _get_nvr_opts(self, opts, src):
         name = opts.get('name')
@@ -333,7 +363,9 @@ class BuildContainerTask(BaseTaskHandler):
                                       "target": target}
             if not SCM.is_scm_url(src):
                 raise koji.BuildError('Invalid source specification: %s' % src)
+            output_template = self._getOutputImageTemplate(**data)
             results = self.runBuilds(src, target_info, archlist,
+                                     output_template,
                                      opts.get('scratch', False))
             results_xmlrpc = {}
             for task_id, result in results.items():

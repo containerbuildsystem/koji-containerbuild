@@ -284,6 +284,31 @@ class BuildContainerTask(BaseTaskHandler):
         """return the next available release number for an N-V"""
         return self.session.getNextRelease(dict(name=name, version=ver))
 
+    def _get_nvr_opts(self, opts, src):
+        name = opts.get('name')
+        version = opts.get('version')
+        release = opts.get('release')
+        #TODO: create option from this
+        release = 'x86_64'
+
+        if not name:
+            scm = My_SCM(src)
+            name = scm.get_component()
+            if not name:
+                raise koji.BuildError('Name needs to be specified for non-scratch container builds')
+
+        if not version:
+            raise koji.BuildError('Version needs to be specified for non-scratch container builds')
+        if not release:
+            release = self.session.getNextRelease(dict(name=name,
+                                                       version=version))
+            if not release:
+                raise koji.BuildError('Release was not specified and failed to get one')
+        return {'name': name,
+                'version': version,
+                'release': release,
+                }
+
     def handler(self, src, target, opts=None):
         if not opts:
             opts = {}
@@ -294,33 +319,15 @@ class BuildContainerTask(BaseTaskHandler):
         target_info = self.session.getBuildTarget(target, event=self.event_id)
         build_tag = target_info['build_tag']
         archlist = self.getArchList(build_tag)
-        data['task_id'] = self.id
+        data = self._get_nvr_opts(opts, src)
 
         # scratch builds do not get imported
         if not self.opts.get('scratch'):
-            name = opts.get('name')
-            version = opts.get('version')
-            release = opts.get('release')
-
-            if not name:
-                scm = My_SCM(src)
-                name = scm.get_component()
-                if not name:
-                    raise koji.BuildError('Name needs to be specified for non-scratch container builds')
-            if not version:
-                raise koji.BuildError('Version needs to be specified for non-scratch container builds')
-            if not release:
-                release = self.getRelease(name, version)
-                if not release:
-                    raise koji.BuildError('Release was not specified and failed to get one')
 
             if not opts.get('skip_tag'):
                 self.check_whitelist(data['name'], target_info)
-            bld_info = self.session.host.initImageBuild(self.id,
-                                                        dict(name=name,
-                                                                version=version,
-                                                                release=release,
-                                                                epoch=0))
+            data['epoch'] = 0
+            bld_info = self.session.host.initImageBuild(self.id, data)
         try:
             self.extra_information = {"src": src, "data": data,
                                       "target": target}

@@ -229,11 +229,11 @@ class BuildContainerTask(BaseTaskHandler):
                 raise koji.BuildError("package (container) %s not in list for tag %s" % (name, target_info['dest_tag_name']))
             elif pkg_cfg['blocked']:
                 raise koji.BuildError("package (container)  %s is blocked for tag %s" % (name, target_info['dest_tag_name']))
-        return self.session.host.initContainerBuild(self.id,
+        return self.session.host.initImageBuild(self.id,
                                                     dict(name=name,
-                                                         version=version,
-                                                         release=release,
-                                                         epoch=0))
+                                                            version=version,
+                                                            release=release,
+                                                            epoch=0))
 
     def runBuilds(self, src, target_info, arches, scratch=False):
         subtasks = {}
@@ -335,12 +335,12 @@ class BuildContainerTask(BaseTaskHandler):
                 self._raise_if_image_failed(result['osbs_build_id'])
             if opts.get('scratch'):
                 # scratch builds do not get imported
-                self.session.host.moveContainerToScratch(self.id,
-                                                         results_xmlrpc)
+                self.session.host.moveImageBuildToScratch(self.id,
+                                                          results_xmlrpc)
             else:
-                self.session.host.completeContainerBuild(self.id,
-                                                         bld_info['id'],
-                                                         results_xmlrpc)
+                self.session.host.completeImageBuild(self.id,
+                                                     bld_info['id'],
+                                                     results_xmlrpc)
         except (SystemExit, ServerExit, KeyboardInterrupt):
             # we do not trap these
             raise

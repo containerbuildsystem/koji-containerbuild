@@ -319,8 +319,6 @@ class BuildContainerTask(BaseTaskHandler):
         name = opts.get('name')
         version = opts.get('version')
         release = opts.get('release')
-        #TODO: create option from this
-        release = 'x86_64'
 
         if not name:
             scm = My_SCM(src)

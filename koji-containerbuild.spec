@@ -4,7 +4,7 @@
 %define module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.3.0
+Version:        0.3.1
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -92,6 +92,9 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Jun 09 2015 Pavol Babincak <pbabinca@redhat.com> 0.3.1-1
+- Add missing import imp (pbabinca@redhat.com)
+
 * Mon Jun 08 2015 Pavol Babincak <pbabinca@redhat.com> 0.3.0-1
 - Remove code which always overwrote release (pbabinca@redhat.com)
 - Removed not used imports (pbabinca@redhat.com)

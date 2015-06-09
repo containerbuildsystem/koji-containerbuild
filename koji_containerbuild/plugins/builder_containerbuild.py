@@ -25,6 +25,7 @@ containers."""
 import os
 import os.path
 import logging
+import imp
 
 import koji
 from koji.daemon import SCM

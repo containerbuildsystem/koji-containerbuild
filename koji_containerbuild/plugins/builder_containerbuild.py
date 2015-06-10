@@ -392,6 +392,17 @@ class BuildContainerTask(BaseTaskHandler):
             # reraise the exception
             raise
 
+        # tag it
+        if not opts.get('scratch') and not opts.get('skip_tag'):
+            tag_task_id = self.session.host.subtask(
+                method='tagBuild',
+                arglist=[target_info['dest_tag'], bld_info['id'], False, None,
+                         True],
+                label='tag',
+                parent=self.id,
+                arch='noarch')
+            self.wait(tag_task_id)
+
     def _raise_if_image_failed(self, osbs_build_id):
         build = self.osbs().get_build(osbs_build_id)
         if build.is_failed():

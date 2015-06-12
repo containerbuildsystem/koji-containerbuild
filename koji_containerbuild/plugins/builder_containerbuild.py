@@ -126,9 +126,15 @@ class CreateContainerTask(BaseTaskHandler):
         self.logger.debug("Going to download %s to %s.", remote_url, localpath)
         koji.ensuredir(self.workdir)
         verify_ssl = self.osbs().os_conf.get_verify_ssl()
+        if verify_ssl:
+            ssl_verify_peer = 1
+            ssl_verify_host = 2
+        else:
+            ssl_verify_peer = 0
+            ssl_verify_host = 0
         output_filename = urlgrabber.urlgrab(remote_url, filename=localpath,
-                                             ssl_verify_peer=verify_ssl,
-                                             ssl_verify_host=verify_ssl)
+                                             ssl_verify_peer=ssl_verify_peer,
+                                             ssl_verify_host=ssl_verify_host)
         self.logger.debug("Output: %s.", output_filename)
         return [output_filename]
 

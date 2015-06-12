@@ -4,7 +4,7 @@
 %define module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.5.0
+Version:        0.5.1
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -94,6 +94,12 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri Jun 12 2015 Pavol Babincak <pbabinca@redhat.com> 0.5.1-1
+- Explicit string conversion before urlgrabber.urlgrab() and more logging
+  (pbabinca@redhat.com)
+- Explicitly set urlgrab ssl verify options which pycurl expects
+  (pbabinca@redhat.com)
+
 * Fri Jun 12 2015 Pavol Babincak <pbabinca@redhat.com> 0.5.0-1
 - Read LABELs from Dockerfile (pbabinca@redhat.com)
 

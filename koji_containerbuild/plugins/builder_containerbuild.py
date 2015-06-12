@@ -123,7 +123,6 @@ class CreateContainerTask(BaseTaskHandler):
             target_filename = "image.tar"
         localpath = os.path.join(self.workdir, target_filename)
         remote_url = self._get_file_url(source_filename)
-        self.logger.debug("Going to download %s to %s.", remote_url, localpath)
         koji.ensuredir(self.workdir)
         verify_ssl = self.osbs().os_conf.get_verify_ssl()
         if verify_ssl:
@@ -132,6 +131,13 @@ class CreateContainerTask(BaseTaskHandler):
         else:
             ssl_verify_peer = 0
             ssl_verify_host = 0
+        self.logger.debug("Going to download %r to %r.", remote_url, localpath)
+        if isinstance(remote_url, unicode):
+            remote_url = remote_url.encode('utf-8')
+            self.logger.debug("remote_url changed to %r", remote_url)
+        if isinstance(localpath, unicode):
+            localpath = localpath.encode('utf-8')
+            self.logger.debug("localpath changed to %r", localpath)
         output_filename = urlgrabber.urlgrab(remote_url, filename=localpath,
                                              ssl_verify_peer=ssl_verify_peer,
                                              ssl_verify_host=ssl_verify_host)

@@ -51,15 +51,9 @@ def handle_container_build(options, session, args):
                       help=_("Do not display progress of the upload"))
     parser.add_option("--background", action="store_true",
                       help=_("Run the build at a lower priority"))
-    parser.add_option("--name",
-                      help=_("Specify container name. Required for "
-                             "non-scratch builds"))
-    parser.add_option("--version",
-                      help=_("Specify container version. Required for "
-                             "non-scratch builds"))
-    parser.add_option("--release",
-                      help=_("Specify container release. Use for "
-                             "non-scratch builds only."))
+    parser.add_option("--epoch",
+                      help=_("Specify container epoch. Requires koji admin "
+                             "permission."))
     (build_opts, args) = parser.parse_args(args)
     if len(args) != 2:
         parser.error(_("Exactly two arguments (a build target and a SCM URL "
@@ -82,7 +76,7 @@ def handle_container_build(options, session, args):
             parser.error(_("Destination tag %s is locked" % dest_tag['name']))
     source = args[1]
     opts = {}
-    for key in ('scratch', 'name', 'version', 'release'):
+    for key in ('scratch', 'epoch'):
         val = getattr(build_opts, key)
         if val is not None:
             opts[key] = val

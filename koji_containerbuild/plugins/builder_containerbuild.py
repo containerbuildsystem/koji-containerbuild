@@ -26,10 +26,15 @@ import os
 import os.path
 import logging
 import imp
+import urlgrabber
 
 import koji
 from koji.daemon import SCM
 from koji.tasks import ServerExit, BaseTaskHandler
+
+# Replace dock after this is fixed
+# https://github.com/DBuildService/dock/issues/149
+import dock.util
 import osbs
 import osbs.core
 import osbs.api
@@ -45,6 +50,20 @@ try:
     kojid = imp.load_module('kojid', fo, fo.name, ('.py', 'U', 1))
 finally:
     fo.close()
+
+
+# List of LABELs to fetch from Dockerfile
+LABELS = ('Name', 'Version', 'Release', 'Architecture')
+
+
+# Map from LABELS to extra data
+LABEL_MAP = {
+    'Name': 'name',
+    'Version': 'version',
+    'Release': 'release',
+    'Architecture': 'architecture',
+}
+
 
 class ContainerError(koji.GenericError):
     """Raised when container creation fails"""
@@ -69,6 +88,8 @@ class My_SCM(SCM):
         return git_uri
 
 
+
+
 class CreateContainerTask(BaseTaskHandler):
     Methods = ['createContainer']
     _taskWeight = 2.0
@@ -89,14 +110,27 @@ class CreateContainerTask(BaseTaskHandler):
         self.logger.debug("Logs written to: %s" % build_log)
         return ['build.log']
 
-    def _mock_tarball(self, arch):
-        output_filename = "%s-%s.tar" % ('image', arch)
-        image_tar = os.path.join(self.workdir, output_filename)
-        outfile = open(image_tar, 'w')
-        outfile.write('foo')
-        outfile.close()
-        self.logger.debug("Mock tarball written to: %s" % image_tar)
+    def _get_file_url(self, source_filename):
+        return "https://%s/image-export/%s/%s" % (self.osbs().os_conf.get_build_host(),
+                                                  self.nfs_dest_dir(),
+                                                  source_filename)
+
+    def _download_files(self, source_filename, target_filename=None):
+        if not target_filename:
+            target_filename = "image.tar"
+        localpath = os.path.join(self.workdir, target_filename)
+        remote_url = self._get_file_url(source_filename)
+        self.logger.debug("Going to download %s to %s.", remote_url, localpath)
+        koji.ensuredir(self.workdir)
+        verify_ssl = self.osbs().os_conf.get_verify_ssl()
+        output_filename = urlgrabber.urlgrab(remote_url, filename=localpath,
+                                             ssl_verify_peer=verify_ssl,
+                                             ssl_verify_host=verify_ssl)
+        self.logger.debug("Output: %s.", output_filename)
         return [output_filename]
+
+    def nfs_dest_dir(self):
+        return "task-%s" % self.id
 
     def osbs(self):
         """Handler of OSBS object"""
@@ -110,7 +144,7 @@ class CreateContainerTask(BaseTaskHandler):
                                                  self.logger.name)
             osbs.logger.debug("osbs logger installed")
             os_conf = Configuration()
-            build_conf = Configuration()
+            build_conf = Configuration(nfs_dest_dir=self.nfs_dest_dir())
             self._osbs = OSBS(os_conf, build_conf)
             assert self._osbs
         return self._osbs
@@ -164,7 +198,9 @@ class CreateContainerTask(BaseTaskHandler):
                           "response: %s.", response.status,
                           response.json)
         logs = self._download_logs(build_id)
-        files = self._mock_tarball(arch)
+
+        files = self._download_files(response.get_tar_metadata_filename(),
+                                     "image-%s.tar" % arch)
 
         rpmlist = []
         try:
@@ -304,40 +340,71 @@ class BuildContainerTask(BaseTaskHandler):
             raise koji.BuildError("No matching arches were found")
         return archdict.keys()
 
+    def fetchDockerfile(self, src):
+        """
+        Gets Dockerfile. Roughly corresponds to getSRPM method of build task
+        """
+        scm = SCM(src)
+        scm.assert_allowed(self.options.allowed_scms)
+        scmdir = os.path.join(self.workdir, 'sources')
+
+        koji.ensuredir(scmdir)
+
+        logfile = os.path.join(self.workdir, 'checkout-for-labels.log')
+        uploadpath = self.getUploadDir()
+
+        koji.ensuredir(uploadpath)
+
+        # Check out sources from the SCM
+        sourcedir = scm.checkout(scmdir, self.session, uploadpath, logfile)
+
+        fn = os.path.join(sourcedir, 'Dockerfile')
+        if not os.path.exists(fn):
+            raise koji.BuildError, "Dockerfile file missing: %s" % fn
+        return fn
+
     def _getOutputImageTemplate(self, **kwargs):
         output_template = 'image.tar'
         have_all_fields = True
-        for field in ['name', 'version', 'release', 'arch']:
+        for field in ['name', 'version', 'release', 'architecture']:
             if field not in kwargs:
                 self.logger.info("Missing var for output image name: %s",
                                  field)
                 have_all_fields = False
         if have_all_fields:
-            output_template = "%(name)s-%(version)s-%(release)s-%(arch)s.tar" % kwargs
+            output_template = "%(name)s-%(version)s-%(release)s-%(architecture)s.tar" % kwargs
         return output_template
 
-    def _get_nvr_opts(self, opts, src):
-        name = opts.get('name')
-        version = opts.get('version')
-        release = opts.get('release')
+    def _get_admin_opts(self, opts):
+        epoch = opts.get('epoch', 0)
+        if epoch:
+            self.session.assertPerm('admin')
 
-        if not name:
-            scm = My_SCM(src)
-            name = scm.get_component()
-            if not name:
-                raise koji.BuildError('Name needs to be specified for non-scratch container builds')
+        return {'epoch': epoch}
 
-        if not version:
-            raise koji.BuildError('Version needs to be specified for non-scratch container builds')
-        if not release:
-            release = self.session.getNextRelease(dict(name=name,
-                                                       version=version))
-            if not release:
-                raise koji.BuildError('Release was not specified and failed to get one')
-        return {'name': name,
-                'version': version,
-                'release': release,
-                }
+    def _get_dockerfile_labels(self, dockerfile_path, fields):
+        """Roughly corresponds to koji.get_header_fields()
+
+        It differs from get_header_fields() which is ran on rpms that missing
+        fields are not considered to be error.
+        """
+        parser = dock.util.DockerfileParser(dockerfile_path)
+        labels = parser.get_labels()
+        ret = {}
+        for f in fields:
+            try:
+                ret[f] = labels[f]
+            except KeyError:
+                self.logger.info("No such label: %s", f)
+        return ret
+
+    def _map_labels_to_data(self, labels):
+        data = {}
+        for key, value in labels.items():
+            if key in LABEL_MAP:
+                key = LABEL_MAP[key]
+            data[key] = value
+        return data
 
     def handler(self, src, target, opts=None):
         if not opts:
@@ -349,14 +416,24 @@ class BuildContainerTask(BaseTaskHandler):
         target_info = self.session.getBuildTarget(target, event=self.event_id)
         build_tag = target_info['build_tag']
         archlist = self.getArchList(build_tag)
-        data = self._get_nvr_opts(opts, src)
+
+        dockerfile_path = self.fetchDockerfile(src)
+        data_labels = self._get_dockerfile_labels(dockerfile_path, LABELS)
+        data = self._map_labels_to_data(data_labels)
+
+        admin_opts = self._get_admin_opts(opts)
+        data.update(admin_opts)
+
+        for field in ['name', 'version', 'release', 'architecture']:
+            if field not in data:
+                raise koji.BuildError('%s needs to be specified for '
+                                      'container builds' % field)
 
         # scratch builds do not get imported
         if not self.opts.get('scratch'):
 
             if not opts.get('skip_tag'):
                 self.check_whitelist(data['name'], target_info)
-            data['epoch'] = 0
             bld_info = self.session.host.initImageBuild(self.id, data)
         try:
             self.extra_information = {"src": src, "data": data,

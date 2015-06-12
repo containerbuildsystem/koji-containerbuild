@@ -37,6 +37,8 @@ Summary:    Builder plugin that extend Koji to build layered container images
 Group:      Applications/System
 Requires:   koji-builder
 Requires:   osbs
+Requires:   python-urlgrabber
+Requires:   python-dock
 
 %description builder
 Builder plugin that extend Koji to communicate with OpenShift buildsystem and build layered container images.

@@ -56,12 +56,12 @@ finally:
 
 
 # List of LABELs to fetch from Dockerfile
-LABELS = ('Name', 'Version', 'Release', 'Architecture')
+LABELS = ('BZComponent', 'Version', 'Release', 'Architecture')
 
 
 # Map from LABELS to extra data
 LABEL_MAP = {
-    'Name': 'name',
+    'BZComponent': 'name',
     'Version': 'version',
     'Release': 'release',
     'Architecture': 'architecture',

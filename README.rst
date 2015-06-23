@@ -11,8 +11,9 @@ documentation how to setup that.
 Build a package
 ---------------
 
-To build the current release, use the following command in the repo directory:  
-`$ tito build --rpm`  
+To build the current release, use the following command in the repo directory::
+
+  tito build --rpm
 
 
 Plugin installation
@@ -37,7 +38,7 @@ Finally (graceful) restart httpd daemon.
 Koji builder
 ~~~~~~~~~~~~
 
-`osbs<https://github.com/DBuildService/osbs>` package is required. In Fedora it
+`osbs <https://github.com/DBuildService/osbs>`_ package is required. In Fedora it
 is part of official repositories. Additionally you'll need to modify
 `/etc/osbs.conf` with addresses to OpenShift buildystem instance and registry.
 Follow osbs documentation if you find any.

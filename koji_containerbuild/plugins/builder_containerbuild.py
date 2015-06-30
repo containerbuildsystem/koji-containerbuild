@@ -163,6 +163,17 @@ class CreateContainerTask(BaseTaskHandler):
 
     def _download_logs(self, osbs_build_id):
         file_names = []
+        fn = 'build.log'
+        build_log = os.path.join(self.workdir, fn)
+        self.logger.debug("Getting docker logs from OSBS")
+        build_log_contents = self.osbs().get_docker_build_logs(osbs_build_id)
+        self.logger.debug("Docker logs from OSBS retrieved")
+        outfile = open(build_log, 'w')
+        outfile.write(build_log_contents)
+        outfile.close()
+        self.logger.debug("Logs written to: %s" % build_log)
+        file_names.append(fn)
+
         fn = 'openshift-final.log'
         build_log = os.path.join(self.workdir, fn)
         self.logger.debug("Getting OpenShift logs from OSBS")

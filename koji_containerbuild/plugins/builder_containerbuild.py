@@ -185,7 +185,11 @@ class CreateContainerTask(BaseTaskHandler):
             rpm['epoch'] = int(parts[4])
         return rpm
 
-    def handler(self, src, target_info, arch, output_template, scratch=False):
+    def handler(self, src, target_info, arch, output_template, scratch=False,
+                yum_repourls=None):
+        if not yum_repourls:
+            yum_repourls = []
+
         this_task = self.session.getTaskInfo(self.id)
         self.logger.debug("This task: %r", this_task)
         owner_info = self.session.getUser(this_task['owner'])
@@ -203,6 +207,7 @@ class CreateContainerTask(BaseTaskHandler):
             component=component,
             target=target_info['name'],
             architecture=arch,
+            yum_repourls=yum_repourls,
         )
         build_id = build_response.build_id
         self.logger.debug("OSBS build id: %r", build_id)
@@ -306,7 +311,7 @@ class BuildContainerTask(BaseTaskHandler):
             raise koji.BuildError("package (container)  %s is blocked for tag %s" % (name, target_info['dest_tag_name']))
 
     def runBuilds(self, src, target_info, arches, output_template,
-                  scratch=False):
+                  scratch=False, yum_repourls=None):
         subtasks = {}
         for arch in arches:
             subtasks[arch] = self.session.host.subtask(method='createContainer',
@@ -314,7 +319,8 @@ class BuildContainerTask(BaseTaskHandler):
                                                                 target_info,
                                                                 arch,
                                                                 output_template,
-                                                                scratch],
+                                                                scratch,
+                                                                yum_repourls],
                                                        label='container',
                                                        parent=self.id)
         self.logger.debug("Got image subtasks: %r", (subtasks))
@@ -458,7 +464,8 @@ class BuildContainerTask(BaseTaskHandler):
             output_template = self._getOutputImageTemplate(**data)
             results = self.runBuilds(src, target_info, archlist,
                                      output_template,
-                                     opts.get('scratch', False))
+                                     opts.get('scratch', False),
+                                     opts.get('yum_repourls', None))
             results_xmlrpc = {}
             for task_id, result in results.items():
                 # get around an xmlrpc limitation, use arches for keys instead

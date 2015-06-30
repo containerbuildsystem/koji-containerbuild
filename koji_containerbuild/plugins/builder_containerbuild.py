@@ -24,9 +24,11 @@ containers."""
 #       Pavol Babincak <pbabinca@redhat.com>
 import os
 import os.path
+import sys
 import logging
 import imp
 import shlex
+import traceback
 import urlgrabber
 import urlgrabber.grabber
 from sys import version_info
@@ -92,6 +94,62 @@ class My_SCM(SCM):
         return git_uri
 
 
+class FileWatcher(object):
+    """Watch directory for new or changed files which can be iterated on
+
+    Rewritten mock() from Buildroot class of kojid. When modifying keep that in
+    mind and after the API looks stable enough try to merge the code back to
+    koji.
+    """
+    def __init__(self, result_dir, logger):
+        self._result_dir = result_dir
+        self.logger = logger
+        self._logs = {}
+
+    def _list_files(self):
+        try:
+            results = os.listdir(self._result_dir)
+        except OSError:
+            # will happen when mock hasn't created the resultdir yet
+            return
+
+        for fname in results:
+            if fname.endswith('.log') and fname not in self._logs:
+                fpath = os.path.join(self._result_dir, fname)
+                self._logs[fname] = (None, None, 0, fpath)
+
+    def _reopen_file(self, fname, fd, inode, size, fpath):
+        try:
+            stat_info = os.stat(fpath)
+            if not fd or stat_info.st_ino != inode or stat_info.st_size < size:
+                # either a file we haven't opened before, or mock replaced a file we had open with
+                # a new file and is writing to it, or truncated the file we're reading,
+                # but our fd is pointing to the previous location in the old file
+                if fd:
+                    self.logger.info('Rereading %s, inode: %s -> %s, size: %s -> %s' %
+                                     (fpath, inode, stat_info.st_ino, size, stat_info.st_size))
+                    fd.close()
+                fd = file(fpath, 'r')
+            self._logs[fname] = (fd, stat_info.st_ino, stat_info.st_size, fpath)
+        except:
+            self.logger.error("Error reading mock log: %s", fpath)
+            self.logger.error(''.join(traceback.format_exception(*sys.exc_info())))
+            return False
+        return fd
+
+    def files_to_upload(self):
+        self._list_files()
+
+        for (fname, (fd, inode, size, fpath)) in self._logs.items():
+            fd = self._reopen_file(fname, fd, inode, size, fpath)
+            if fd is False:
+                return
+            yield (fd, fname)
+
+    def clean(self):
+        for (fname, (fd, inode, size, fpath)) in self._logs.items():
+            if fd:
+                fd.close()
 
 
 class CreateContainerTask(BaseTaskHandler):
@@ -104,15 +162,19 @@ class CreateContainerTask(BaseTaskHandler):
         self._osbs = None
 
     def _download_logs(self, osbs_build_id):
-        build_log = os.path.join(self.workdir, 'build.log')
-        self.logger.debug("Getting logs from OSBS")
-        build_log_contents = self.osbs().get_build_logs(osbs_build_id)
-        self.logger.debug("Logs from OSBS retrieved")
+        file_names = []
+        fn = 'openshift-final.log'
+        build_log = os.path.join(self.workdir, fn)
+        self.logger.debug("Getting OpenShift logs from OSBS")
+        build_log_contents = self.osbs().get_build_logs(osbs_build_id,
+                                                        follow=False)
+        self.logger.debug("Docker logs from OSBS retrieved")
         outfile = open(build_log, 'w')
         outfile.write(build_log_contents)
         outfile.close()
-        self.logger.debug("Logs written to: %s" % build_log)
-        return ['build.log']
+        file_names.append(fn)
+
+        return file_names
 
     def _get_file_url(self, source_filename):
         return "https://%s/image-export/%s/%s" % (self.osbs().os_conf.get_build_host(),
@@ -192,6 +254,61 @@ class CreateContainerTask(BaseTaskHandler):
             rpm['epoch'] = int(parts[4])
         return rpm
 
+    def getUploadPath(self):
+        """Get the path that should be used when uploading files to
+        the hub."""
+        return koji.pathinfo.taskrelpath(self.id)
+
+    def resultdir(self):
+        return os.path.join(self.workdir, 'osbslogs')
+
+    def _incremental_upload_logs(self, build_id):
+        resultdir = self.resultdir()
+        uploadpath = self.getUploadPath()
+        watcher = FileWatcher(resultdir, logger=self.logger)
+        finished = False
+        try:
+            while not finished:
+                build_response = self.osbs().get_build(build_id)
+                if not (build_response.is_running() or
+                        build_response.is_pending()):
+                    finished = True
+
+                for result in watcher.files_to_upload():
+                    if result is False:
+                        return
+                    (fd, fname) = result
+                    kojid.incremental_upload(self.session, fname, fd,
+                                             uploadpath, logger=self.logger)
+        finally:
+            watcher.clean()
+
+    def _write_incremental_logs(self, build_id, log_filename):
+        log_basename = os.path.basename(log_filename)
+        self.logger.info("Will write follow log: %s", log_basename)
+        try:
+            build_logs = self.osbs().get_build_logs(build_id,
+                                                    follow=True)
+        except Exception, error:
+            self.logger.error("Exception while waiting for build "
+                              "logs: %s", error)
+            raise
+        outfile = open(log_filename, 'w')
+        try:
+            for line in build_logs:
+                outfile.write("%s\n" % line)
+        except Exception, error:
+            self.logger.info("Exception (%s) while reading build logs: %s",
+                             type(error), error)
+            raise
+        finally:
+            outfile.close()
+        self.logger.info("%s written", log_basename)
+        build_response = self.osbs().get_build(build_id)
+        if (build_response.is_running() or build_response.is_pending()):
+            raise ContainerError("Build log finished but build still has not "
+                                 "finished.")
+
     def handler(self, src, target_info, arch, output_template, scratch=False,
                 yum_repourls=None):
         if not yum_repourls:
@@ -219,7 +336,46 @@ class CreateContainerTask(BaseTaskHandler):
         build_id = build_response.build_id
         self.logger.debug("OSBS build id: %r", build_id)
 
-        self.logger.info("Waiting for osbs build_id: %s to finish.", build_id)
+        self.logger.debug("Waiting for osbs build_id: %s to be scheduled.",
+                          build_id)
+        # we need to wait for kubelet to schedule the build, otherwise it's 500
+        self.osbs().wait_for_build_to_get_scheduled(build_id)
+        self.logger.debug("Build was scheduled")
+
+        osbs_logs_dir = self.resultdir()
+        koji.ensuredir(osbs_logs_dir)
+        pid = os.fork()
+        if pid:
+            self._incremental_upload_logs(build_id)
+
+        else:
+            full_output_name = os.path.join(osbs_logs_dir,
+                                            'openshift-incremental.log')
+
+            # Following retry code is here mainly to workaround bug which causes
+            # connection drop while reading logs after about 5 minutes.
+            # OpenShift bug with description:
+            # https://github.com/openshift/origin/issues/2348
+            # and upstream bug in Kubernetes:
+            # https://github.com/GoogleCloudPlatform/kubernetes/issues/9013
+            retry = 0
+            max_retries = 30
+            while retry < max_retries:
+                try:
+                    self._write_incremental_logs(build_id,
+                                                 full_output_name)
+                except Exception:
+                    self.logger.info("Error while saving incremental logs "
+                                     "(retry #%d).", retry)
+                    retry += 1
+                    continue
+                break
+            else:
+                self.logger.info("Gave up trying to save incremental logs "
+                                 "after #%d retries.", retry)
+                os._exit(1)
+            os._exit(0)
+
         response = self.osbs().wait_for_build_to_finish(build_id)
         self.logger.debug("OSBS build finished with status: %s. Build "
                           "response: %s.", response.status,

@@ -262,7 +262,7 @@ class CreateContainerTask(BaseTaskHandler):
 
         if len(files) != 1:
             raise ContainerError("There should be only one container file but "
-                                 "it isn't(%d): %s" % (len(files), files))
+                                 "there are %d: %s" % (len(files), files))
         for filename in files:
             full_path = os.path.join(self.workdir, filename)
             self.uploadFile(full_path, remoteName=output_template)

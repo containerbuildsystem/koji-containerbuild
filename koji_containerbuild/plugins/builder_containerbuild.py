@@ -28,6 +28,7 @@ import logging
 import imp
 import shlex
 import urlgrabber
+import urlgrabber.grabber
 from sys import version_info
 # from python-six
 PY2 = version_info[0] == 2
@@ -138,9 +139,15 @@ class CreateContainerTask(BaseTaskHandler):
         if isinstance(localpath, unicode):
             localpath = localpath.encode('utf-8')
             self.logger.debug("localpath changed to %r", localpath)
-        output_filename = urlgrabber.urlgrab(remote_url, filename=localpath,
-                                             ssl_verify_peer=ssl_verify_peer,
-                                             ssl_verify_host=ssl_verify_host)
+        try:
+            output_filename = urlgrabber.urlgrab(remote_url,
+                                                 filename=localpath,
+                                                 ssl_verify_peer=ssl_verify_peer,
+                                                 ssl_verify_host=ssl_verify_host)
+        except urlgrabber.grabber.URLGrabError, error:
+            self.logger.info("Failed to download file from URL %s: %s.",
+                             remote_url, error)
+            return []
         self.logger.debug("Output: %s.", output_filename)
         return [output_filename]
 

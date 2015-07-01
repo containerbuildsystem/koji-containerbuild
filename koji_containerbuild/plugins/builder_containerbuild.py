@@ -27,15 +27,10 @@ import os.path
 import sys
 import logging
 import imp
-import shlex
 import traceback
 import urlgrabber
 import urlgrabber.grabber
-from sys import version_info
-# from python-six
-PY2 = version_info[0] == 2
-
-DOCKERFILE_FILENAME = 'Dockerfile'
+import dockerfile_parse
 
 import koji
 from koji.daemon import SCM
@@ -583,12 +578,13 @@ class BuildContainerTask(BaseTaskHandler):
         It differs from get_header_fields() which is ran on rpms that missing
         fields are not considered to be error.
         """
-        parser = DockerfileParser(dockerfile_path, logger=self.logger)
-        labels = parser.get_labels()
+        dockerfile_parse.parser.logger = logging.getLogger("%s.dockerfile_parse"
+                                                           % self.logger.name)
+        parser = dockerfile_parse.parser.DockerfileParser(dockerfile_path)
         ret = {}
         for f in fields:
             try:
-                ret[f] = labels[f]
+                ret[f] = parser.labels[f]
             except KeyError:
                 self.logger.info("No such label: %s", f)
         return ret
@@ -680,121 +676,3 @@ class BuildContainerTask(BaseTaskHandler):
         build = self.osbs().get_build(osbs_build_id)
         if build.is_failed():
             raise ContainerError('Image build failed')
-
-
-# Stolen from dock to not introduce new require. Replace with separate module
-# after it is available: https://github.com/DBuildService/dock/issues/149
-# Originally BSD licensed.
-class DockerfileParser(object):
-    def __init__(self, git_path, path='', logger=None):
-        if git_path.endswith(DOCKERFILE_FILENAME):
-            self.dockerfile_path = git_path
-        else:
-            if path.endswith(DOCKERFILE_FILENAME):
-                self.dockerfile_path = os.path.join(git_path, path)
-            else:
-                self.dockerfile_path = os.path.join(git_path, path, DOCKERFILE_FILENAME)
-        if logger:
-            self.logger = logger
-        else:
-            self.logger = logging.getLogger(__name__)
-
-    @staticmethod
-    def b2u(string):
-        """ bytes to unicode """
-        if isinstance(string, bytes):
-            return string.decode('utf-8')
-        return string
-
-    @staticmethod
-    def u2b(string):
-        """ unicode to bytes (Python 2 only) """
-        if PY2 and isinstance(string, unicode):
-            return string.encode('utf-8')
-        return string
-
-    @property
-    def lines(self):
-        try:
-            with open(self.dockerfile_path, 'r') as dockerfile:
-                return [self.b2u(l) for l in dockerfile.readlines()]
-        except (IOError, OSError) as ex:
-            self.logger.error("Couldn't retrieve lines from dockerfile: %s" % repr(ex))
-            raise
-
-    @lines.setter
-    def lines(self, lines):
-        try:
-            with open(self.dockerfile_path, 'w') as dockerfile:
-                dockerfile.writelines([self.u2b(l) for l in lines])
-        except (IOError, OSError) as ex:
-            self.logger.error("Couldn't write lines to dockerfile: %s" % repr(ex))
-            raise
-
-    @property
-    def content(self):
-        try:
-            with open(self.dockerfile_path, 'r') as dockerfile:
-                return self.b2u(dockerfile.read())
-        except (IOError, OSError) as ex:
-            self.logger.error("Couldn't retrieve content of dockerfile: %s" % repr(ex))
-            raise
-
-    @content.setter
-    def content(self, content):
-        try:
-            with open(self.dockerfile_path, 'w') as dockerfile:
-                dockerfile.write(self.u2b(content))
-        except (IOError, OSError) as ex:
-            self.logger.error("Couldn't write content to dockerfile: %s" % repr(ex))
-            raise
-
-    def get_baseimage(self):
-        for line in self.lines:
-            if line.startswith("FROM"):
-                return line.split()[1]
-
-    def _split(self, string):
-        if PY2 and isinstance(string, unicode):
-            # Python2's shlex doesn't like unicode
-            string = self.u2b(string)
-            splits = shlex.split(string)
-            return map(self.b2u, splits)
-        else:
-            return shlex.split(string)
-
-    def get_labels(self):
-        """ opposite of AddLabelsPlugin, i.e. return dict of labels from dockerfile
-        :return: dictionary of label:value or label:'' if there's no value
-        """
-        labels = {}
-        multiline = False
-        processed_instr = ""
-        for line in self.lines:
-            line = line.rstrip()  # docker does this
-            self.logger.debug("processing line %s", repr(line))
-            if multiline:
-                processed_instr += line
-                if line.endswith("\\"):  # does multiline continue?
-                    # docker strips single \
-                    processed_instr = processed_instr[:-1]
-                    continue
-                else:
-                    multiline = False
-            else:
-                processed_instr = line
-            if processed_instr.startswith("LABEL"):
-                if processed_instr.endswith("\\"):
-                    self.logger.debug("multiline LABEL")
-                    # docker strips single \
-                    processed_instr = processed_instr[:-1]
-                    multiline = True
-                    continue
-                for token in self._split(processed_instr[len("LABEL "):]):
-                    key_val = token.split("=", 1)
-                    if len(key_val) == 2:
-                        labels[key_val[0]] = key_val[1]
-                    else:
-                        labels[key_val[0]] = ''
-                    self.logger.debug("new label %s=%s", repr(key_val[0]), repr(labels[key_val[0]]))
-        return labels

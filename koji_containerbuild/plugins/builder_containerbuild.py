@@ -676,4 +676,5 @@ class BuildContainerTask(BaseTaskHandler):
     def _raise_if_image_failed(self, osbs_build_id):
         build = self.osbs().get_build(osbs_build_id)
         if build.is_failed():
-            raise ContainerError('Image build failed')
+            raise ContainerError('Image build failed. OSBS build id: %s' %
+                                 osbs_build_id)

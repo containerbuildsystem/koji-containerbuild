@@ -420,6 +420,18 @@ class CreateContainerTask(BaseTaskHandler):
             # TODO: I'm not sure if this is ok
             br.expire()
 
+        repositories = []
+        try:
+            repo_dict = response.get_repositories()
+            for repos in repo_dict.values():
+                repositories.extend(repos)
+        except Exception, error:
+            self.logger.error("Failed to get available repositories from: %r. "
+                              "Reason(%s): %s",
+                              repo_dict, type(error), error)
+        self.logger.info("Image available in the following repositories: %r",
+                         repositories)
+
         containerdata = {
             'arch': arch,
             'task_id': self.id,
@@ -427,6 +439,7 @@ class CreateContainerTask(BaseTaskHandler):
             'osbs_build_id': build_id,
             'rpmlist': rpmlist,
             'files': [],
+            'repositories': repositories
         }
 
         # upload the build output
@@ -641,8 +654,16 @@ class BuildContainerTask(BaseTaskHandler):
             for task_id, result in results.items():
                 # get around an xmlrpc limitation, use arches for keys instead
                 results_xmlrpc[str(task_id)] = result
+            all_repositories = []
             for result in results.values():
                 self._raise_if_image_failed(result['osbs_build_id'])
+                try:
+                    repository = result.get('repositories')
+                    all_repositories.extend(repository)
+                except Exception, error:
+                    self.logger.error("Failed to merge list of repositories "
+                                      "%r. Reason (%s): %s", repository,
+                                      type(error), error)
             if opts.get('scratch'):
                 # scratch builds do not get imported
                 self.session.host.moveImageBuildToScratch(self.id,
@@ -672,6 +693,10 @@ class BuildContainerTask(BaseTaskHandler):
                 parent=self.id,
                 arch='noarch')
             self.wait(tag_task_id)
+
+        report = ('Image available in following repositories:\n%s' %
+                  '\n'.join(all_repositories))
+        return report
 
     def _raise_if_image_failed(self, osbs_build_id):
         build = self.osbs().get_build(osbs_build_id)

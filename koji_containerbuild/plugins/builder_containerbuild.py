@@ -339,7 +339,7 @@ class CreateContainerTask(BaseTaskHandler):
             architecture=arch,
             yum_repourls=yum_repourls,
         )
-        build_id = build_response.build_id
+        build_id = build_response.get_build_name()
         self.logger.debug("OSBS build id: %r", build_id)
 
         self.logger.debug("Waiting for osbs build_id: %s to be scheduled.",

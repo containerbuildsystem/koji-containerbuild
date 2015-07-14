@@ -4,7 +4,7 @@
 %define module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.5.2
+Version:        0.5.3
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -95,6 +95,27 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Jul 14 2015 Pavol Babincak <pbabinca@redhat.com> 0.5.3-1
+- List repositories in status message of buildContainer task
+  (pbabinca@redhat.com)
+- Print osbs build id in the error message about failed build
+  (pbabinca@redhat.com)
+- If not exactly one image was built leave fail to parent (pbabinca@redhat.com)
+- Use DockerfileParser class from dockerfile_parse module for parsing
+  (pbabinca@redhat.com)
+- Download docker logs at the end of the build (pbabinca@redhat.com)
+- Try fetch OSBS logs with follow and incrementally upload them
+  (pbabinca@redhat.com)
+- If final tarball cannot be downloaded log error and continue
+  (pbabinca@redhat.com)
+- Accept repo URLs in CLI and pass it in builder plugin to osbs
+  (pbabinca@redhat.com)
+- Improve error message when there were unexpected number of builds
+  (pbabinca@redhat.com)
+- Fix: correctly format string before passing to ContainerError
+  (pbabinca@redhat.com)
+- Fix formatting of README.rst (pbabinca@redhat.com)
+
 * Mon Jun 15 2015 Pavol Babincak <pbabinca@redhat.com> 0.5.2-1
 - Use BZComponent LABEL instead of Name (pbabinca@redhat.com)
 

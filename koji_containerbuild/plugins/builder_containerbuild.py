@@ -27,6 +27,7 @@ import os.path
 import sys
 import logging
 import imp
+import time
 import traceback
 import urlgrabber
 import urlgrabber.grabber
@@ -374,6 +375,7 @@ class CreateContainerTask(BaseTaskHandler):
                     self.logger.info("Error while saving incremental logs "
                                      "(retry #%d).", retry)
                     retry += 1
+                    time.sleep(10)
                     continue
                 break
             else:

@@ -425,8 +425,9 @@ class CreateContainerTask(BaseTaskHandler):
         repositories = []
         try:
             repo_dict = response.get_repositories()
-            for repos in repo_dict.values():
-                repositories.extend(repos)
+            if repo_dict:
+                for repos in repo_dict.values():
+                    repositories.extend(repos)
         except Exception, error:
             self.logger.error("Failed to get available repositories from: %r. "
                               "Reason(%s): %s",

@@ -269,16 +269,16 @@ class CreateContainerTask(BaseTaskHandler):
     def resultdir(self):
         return os.path.join(self.workdir, 'osbslogs')
 
-    def _incremental_upload_logs(self, build_id):
+    def _incremental_upload_logs(self, child_pid):
         resultdir = self.resultdir()
         uploadpath = self.getUploadPath()
         watcher = FileWatcher(resultdir, logger=self.logger)
         finished = False
         try:
             while not finished:
-                build_response = self.osbs().get_build(build_id)
-                if not (build_response.is_running() or
-                        build_response.is_pending()):
+                time.sleep(1)
+                status = os.waitpid(child_pid, os.WNOHANG)
+                if status[0] != 0:
                     finished = True
 
                 for result in watcher.files_to_upload():
@@ -353,7 +353,7 @@ class CreateContainerTask(BaseTaskHandler):
         koji.ensuredir(osbs_logs_dir)
         pid = os.fork()
         if pid:
-            self._incremental_upload_logs(build_id)
+            self._incremental_upload_logs(pid)
 
         else:
             full_output_name = os.path.join(osbs_logs_dir,

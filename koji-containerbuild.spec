@@ -67,10 +67,10 @@ rm -rf $RPM_BUILD_ROOT
 %{__python} setup.py install -O1 --skip-build --root $RPM_BUILD_ROOT
 %{__install} -d $RPM_BUILD_ROOT%{_bindir}
 %{__install} -p -m 0775 cli/koji-containerbuild $RPM_BUILD_ROOT%{_bindir}/koji-containerbuild
-%{__install} -d $RPM_BUILD_ROOT%{_libdir}/koji-hub-plugins
-%{__install} -p -m 0644 %{module}/plugins/hub_containerbuild.py $RPM_BUILD_ROOT%{_libdir}/koji-hub-plugins/hub_containerbuild.py
-%{__install} -d $RPM_BUILD_ROOT%{_libdir}/koji-builder-plugins
-%{__install} -p -m 0644 %{module}/plugins/builder_containerbuild.py $RPM_BUILD_ROOT%{_libdir}/koji-builder-plugins/builder_containerbuild.py
+%{__install} -d $RPM_BUILD_ROOT%{_prefix}/lib/koji-hub-plugins
+%{__install} -p -m 0644 %{module}/plugins/hub_containerbuild.py $RPM_BUILD_ROOT%{_prefix}/lib/koji-hub-plugins/hub_containerbuild.py
+%{__install} -d $RPM_BUILD_ROOT%{_prefix}/lib/koji-builder-plugins
+%{__install} -p -m 0644 %{module}/plugins/builder_containerbuild.py $RPM_BUILD_ROOT%{_prefix}/lib/koji-builder-plugins/builder_containerbuild.py
 
 
 %files
@@ -85,11 +85,11 @@ rm -rf $RPM_BUILD_ROOT
 
 %files hub
 %defattr(-,root,root)
-%{_libdir}/koji-hub-plugins/hub_containerbuild.py*
+%{_prefix}/lib/koji-hub-plugins/hub_containerbuild.py*
 
 %files builder
 %defattr(-,root,root)
-%{_libdir}/koji-builder-plugins/builder_containerbuild.py*
+%{_prefix}/lib/koji-builder-plugins/builder_containerbuild.py*
 
 %clean
 rm -rf $RPM_BUILD_ROOT

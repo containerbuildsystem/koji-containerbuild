@@ -66,4 +66,28 @@ Package provides CLI binary with interface similar to upstream koji CLI. It
 adds only single new command - `container-build` which allows submitting container
 builds to Koji hub. To configure CLI you'll need to copy `[koji]` section in
 `/etc/koji.conf` to `[koji-containerbuild]` and optionally adapt configuration
-there. 
+there.
+
+
+Post Install Configuration
+--------------------------
+
+As the kojiadmin user (normally the koji system user), add the container channel to koji
+
+::
+
+    $ psql
+    psql (8.4.20)
+    Type "help" for help.
+
+    koji=# INSERT INTO channels (name) VALUES ('container');
+
+As the kojiadmin, add builder(s) to the channel and add a package
+
+::
+
+    $ koji add-host-to-channel kojibuilder1 container
+    $ koji add-pkg --owner some_koji_user some_koji_target testing
+
+
+

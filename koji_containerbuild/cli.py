@@ -58,6 +58,8 @@ def handle_container_build(options, session, args):
                       action='append',
                       help=_("URL of yum repo file. May be used multiple "
                              "times."))
+    parser.add_option("--git-branch", metavar="GIT_BRANCH",
+                      help=_("Git branch"))
     (build_opts, args) = parser.parse_args(args)
     if len(args) != 2:
         parser.error(_("Exactly two arguments (a build target and a SCM URL "
@@ -80,7 +82,7 @@ def handle_container_build(options, session, args):
             parser.error(_("Destination tag %s is locked" % dest_tag['name']))
     source = args[1]
     opts = {}
-    for key in ('scratch', 'epoch', 'yum_repourls'):
+    for key in ('scratch', 'epoch', 'yum_repourls', 'git_branch'):
         val = getattr(build_opts, key)
         if val is not None:
             opts[key] = val

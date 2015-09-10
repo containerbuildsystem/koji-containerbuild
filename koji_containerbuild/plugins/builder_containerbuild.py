@@ -317,7 +317,7 @@ class CreateContainerTask(BaseTaskHandler):
                                  "finished.")
 
     def handler(self, src, target_info, arch, output_template, scratch=False,
-                yum_repourls=None):
+                yum_repourls=None, branch=None, push_url=None):
         if not yum_repourls:
             yum_repourls = []
 
@@ -331,14 +331,21 @@ class CreateContainerTask(BaseTaskHandler):
         git_uri = scm.get_git_uri()
         component = scm.get_component()
 
+        create_build_args = {
+            'git_uri': git_uri,
+            'git_ref': scm.revision,
+            'user': owner_info['name'],
+            'component': component,
+            'target': target_info['name'],
+            'architecture': arch,
+            'yum_repourls': yum_repourls,
+        }
+        if branch:
+            create_build_args['git_branch'] = branch
+        if push_url:
+            create_build_args['git_push_url'] = push_url
         build_response = self.osbs().create_build(
-            git_uri=git_uri,
-            git_ref=scm.revision,
-            user=owner_info['name'],
-            component=component,
-            target=target_info['name'],
-            architecture=arch,
-            yum_repourls=yum_repourls,
+            **create_build_args
         )
         build_id = build_response.get_build_name()
         self.logger.debug("OSBS build id: %r", build_id)
@@ -497,7 +504,7 @@ class BuildContainerTask(BaseTaskHandler):
             raise koji.BuildError("package (container)  %s is blocked for tag %s" % (name, target_info['dest_tag_name']))
 
     def runBuilds(self, src, target_info, arches, output_template,
-                  scratch=False, yum_repourls=None):
+                  scratch=False, yum_repourls=None, branch=None, push_url=None):
         subtasks = {}
         for arch in arches:
             subtasks[arch] = self.session.host.subtask(method='createContainer',
@@ -506,7 +513,9 @@ class BuildContainerTask(BaseTaskHandler):
                                                                 arch,
                                                                 output_template,
                                                                 scratch,
-                                                                yum_repourls],
+                                                                yum_repourls,
+                                                                branch,
+                                                                push_url],
                                                        label='container',
                                                        parent=self.id)
         self.logger.debug("Got image subtasks: %r", (subtasks))
@@ -652,7 +661,9 @@ class BuildContainerTask(BaseTaskHandler):
             results = self.runBuilds(src, target_info, archlist,
                                      output_template,
                                      opts.get('scratch', False),
-                                     opts.get('yum_repourls', None))
+                                     opts.get('yum_repourls', None),
+                                     opts.get('git_branch', None),
+                                     opts.get('push_url', None))
             results_xmlrpc = {}
             for task_id, result in results.items():
                 # get around an xmlrpc limitation, use arches for keys instead

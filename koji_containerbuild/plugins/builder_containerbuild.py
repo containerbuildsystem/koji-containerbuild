@@ -436,7 +436,9 @@ class CreateContainerTask(BaseTaskHandler):
             files = self._download_files(response.get_tar_metadata_filename(),
                                          "image-%s.tar" % arch)
 
-        rpmlist = self._get_rpm_packages(response)
+        rpmlist = []
+        if response.is_succeeded():
+            rpmlist = self._get_rpm_packages(response)
 
         self.logger.debug("rpm list:")
         for rpm in rpmlist:
@@ -454,7 +456,9 @@ class CreateContainerTask(BaseTaskHandler):
             # TODO: I'm not sure if this is ok
             br.expire()
 
-        repositories = self._get_repositories(response)
+        repositories = []
+        if response.is_succeeded():
+            repositories = self._get_repositories(response)
 
         self.logger.info("Image available in the following repositories: %r",
                          repositories)

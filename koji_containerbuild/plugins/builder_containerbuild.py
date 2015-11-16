@@ -456,7 +456,7 @@ class CreateContainerTask(BaseTaskHandler):
             build_log = os.path.join(self.workdir, filename)
             self.uploadFile(build_log)
 
-        if len(files) != 1:
+        if response.is_succeeded() and len(files) != 1:
             self.logger.error("There should be only one container file but "
                               "there are %d: %s", len(files), files)
         else:

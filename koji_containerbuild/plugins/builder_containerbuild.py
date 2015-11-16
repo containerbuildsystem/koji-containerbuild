@@ -315,6 +315,26 @@ class CreateContainerTask(BaseTaskHandler):
             raise ContainerError("Build log finished but build still has not "
                                  "finished: %s." % build_response.status)
 
+    def _get_rpm_packages(self, response):
+        rpmlist = []
+        try:
+            rpm_packages = response.get_rpm_packages()
+        except (KeyError, TypeError), error:
+            self.logger.error("Build response miss rpm-package: %s" % error)
+            rpm_packages = ''
+        if rpm_packages is None:
+            rpm_packages = ''
+        self.logger.debug("List of rpms: %s", rpm_packages)
+        for package in rpm_packages.split('\n'):
+            if len(package.strip()) == 0:
+                continue
+            parts = package.split(',')
+            rpm_info = self._rpm_package_info(parts)
+            if not rpm_info:
+                continue
+            rpmlist.append(rpm_info)
+        return rpmlist
+
     def _get_repositories(self, response):
         repositories = []
         try:
@@ -412,23 +432,7 @@ class CreateContainerTask(BaseTaskHandler):
         files = self._download_files(response.get_tar_metadata_filename(),
                                      "image-%s.tar" % arch)
 
-        rpmlist = []
-        try:
-            rpm_packages = response.get_rpm_packages()
-        except (KeyError, TypeError), error:
-            self.logger.error("Build response miss rpm-package: %s" % error)
-            rpm_packages = ''
-        if rpm_packages is None:
-            rpm_packages = ''
-        self.logger.debug("List of rpms: %s", rpm_packages)
-        for package in rpm_packages.split('\n'):
-            if len(package.strip()) == 0:
-                continue
-            parts = package.split(',')
-            rpm_info = self._rpm_package_info(parts)
-            if not rpm_info:
-                continue
-            rpmlist.append(rpm_info)
+        rpmlist = self._get_rpm_packages(response)
 
         repo_info = self.session.getRepo(target_info['build_tag'])
         # TODO: copied from image build

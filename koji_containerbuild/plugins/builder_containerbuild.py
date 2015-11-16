@@ -449,12 +449,16 @@ class CreateContainerTask(BaseTaskHandler):
         # TODO: copied from image build
         # TODO: hack to make this work for now, need to refactor
         if scratch:
-            br = kojid.BuildRoot(self.session, self.options,
-                                 target_info['build_tag'], arch,
-                                 self.id, repo_id=repo_info['id'])
-            br.markExternalRPMs(rpmlist)
-            # TODO: I'm not sure if this is ok
-            br.expire()
+            try:
+                br = kojid.BuildRoot(self.session, self.options,
+                                     target_info['build_tag'], arch,
+                                     self.id, repo_id=repo_info['id'])
+                br.markExternalRPMs(rpmlist)
+                # TODO: I'm not sure if this is ok
+                br.expire()
+            except Exception, error:
+                raise koji.PostBuildError("Failed to distuinguish external "
+                                          "rpms: %s" % error)
 
         repositories = []
         if response.is_succeeded():

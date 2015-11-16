@@ -448,7 +448,7 @@ class CreateContainerTask(BaseTaskHandler):
         repo_info = self.session.getRepo(target_info['build_tag'])
         # TODO: copied from image build
         # TODO: hack to make this work for now, need to refactor
-        if scratch:
+        if not scratch:
             try:
                 br = kojid.BuildRoot(self.session, self.options,
                                      target_info['build_tag'], arch,

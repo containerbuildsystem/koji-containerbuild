@@ -429,8 +429,12 @@ class CreateContainerTask(BaseTaskHandler):
                           response.json)
         logs = self._download_logs(build_id)
 
-        files = self._download_files(response.get_tar_metadata_filename(),
-                                     "image-%s.tar" % arch)
+        self.logger.info("Response status: %r", response.is_succeeded())
+
+        files = []
+        if response.is_succeeded() and response.get_tar_metadata_filename():
+            files = self._download_files(response.get_tar_metadata_filename(),
+                                         "image-%s.tar" % arch)
 
         rpmlist = self._get_rpm_packages(response)
 

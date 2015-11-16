@@ -434,6 +434,11 @@ class CreateContainerTask(BaseTaskHandler):
 
         rpmlist = self._get_rpm_packages(response)
 
+        self.logger.debug("rpm list:")
+        for rpm in rpmlist:
+            self.logger.debug("%(name)s-%(version)s-%(release)s.%(arch)s.rpm" %
+                              rpm)
+
         repo_info = self.session.getRepo(target_info['build_tag'])
         # TODO: copied from image build
         # TODO: hack to make this work for now, need to refactor

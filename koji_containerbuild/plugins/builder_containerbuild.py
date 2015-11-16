@@ -297,17 +297,16 @@ class CreateContainerTask(BaseTaskHandler):
             build_logs = self.osbs().get_build_logs(build_id,
                                                     follow=True)
         except Exception, error:
-            self.logger.info("Exception while waiting for build "
-                              "logs: %s", error)
-            raise
+            msg = "Exception while waiting for build logs: %s" % error
+            raise ContainerError(msg)
         outfile = open(log_filename, 'w')
         try:
             for line in build_logs:
                 outfile.write("%s\n" % line)
         except Exception, error:
-            self.logger.info("Exception (%s) while reading build logs: %s",
-                             type(error), error)
-            raise
+            msg = "Exception (%s) while reading build logs: %s" % (type(error),
+                                                                   error)
+            raise ContainerError(msg)
         finally:
             outfile.close()
         self.logger.info("%s written", log_basename)

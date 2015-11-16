@@ -313,7 +313,7 @@ class CreateContainerTask(BaseTaskHandler):
         build_response = self.osbs().get_build(build_id)
         if (build_response.is_running() or build_response.is_pending()):
             raise ContainerError("Build log finished but build still has not "
-                                 "finished.")
+                                 "finished: %s." % build_response.status)
 
     def handler(self, src, target_info, arch, output_template, scratch=False,
                 yum_repourls=None, branch=None, push_url=None):
@@ -377,9 +377,9 @@ class CreateContainerTask(BaseTaskHandler):
                 try:
                     self._write_incremental_logs(build_id,
                                                  full_output_name)
-                except Exception:
+                except Exception, error:
                     self.logger.info("Error while saving incremental logs "
-                                     "(retry #%d).", retry)
+                                     "(retry #%d): %s", retry, error)
                     retry += 1
                     time.sleep(10)
                     continue

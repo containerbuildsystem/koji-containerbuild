@@ -54,16 +54,42 @@ finally:
     fo.close()
 
 
-# List of LABELs to fetch from Dockerfile
-LABELS = ('BZComponent', 'Version', 'Release', 'Architecture')
+
+# List of LABEL identifiers used within Koji. Values doesn't need to correspond
+# to actual LABEL names. All these are required unless there exist default
+# value (see LABEL_DEFAULT_VALUES).
+LABELS = koji.Enum((
+    'COMPONENT',
+    'VERSION',
+    'RELEASE',
+    'ARCHITECTURE',
+))
+
+
+# Mapping between LABEL identifiers within koji and actual LABEL identifiers
+# which can be found in Dockerfile. First value is preferred one, others are for
+# compatibility purposes.
+LABEL_NAME_MAP = {
+    'COMPONENT': ('com.redhat.component', 'BZComponent'),
+    'VERSION': ('version', 'Version'),
+    'RELEASE': ('release', 'Release'),
+    'ARCHITECTURE': ('architecture', 'Architecture'),
+}
 
 
 # Map from LABELS to extra data
-LABEL_MAP = {
-    'BZComponent': 'name',
-    'Version': 'version',
-    'Release': 'release',
-    'Architecture': 'architecture',
+LABEL_DATA_MAP = {
+    'COMPONENT': 'name',
+    'VERSION': 'version',
+    'RELEASE': 'release',
+    'ARCHITECTURE': 'architecture',
+}
+
+
+# Default values for LABELs. If there exist default value here LABEL is
+# optional in Dockerfile.
+LABEL_DEFAULT_VALUES = {
+    'ARCHITECTURE': 'x86_64',
 }
 
 
@@ -146,6 +172,77 @@ class FileWatcher(object):
         for (fname, (fd, inode, size, fpath)) in self._logs.items():
             if fd:
                 fd.close()
+
+
+class LabelsWrapper(object):
+    def __init__(self, dockerfile_path, logger_name=None):
+        self.dockerfile_path = dockerfile_path
+        self._setup_logger(logger_name)
+        self._parser = None
+        self._label_data = {}
+
+    def _setup_logger(self, logger_name=None):
+        if logger_name:
+            dockerfile_parse.parser.logger = logging.getLogger("%s.dockerfile_parse"
+                                                               % logger_name)
+
+    def _parse(self):
+        self._parser = dockerfile_parse.parser.DockerfileParser(self.dockerfile_path)
+
+    def get_labels(self):
+        """returns all labels how they are found in Dockerfile"""
+        self._parse()
+        return self._parser.labels
+
+    def get_data_labels(self):
+        """Subset of labels found in Dockerfile which we are interested in
+
+        returns dict with keys from LABELS and default values from
+        LABEL_DEFAULT_VALUES or actual values from Dockefile as mapped via
+        LABEL_NAME_MAP.
+        """
+
+        parsed_labels = self.get_labels()
+        for label_id in LABELS:
+            assert label_id in LABEL_NAME_MAP, ("Required LABEL doesn't map "
+                                                "to LABEL name in Dockerfile")
+            self._label_data.setdefault(label_id,
+                                        LABEL_DEFAULT_VALUES.get(label_id,
+                                                                 None))
+            for label_name in LABEL_NAME_MAP[label_id]:
+                if label_name in parsed_labels:
+                    self._label_data[label_id] = parsed_labels[label_name]
+                    break
+        return self._label_data
+
+    def get_extra_data(self):
+        """Returns dict with keys for Koji's extra_information"""
+        data = self.get_data_labels()
+        extra_data = {}
+        for label_id, value in data.items():
+            assert label_id in LABEL_DATA_MAP
+            extra_key = LABEL_DATA_MAP[label_id]
+            extra_data[extra_key] = value
+        return extra_data
+
+    def get_missing_label_ids(self):
+        data = self.get_data_labels()
+        missing_labels = []
+        for label_id in LABELS:
+            assert label_id in data
+            if not data[label_id]:
+                missing_labels.append(label_id)
+        return missing_labels
+
+    def format_label(self, label_id):
+        """Formats string with user-facing LABEL name and its alternatives"""
+
+        assert label_id in LABEL_NAME_MAP
+        label_map = LABEL_NAME_MAP[label_id]
+        if len(label_map) == 1:
+            return label_map[0]
+        else:
+            return "%s (or %s)" % (label_map[0], " or ".join(label_map[1:]))
 
 
 class CreateContainerTask(BaseTaskHandler):
@@ -640,14 +737,6 @@ class BuildContainerTask(BaseTaskHandler):
                 self.logger.info("No such label: %s", f)
         return ret
 
-    def _map_labels_to_data(self, labels):
-        data = {}
-        for key, value in labels.items():
-            if key in LABEL_MAP:
-                key = LABEL_MAP[key]
-            data[key] = value
-        return data
-
     def handler(self, src, target, opts=None):
         if not opts:
             opts = {}
@@ -660,16 +749,18 @@ class BuildContainerTask(BaseTaskHandler):
         archlist = self.getArchList(build_tag)
 
         dockerfile_path = self.fetchDockerfile(src)
-        data_labels = self._get_dockerfile_labels(dockerfile_path, LABELS)
-        data = self._map_labels_to_data(data_labels)
-
+        labels_wrapper = LabelsWrapper(dockerfile_path, self.logger.name)
+        missing_labels = labels_wrapper.get_missing_label_ids()
+        if missing_labels:
+            formatted_labels_list = [labels_wrapper.format_label(label_id) for
+                                     label_id in missing_labels]
+            msg_template = ("Required LABELs haven't been found in "
+                            "Dockerfile: %s.")
+            raise koji.BuildError, (msg_template %
+                                    ', '.join(formatted_labels_list))
+        data = labels_wrapper.get_extra_data()
         admin_opts = self._get_admin_opts(opts)
         data.update(admin_opts)
-
-        for field in ['name', 'version', 'release', 'architecture']:
-            if field not in data:
-                raise koji.BuildError('%s needs to be specified for '
-                                      'container builds' % field)
 
         # scratch builds do not get imported
         if not self.opts.get('scratch'):

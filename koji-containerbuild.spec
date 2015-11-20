@@ -5,7 +5,7 @@
 
 Name:           koji-containerbuild
 Version:        0.5.4
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
 
@@ -96,6 +96,10 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri Nov 20 2015 Pavol Babincak <pbabinca@redhat.com> 0.5.4-2
+- fix spec paths, libdir evals to /usr/lib64/ on 64-bit build hosts which is
+  the wrong path for koji plugins (admiller@redhat.com)
+
 * Fri Nov 20 2015 Pavol Babincak <pbabinca@redhat.com> 0.5.4-1
 - Reinit curl after fork to properly process incremental logs
   (pbabinca@redhat.com)

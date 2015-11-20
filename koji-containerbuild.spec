@@ -4,7 +4,7 @@
 %define module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.5.3
+Version:        0.5.4
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -96,6 +96,38 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri Nov 20 2015 Pavol Babincak <pbabinca@redhat.com> 0.5.4-1
+- Reinit curl after fork to properly process incremental logs
+  (pbabinca@redhat.com)
+- Add support to new LABEL names and make architecture optional
+  (pbabinca@redhat.com)
+- Fix serious issue: check external rpms for *non*scratch builds
+  (pbabinca@redhat.com)
+- Catch errors raised by markExternalRPMs and raise it as koji.PostBuildError
+  (pbabinca@redhat.com)
+- Get list of rpms and repositories only for successful builds
+  (pbabinca@redhat.com)
+- Download image tarball only if build was successful (pbabinca@redhat.com)
+- Log list of all rpms from osbs response as formatted rpm list
+  (pbabinca@redhat.com)
+- Refactor: get rpm packages to separate method (pbabinca@redhat.com)
+- Refactor: get docker repositories to separate method (pbabinca@redhat.com)
+- Fail only if build was successful and it haven't generated any tarball
+  (pbabinca@redhat.com)
+- Improve log write related exception messages (pbabinca@redhat.com)
+- Raise ContainerError exceptions when something goes wrong with osbs logs
+  (pbabinca@redhat.com)
+- Pass branch and push_url from opts to osbs's create_build()
+  (pbabinca@redhat.com)
+- Uploader process check if child (which fetches logs) finished
+  (pbabinca@redhat.com)
+- Overall docs about build architecture (pbabinca@redhat.com)
+- change log msg level to info (mikem@redhat.com)
+- Properly handle empty repositories in osbs response (pbabinca@redhat.com)
+- Wait between new connection/fetch logs (pbabinca@redhat.com)
+- Use get_build_name() instead of build_id to get osbs build id
+  (pbabinca@redhat.com)
+
 * Tue Jul 14 2015 Pavol Babincak <pbabinca@redhat.com> 0.5.3-1
 - List repositories in status message of buildContainer task
   (pbabinca@redhat.com)

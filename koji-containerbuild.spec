@@ -10,7 +10,7 @@ Summary:        Koji support for building layered container images
 Group:          Applications/System
 
 License:        LGPLv2
-URL:            https://github.com/release-engineering/${name}
+URL:            https://github.com/release-engineering/%{name}
 Source0:        %{name}-%{version}.tar.gz
 BuildArch:      noarch
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)

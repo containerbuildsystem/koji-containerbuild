@@ -15,6 +15,13 @@ To build the current release, use the following command in the repo directory::
 
   tito build --rpm
 
+Create release tarball
+----------------------
+
+To create tarball for a release run::
+
+  python setup.py sdist
+
 
 Plugin installation
 -------------------

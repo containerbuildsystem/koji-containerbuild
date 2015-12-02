@@ -59,7 +59,7 @@ Builder plugin that extend Koji to communicate with OpenShift build system and b
 %package cli
 Summary:    CLI that communicates with Koji to control building layered container images
 Group:      Applications/System
-Requires:   koji-builder
+Requires:   koji
 
 %description cli
 Builder plugin that extend Koji to communicate with OpenShift build system and build layered container images.

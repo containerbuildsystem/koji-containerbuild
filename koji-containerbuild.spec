@@ -27,7 +27,6 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildRequires:  python
 BuildRequires:  python-setuptools
-Requires:       koji
 
 %description
 Koji support for building layered container images

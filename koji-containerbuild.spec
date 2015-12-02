@@ -77,7 +77,7 @@ build layered container images.
 rm -rf $RPM_BUILD_ROOT
 %{__python} setup.py install -O1 --skip-build --root $RPM_BUILD_ROOT
 %{__install} -d $RPM_BUILD_ROOT%{_bindir}
-%{__install} -p -m 0775 cli/koji-containerbuild $RPM_BUILD_ROOT%{_bindir}/koji-containerbuild
+%{__install} -p -m 0755 cli/koji-containerbuild $RPM_BUILD_ROOT%{_bindir}/koji-containerbuild
 %{__install} -d $RPM_BUILD_ROOT%{_prefix}/lib/koji-hub-plugins
 %{__install} -p -m 0644 %{module}/plugins/hub_containerbuild.py $RPM_BUILD_ROOT%{_prefix}/lib/koji-hub-plugins/hub_containerbuild.py
 %{__install} -d $RPM_BUILD_ROOT%{_prefix}/lib/koji-builder-plugins

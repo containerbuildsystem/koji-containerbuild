@@ -52,7 +52,8 @@ Requires:   python-dockerfile-parse
 Requires:   python-pycurl
 
 %description builder
-Builder plugin that extend Koji to communicate with OpenShift build system and build layered container images.
+Builder plugin that extend Koji to communicate with OpenShift build system and
+build layered container images.
 
 
 %package cli
@@ -61,7 +62,8 @@ Group:      Applications/System
 Requires:   koji
 
 %description cli
-Builder plugin that extend Koji to communicate with OpenShift build system and build layered container images.
+Builder plugin that extend Koji to communicate with OpenShift build system and
+build layered container images.
 
 %prep
 %setup -q

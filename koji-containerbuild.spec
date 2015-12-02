@@ -85,7 +85,6 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %files
-%defattr(-,root,root)
 %{python_sitelib}/%{module}/*
 %{python_sitelib}/%{module}-*.egg-info
 %doc docs AUTHORS
@@ -95,15 +94,12 @@ rm -rf $RPM_BUILD_ROOT
 %license LICENSE
 
 %files cli
-%defattr(-,root,root)
 %{_bindir}/*
 
 %files hub
-%defattr(-,root,root)
 %{_prefix}/lib/koji-hub-plugins/hub_containerbuild.py*
 
 %files builder
-%defattr(-,root,root)
 %{_prefix}/lib/koji-builder-plugins/builder_containerbuild.py*
 
 %clean

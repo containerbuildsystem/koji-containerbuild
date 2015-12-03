@@ -36,6 +36,7 @@ Koji support for building layered container images
 
 
 %package hub
+License:    LGPLv2
 Summary:    Hub plugin that extend Koji to build layered container images
 Group:      Applications/System
 Requires:   koji-hub
@@ -60,6 +61,7 @@ build layered container images.
 
 
 %package cli
+License:    LGPLv2
 Summary:    CLI that communicates with Koji to control building layered container images
 Group:      Applications/System
 Requires:   koji

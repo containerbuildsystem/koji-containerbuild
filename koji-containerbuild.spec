@@ -7,7 +7,7 @@
 
 Name:           koji-containerbuild
 Version:        0.5.4
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
 
@@ -109,6 +109,25 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Thu Dec 03 2015 Pavol Babincak <pbabinca@redhat.com> 0.5.4-3
+- Simplify inclusion of python modules to get proper owners
+  (pbabinca@redhat.com)
+- Explicit __python2 definitions on <=rhel6 (pbabinca@redhat.com)
+- Explicit use of python2 and BuildRequires on python2-devel
+  (pbabinca@redhat.com)
+- %%defattr macro isn't needed anymore (pbabinca@redhat.com)
+- Use %%license tag for license on RHEL && RHEL <= 6 (pbabinca@redhat.com)
+- Fix permissions for CLI binary (pbabinca@redhat.com)
+- Wrap package descriptions to make rpmlint happy (pbabinca@redhat.com)
+- Replace Requires on osbs with osbs-client (pbabinca@redhat.com)
+- Remove koji Requires from the base package (pbabinca@redhat.com)
+- Replace koji-builder with koji dependency for cli subpackage
+  (pbabinca@redhat.com)
+- Specify how release tarballs are created (pbabinca@redhat.com)
+- Use build system instead of buildsystem to make rpmlint happy
+  (pbabinca@redhat.com)
+- Fix name macro in URL (pbabinca@redhat.com)
+
 * Fri Nov 20 2015 Pavol Babincak <pbabinca@redhat.com> 0.5.4-2
 - fix spec paths, libdir evals to /usr/lib64/ on 64-bit build hosts which is
   the wrong path for koji plugins (admiller@redhat.com)

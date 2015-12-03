@@ -88,8 +88,7 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %files
-%{python_sitelib}/%{module}/*
-%{python_sitelib}/%{module}-*.egg-info
+%{python2_sitelib}/*
 %doc docs AUTHORS
 %if 0%{?rhel} && 0%{?rhel} <= 6
 %{!?_licensedir:%global license %doc}

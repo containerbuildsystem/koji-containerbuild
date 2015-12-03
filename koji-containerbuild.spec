@@ -1,5 +1,4 @@
-%{!?python_sitelib: %define python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print get_python_lib()")}
-%{!?python_sitelib: %define python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print get_python_lib()")}
+%{!?python2_sitelib: %define python2_sitelib %(%{__python2} -c "from distutils.sysconfig import get_python_lib; print get_python_lib()")}
 
 %define module koji_containerbuild
 
@@ -26,6 +25,7 @@ BuildArch:      noarch
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildRequires:  python
+BuildRequires:  python2-devel
 BuildRequires:  python-setuptools
 
 %description
@@ -70,12 +70,12 @@ build layered container images.
 
 
 %build
-%{__python} setup.py build
+%{__python2} setup.py build
 
 
 %install
 rm -rf $RPM_BUILD_ROOT
-%{__python} setup.py install -O1 --skip-build --root $RPM_BUILD_ROOT
+%{__python2} setup.py install -O1 --skip-build --root $RPM_BUILD_ROOT
 %{__install} -d $RPM_BUILD_ROOT%{_bindir}
 %{__install} -p -m 0755 cli/koji-containerbuild $RPM_BUILD_ROOT%{_bindir}/koji-containerbuild
 %{__install} -d $RPM_BUILD_ROOT%{_prefix}/lib/koji-hub-plugins

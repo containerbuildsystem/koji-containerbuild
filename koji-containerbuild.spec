@@ -39,6 +39,7 @@ Koji support for building layered container images
 License:    LGPLv2
 Summary:    Hub plugin that extend Koji to build layered container images
 Group:      Applications/System
+Requires:   koji-containerbuild
 Requires:   koji-hub
 
 %description hub
@@ -50,6 +51,7 @@ License:    LGPLv2
 Summary:    Builder plugin that extend Koji to build layered container images
 Group:      Applications/System
 Requires:   koji-builder
+Requires:   koji-containerbuild
 Requires:   osbs-client
 Requires:   python-urlgrabber
 Requires:   python-dockerfile-parse
@@ -65,6 +67,7 @@ License:    LGPLv2
 Summary:    CLI that communicates with Koji to control building layered container images
 Group:      Applications/System
 Requires:   koji
+Requires:   koji-containerbuild
 
 %description cli
 Builder plugin that extend Koji to communicate with OpenShift build system and

@@ -46,7 +46,7 @@ License:    LGPLv2
 Summary:    Builder plugin that extend Koji to build layered container images
 Group:      Applications/System
 Requires:   koji-builder
-Requires:   osbs
+Requires:   osbs-client
 Requires:   python-urlgrabber
 Requires:   python-dockerfile-parse
 Requires:   python-pycurl

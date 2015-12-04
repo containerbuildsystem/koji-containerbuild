@@ -6,8 +6,8 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.5.4
-Release:        3%{?dist}
+Version:        0.5.5
+Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
 
@@ -114,6 +114,13 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri Dec 04 2015 Pavol Babincak <pbabinca@redhat.com> 0.5.5-1
+- Add README.rst to a release (pbabinca@redhat.com)
+- Use %%global macro instead of %%define one (pbabinca@redhat.com)
+- Require main package in subpackages to always install license file
+  (pbabinca@redhat.com)
+- Add license directives to subpackages (pbabinca@redhat.com)
+
 * Thu Dec 03 2015 Pavol Babincak <pbabinca@redhat.com> 0.5.4-3
 - Simplify inclusion of python modules to get proper owners
   (pbabinca@redhat.com)

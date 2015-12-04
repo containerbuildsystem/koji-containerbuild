@@ -94,7 +94,7 @@ rm -rf $RPM_BUILD_ROOT
 
 %files
 %{python2_sitelib}/*
-%doc docs AUTHORS
+%doc docs AUTHORS README.rst
 %if 0%{?rhel} && 0%{?rhel} <= 6
 %{!?_licensedir:%global license %doc}
 %endif

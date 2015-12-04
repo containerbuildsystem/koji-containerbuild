@@ -1,4 +1,5 @@
 include AUTHORS
+include README.rst
 include cli/koji-containerbuild.conf
 include LICENSE
 include docs/schema.sql

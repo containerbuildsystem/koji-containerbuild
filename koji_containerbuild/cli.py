@@ -30,6 +30,9 @@ from optparse import OptionParser
 clikoji = None
 
 
+# matches hub's buildContainer parameter channel
+DEFAULT_CHANNEL = 'container'
+
 def handle_container_build(options, session, args):
     "Build a container"
     usage = _("usage: %prog container-build [options] target <scm url or "
@@ -60,6 +63,9 @@ def handle_container_build(options, session, args):
                              "times."))
     parser.add_option("--git-branch", metavar="GIT_BRANCH",
                       help=_("Git branch"))
+    parser.add_option("--channel-override",
+                      help=_("Use a non-standard channel [default: %default]"),
+                      default=DEFAULT_CHANNEL)
     (build_opts, args) = parser.parse_args(args)
     if len(args) != 2:
         parser.error(_("Exactly two arguments (a build target and a SCM URL "
@@ -103,7 +109,8 @@ def handle_container_build(options, session, args):
         session.uploadWrapper(source, serverdir, callback=callback)
         print
         source = "%s/%s" % (serverdir, os.path.basename(source))
-    task_id = session.buildContainer(source, target, opts, priority=priority)
+    task_id = session.buildContainer(source, target, opts, priority=priority,
+                                     channel=build_opts.channel_override)
     if not build_opts.quiet:
         print "Created task:", task_id
         print "Task info: %s/taskinfo?taskID=%s" % (options.weburl, task_id)

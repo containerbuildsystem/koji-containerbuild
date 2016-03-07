@@ -288,7 +288,10 @@ class CreateContainerTask(BaseTaskHandler):
 
     def _download_files(self, source_filename, target_filename=None):
         if not target_filename:
-            target_filename = "image.tar"
+            if source_filename.endswith(".tar.gz"):
+                target_filename = "image.tar.gz"
+            else:
+                target_filename = "image.tar"
         localpath = os.path.join(self.workdir, target_filename)
         remote_url = self._get_file_url(source_filename)
         koji.ensuredir(self.workdir)
@@ -539,8 +542,12 @@ class CreateContainerTask(BaseTaskHandler):
 
         files = []
         if response.is_succeeded() and response.get_tar_metadata_filename():
-            files = self._download_files(response.get_tar_metadata_filename(),
-                                         "image-%s.tar" % arch)
+            sourceimage = response.get_tar_metadata_filename()
+            if sourceimage.endswith(".tar.gz"):
+                targetimage = "image-%s.tar.gz" % arch
+            else:
+                targetimage = "image-%s.tar" % arch
+            files = self._download_files(sourceimage, targetimage)
 
         rpmlist = []
         if response.is_succeeded():

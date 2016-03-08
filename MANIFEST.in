@@ -3,3 +3,5 @@ include README.rst
 include cli/koji-containerbuild.conf
 include LICENSE
 include docs/schema.sql
+include docs/build-process.md
+include docs/build-architecture.md

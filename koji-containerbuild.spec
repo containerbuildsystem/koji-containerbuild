@@ -6,7 +6,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.5.6
+Version:        0.5.7
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -114,6 +114,11 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Mon Mar 14 2016 Pavol Babincak <pbabinca@redhat.com> 0.5.7-1
+- Updated docs how to create a release (pbabinca@redhat.com)
+- add some post-install instructions (admiller@redhat.com)
+- incorporated new osbs api for compression fix (breilly@redhat.com)
+
 * Tue Mar 08 2016 Pavol Babincak <pbabinca@redhat.com> 0.5.6-1
 - Backport spec file from Fedora (pbabinca@redhat.com)
 - Include docs in MANIFEST.in (pbabinca@redhat.com)

@@ -653,10 +653,6 @@ class BuildContainerTask(BaseTaskHandler):
                   scratch=False, yum_repourls=None, branch=None, push_url=None):
         self.logger.debug("Spawning jobs for arches: %r" % (arches))
         subtasks = {}
-        if koji.util.multi_fnmatch(arch, self.options.literal_task_arches):
-            taskarch = arch
-        else:
-            taskarch = koji.canonArch(arch)
         for arch in arches:
             if koji.util.multi_fnmatch(arch, self.options.literal_task_arches):
                 taskarch = arch
@@ -758,22 +754,6 @@ class BuildContainerTask(BaseTaskHandler):
 
         return {'epoch': epoch}
 
-    def _get_dockerfile_labels(self, dockerfile_path, fields):
-        """Roughly corresponds to koji.get_header_fields()
-
-        It differs from get_header_fields() which is ran on rpms that missing
-        fields are not considered to be error.
-        """
-        dockerfile_parse.parser.logger = logging.getLogger("%s.dockerfile_parse"
-                                                           % self.logger.name)
-        parser = dockerfile_parse.parser.DockerfileParser(dockerfile_path)
-        ret = {}
-        for f in fields:
-            try:
-                ret[f] = parser.labels[f]
-            except KeyError:
-                self.logger.info("No such label: %s", f)
-        return ret
 
     def _get_compressed_extension(self, compressed_extension=None):
 
@@ -815,12 +795,6 @@ class BuildContainerTask(BaseTaskHandler):
         admin_opts = self._get_admin_opts(opts)
         data.update(admin_opts)
 
-        # scratch builds do not get imported
-        if not self.opts.get('scratch'):
-
-            if not opts.get('skip_tag'):
-                self.check_whitelist(data['name'], target_info)
-            bld_info = self.session.host.initImageBuild(self.id, data)
         try:
             self.extra_information = {"src": src, "data": data,
                                       "target": target}
@@ -847,35 +821,12 @@ class BuildContainerTask(BaseTaskHandler):
                     self.logger.error("Failed to merge list of repositories "
                                       "%r. Reason (%s): %s", repository,
                                       type(error), error)
-            if opts.get('scratch'):
-                # scratch builds do not get imported
-                self.session.host.moveImageBuildToScratch(self.id,
-                                                          results_xmlrpc)
-            else:
-                self.session.host.completeImageBuild(self.id,
-                                                     bld_info['id'],
-                                                     results_xmlrpc)
         except (SystemExit, ServerExit, KeyboardInterrupt):
             # we do not trap these
             raise
         except:
-            if not self.opts.get('scratch'):
-                # scratch builds do not get imported
-                if bld_info:
-                    self.session.host.failBuild(self.id, bld_info['id'])
             # reraise the exception
             raise
-
-        # tag it
-        if not opts.get('scratch') and not opts.get('skip_tag'):
-            tag_task_id = self.session.host.subtask(
-                method='tagBuild',
-                arglist=[target_info['dest_tag'], bld_info['id'], False, None,
-                         True],
-                label='tag',
-                parent=self.id,
-                arch='noarch')
-            self.wait(tag_task_id)
 
         report = ('Image available in following repositories:\n%s' %
                   '\n'.join(all_repositories))

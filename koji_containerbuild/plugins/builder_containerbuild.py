@@ -653,6 +653,10 @@ class BuildContainerTask(BaseTaskHandler):
                   scratch=False, yum_repourls=None, branch=None, push_url=None):
         self.logger.debug("Spawning jobs for arches: %r" % (arches))
         subtasks = {}
+        if koji.util.multi_fnmatch(arch, self.options.literal_task_arches):
+                taskarch = arch
+            else:
+                taskarch = koji.canonArch(arch)
         for arch in arches:
             if koji.util.multi_fnmatch(arch, self.options.literal_task_arches):
                 taskarch = arch

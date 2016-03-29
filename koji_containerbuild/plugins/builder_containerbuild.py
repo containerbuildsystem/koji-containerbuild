@@ -636,8 +636,13 @@ class BuildContainerTask(BaseTaskHandler):
 
     def runBuilds(self, src, target_info, arches, output_template,
                   scratch=False, yum_repourls=None, branch=None, push_url=None):
+        self.logger.debug("Spawning jobs for arches: %r" % (arches))
         subtasks = {}
         for arch in arches:
+            if koji.util.multi_fnmatch(arch, self.options.literal_task_arches):
+                taskarch = arch
+            else:
+                taskarch = koji.canonArch(arch)
             subtasks[arch] = self.session.host.subtask(method='createContainer',
                                                        arglist=[src,
                                                                 target_info,
@@ -647,8 +652,9 @@ class BuildContainerTask(BaseTaskHandler):
                                                                 yum_repourls,
                                                                 branch,
                                                                 push_url],
-                                                       label='container',
-                                                       parent=self.id)
+                                                       label='%s-container' % arch,
+                                                       parent=self.id,
+                                                       arch=taskarch)
         self.logger.debug("Got image subtasks: %r", (subtasks))
         self.logger.debug("Waiting on image subtasks...")
         results = self.wait(subtasks.values(), all=True, failany=True)

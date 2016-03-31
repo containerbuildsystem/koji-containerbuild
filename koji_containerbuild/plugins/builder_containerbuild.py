@@ -286,9 +286,22 @@ class CreateContainerTask(BaseTaskHandler):
                                                   self.nfs_dest_dir(),
                                                   source_filename)
 
-    def _download_files(self, source_filename, target_filename=None):
-        if not target_filename:
-            target_filename = "image.tar"
+    def _getOutputImageTemplate(self, arch, compressed_extension=None):
+
+        try:
+            if not compressed_extension:
+                compressed_extension = self.osbs().get_compression_extension()
+        except AttributeError:
+            # for compatibility with osbs without this API
+            pass
+
+        # OSBS returns None if no extension
+        if not compressed_extension:
+            compressed_extension = ''
+
+        return "image-%s.tar%s" % (arch, compressed_extension)
+
+    def _download_files(self, source_filename, target_filename='image.tar'):
         localpath = os.path.join(self.workdir, target_filename)
         remote_url = self._get_file_url(source_filename)
         koji.ensuredir(self.workdir)
@@ -539,8 +552,10 @@ class CreateContainerTask(BaseTaskHandler):
 
         files = []
         if response.is_succeeded() and response.get_tar_metadata_filename():
-            files = self._download_files(response.get_tar_metadata_filename(),
-                                         "image-%s.tar" % arch)
+            sourceimage = response.get_tar_metadata_filename()
+            targetimage = self._getOutputImageTemplate(arch)
+
+            files = self._download_files(sourceimage, targetimage)
 
         rpmlist = []
         if response.is_succeeded():
@@ -711,7 +726,6 @@ class BuildContainerTask(BaseTaskHandler):
         return fn
 
     def _getOutputImageTemplate(self, **kwargs):
-        output_template = 'image.tar'
         have_all_fields = True
         for field in ['name', 'version', 'release', 'architecture']:
             if field not in kwargs:
@@ -719,8 +733,13 @@ class BuildContainerTask(BaseTaskHandler):
                                  field)
                 have_all_fields = False
         if have_all_fields:
-            output_template = "%(name)s-%(version)s-%(release)s-%(architecture)s.tar" % kwargs
-        return output_template
+            base_name = "%(name)s-%(version)s-%(release)s-%(architecture)s" % kwargs
+        else:
+            base_name = 'image'
+
+        compressed_extension = self._get_compressed_extension()
+
+        return "%s.tar%s" % (base_name, compressed_extension)
 
     def _get_admin_opts(self, opts):
         epoch = opts.get('epoch', 0)
@@ -745,6 +764,21 @@ class BuildContainerTask(BaseTaskHandler):
             except KeyError:
                 self.logger.info("No such label: %s", f)
         return ret
+
+    def _get_compressed_extension(self, compressed_extension=None):
+
+        try:
+            if not compressed_extension:
+                compressed_extension = self.osbs().get_compression_extension()
+        except AttributeError:
+            # for compatibility with osbs without this API
+            pass
+
+        # OSBS returns None if no extension
+        if not compressed_extension:
+            compressed_extension = ''
+
+        return compressed_extension
 
     def handler(self, src, target, opts=None):
         if not opts:

@@ -6,7 +6,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.5.5
+Version:        0.5.7
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -114,6 +114,22 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Mon Mar 14 2016 Pavol Babincak <pbabinca@redhat.com> 0.5.7-1
+- Updated docs how to create a release (pbabinca@redhat.com)
+- add some post-install instructions (admiller@redhat.com)
+- incorporated new osbs api for compression fix (breilly@redhat.com)
+
+* Tue Mar 08 2016 Pavol Babincak <pbabinca@redhat.com> 0.5.6-1
+- Backport spec file from Fedora (pbabinca@redhat.com)
+- Include docs in MANIFEST.in (pbabinca@redhat.com)
+- Use .md extension for build architecture (pbabinca@redhat.com)
+- quickfix for downloads always being .tar (breilly@redhat.com)
+- Channel override in CLI (pbabinca@redhat.com)
+- Build process documentation - quick and dirty (pbabinca@redhat.com)
+
+* Thu Feb 04 2016 Fedora Release Engineering <releng@fedoraproject.org> - 0.5.5-2
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_24_Mass_Rebuild
+
 * Fri Dec 04 2015 Pavol Babincak <pbabinca@redhat.com> 0.5.5-1
 - Add README.rst to a release (pbabinca@redhat.com)
 - Use %%global macro instead of %%define one (pbabinca@redhat.com)

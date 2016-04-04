@@ -286,9 +286,22 @@ class CreateContainerTask(BaseTaskHandler):
                                                   self.nfs_dest_dir(),
                                                   source_filename)
 
-    def _download_files(self, source_filename, target_filename=None):
-        if not target_filename:
-            target_filename = "image.tar"
+    def _getOutputImageTemplate(self, arch, compressed_extension=None):
+
+        try:
+            if not compressed_extension:
+                compressed_extension = self.osbs().get_compression_extension()
+        except AttributeError:
+            # for compatibility with osbs without this API
+            pass
+
+        # OSBS returns None if no extension
+        if not compressed_extension:
+            compressed_extension = ''
+
+        return "image-%s.tar%s" % (arch, compressed_extension)
+
+    def _download_files(self, source_filename, target_filename='image.tar'):
         localpath = os.path.join(self.workdir, target_filename)
         remote_url = self._get_file_url(source_filename)
         koji.ensuredir(self.workdir)
@@ -539,8 +552,10 @@ class CreateContainerTask(BaseTaskHandler):
 
         files = []
         if response.is_succeeded() and response.get_tar_metadata_filename():
-            files = self._download_files(response.get_tar_metadata_filename(),
-                                         "image-%s.tar" % arch)
+            sourceimage = response.get_tar_metadata_filename()
+            targetimage = self._getOutputImageTemplate(arch)
+
+            files = self._download_files(sourceimage, targetimage)
 
         rpmlist = []
         if response.is_succeeded():
@@ -636,8 +651,13 @@ class BuildContainerTask(BaseTaskHandler):
 
     def runBuilds(self, src, target_info, arches, output_template,
                   scratch=False, yum_repourls=None, branch=None, push_url=None):
+        self.logger.debug("Spawning jobs for arches: %r" % (arches))
         subtasks = {}
         for arch in arches:
+            if koji.util.multi_fnmatch(arch, self.options.literal_task_arches):
+                taskarch = arch
+            else:
+                taskarch = koji.canonArch(arch)
             subtasks[arch] = self.session.host.subtask(method='createContainer',
                                                        arglist=[src,
                                                                 target_info,
@@ -647,8 +667,9 @@ class BuildContainerTask(BaseTaskHandler):
                                                                 yum_repourls,
                                                                 branch,
                                                                 push_url],
-                                                       label='container',
-                                                       parent=self.id)
+                                                       label='%s-container' % arch,
+                                                       parent=self.id,
+                                                       arch=taskarch)
         self.logger.debug("Got image subtasks: %r", (subtasks))
         self.logger.debug("Waiting on image subtasks...")
         results = self.wait(subtasks.values(), all=True, failany=True)
@@ -711,7 +732,6 @@ class BuildContainerTask(BaseTaskHandler):
         return fn
 
     def _getOutputImageTemplate(self, **kwargs):
-        output_template = 'image.tar'
         have_all_fields = True
         for field in ['name', 'version', 'release', 'architecture']:
             if field not in kwargs:
@@ -719,8 +739,13 @@ class BuildContainerTask(BaseTaskHandler):
                                  field)
                 have_all_fields = False
         if have_all_fields:
-            output_template = "%(name)s-%(version)s-%(release)s-%(architecture)s.tar" % kwargs
-        return output_template
+            base_name = "%(name)s-%(version)s-%(release)s-%(architecture)s" % kwargs
+        else:
+            base_name = 'image'
+
+        compressed_extension = self._get_compressed_extension()
+
+        return "%s.tar%s" % (base_name, compressed_extension)
 
     def _get_admin_opts(self, opts):
         epoch = opts.get('epoch', 0)
@@ -729,22 +754,21 @@ class BuildContainerTask(BaseTaskHandler):
 
         return {'epoch': epoch}
 
-    def _get_dockerfile_labels(self, dockerfile_path, fields):
-        """Roughly corresponds to koji.get_header_fields()
 
-        It differs from get_header_fields() which is ran on rpms that missing
-        fields are not considered to be error.
-        """
-        dockerfile_parse.parser.logger = logging.getLogger("%s.dockerfile_parse"
-                                                           % self.logger.name)
-        parser = dockerfile_parse.parser.DockerfileParser(dockerfile_path)
-        ret = {}
-        for f in fields:
-            try:
-                ret[f] = parser.labels[f]
-            except KeyError:
-                self.logger.info("No such label: %s", f)
-        return ret
+    def _get_compressed_extension(self, compressed_extension=None):
+
+        try:
+            if not compressed_extension:
+                compressed_extension = self.osbs().get_compression_extension()
+        except AttributeError:
+            # for compatibility with osbs without this API
+            pass
+
+        # OSBS returns None if no extension
+        if not compressed_extension:
+            compressed_extension = ''
+
+        return compressed_extension
 
     def handler(self, src, target, opts=None):
         if not opts:
@@ -771,12 +795,6 @@ class BuildContainerTask(BaseTaskHandler):
         admin_opts = self._get_admin_opts(opts)
         data.update(admin_opts)
 
-        # scratch builds do not get imported
-        if not self.opts.get('scratch'):
-
-            if not opts.get('skip_tag'):
-                self.check_whitelist(data['name'], target_info)
-            bld_info = self.session.host.initImageBuild(self.id, data)
         try:
             self.extra_information = {"src": src, "data": data,
                                       "target": target}
@@ -803,35 +821,12 @@ class BuildContainerTask(BaseTaskHandler):
                     self.logger.error("Failed to merge list of repositories "
                                       "%r. Reason (%s): %s", repository,
                                       type(error), error)
-            if opts.get('scratch'):
-                # scratch builds do not get imported
-                self.session.host.moveImageBuildToScratch(self.id,
-                                                          results_xmlrpc)
-            else:
-                self.session.host.completeImageBuild(self.id,
-                                                     bld_info['id'],
-                                                     results_xmlrpc)
         except (SystemExit, ServerExit, KeyboardInterrupt):
             # we do not trap these
             raise
         except:
-            if not self.opts.get('scratch'):
-                # scratch builds do not get imported
-                if bld_info:
-                    self.session.host.failBuild(self.id, bld_info['id'])
             # reraise the exception
             raise
-
-        # tag it
-        if not opts.get('scratch') and not opts.get('skip_tag'):
-            tag_task_id = self.session.host.subtask(
-                method='tagBuild',
-                arglist=[target_info['dest_tag'], bld_info['id'], False, None,
-                         True],
-                label='tag',
-                parent=self.id,
-                arch='noarch')
-            self.wait(tag_task_id)
 
         report = ('Image available in following repositories:\n%s' %
                   '\n'.join(all_repositories))

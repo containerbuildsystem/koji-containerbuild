@@ -6,7 +6,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.5.7
+Version:        0.6.0
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -114,6 +114,13 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Thu Apr 07 2016 Brendan Reilly <breilly@redhat.com> 0.6.0-1
+- remove un-necessary code for v2-only CG builds
+  (maxamillion@fedoraproject.org)
+- runBuilds: add debug for arches (dennis@ausil.us)
+- runBuilds make label unique and be able to build archfully (dennis@ausil.us)
+- Build process documentation - quick and dirty (pbabinca@redhat.com)
+
 * Mon Mar 14 2016 Pavol Babincak <pbabinca@redhat.com> 0.5.7-1
 - Updated docs how to create a release (pbabinca@redhat.com)
 - add some post-install instructions (admiller@redhat.com)

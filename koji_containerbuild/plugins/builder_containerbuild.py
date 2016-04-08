@@ -117,6 +117,64 @@ class My_SCM(SCM):
         return git_uri
 
 
+class FileWatcher(object):
+    """Watch directory for new or changed files which can be iterated on
+
+    Rewritten mock() from Buildroot class of kojid. When modifying keep that in
+    mind and after the API looks stable enough try to merge the code back to
+    koji.
+    """
+    def __init__(self, result_dir, logger):
+        self._result_dir = result_dir
+        self.logger = logger
+        self._logs = {}
+
+    def _list_files(self):
+        try:
+            results = os.listdir(self._result_dir)
+        except OSError:
+            # will happen when mock hasn't created the resultdir yet
+            return
+
+        for fname in results:
+            if fname.endswith('.log') and fname not in self._logs:
+                fpath = os.path.join(self._result_dir, fname)
+                self._logs[fname] = (None, None, 0, fpath)
+
+    def _reopen_file(self, fname, fd, inode, size, fpath):
+        try:
+            stat_info = os.stat(fpath)
+            if not fd or stat_info.st_ino != inode or stat_info.st_size < size:
+                # either a file we haven't opened before, or mock replaced a file we had open with
+                # a new file and is writing to it, or truncated the file we're reading,
+                # but our fd is pointing to the previous location in the old file
+                if fd:
+                    self.logger.info('Rereading %s, inode: %s -> %s, size: %s -> %s' %
+                                     (fpath, inode, stat_info.st_ino, size, stat_info.st_size))
+                    fd.close()
+                fd = file(fpath, 'r')
+            self._logs[fname] = (fd, stat_info.st_ino, stat_info.st_size, fpath)
+        except:
+            self.logger.error("Error reading mock log: %s", fpath)
+            self.logger.error(''.join(traceback.format_exception(*sys.exc_info())))
+            return False
+        return fd
+
+    def files_to_upload(self):
+        self._list_files()
+
+        for (fname, (fd, inode, size, fpath)) in self._logs.items():
+            fd = self._reopen_file(fname, fd, inode, size, fpath)
+            if fd is False:
+                return
+            yield (fd, fname)
+
+    def clean(self):
+        for (fname, (fd, inode, size, fpath)) in self._logs.items():
+            if fd:
+                fd.close()
+
+
 class LabelsWrapper(object):
     def __init__(self, dockerfile_path, logger_name=None):
         self.dockerfile_path = dockerfile_path
@@ -215,6 +273,10 @@ class CreateContainerTask(BaseTaskHandler):
             assert self._osbs
         return self._osbs
 
+    def getUploadPath(self):
+        """Get the path that should be used when uploading files to
+        the hub."""
+        return koji.pathinfo.taskrelpath(self.id)
 
     def resultdir(self):
         return os.path.join(self.workdir, 'osbslogs')
@@ -372,6 +434,7 @@ class CreateContainerTask(BaseTaskHandler):
         }
 
         return containerdata
+
 
 class BuildContainerTask(BaseTaskHandler):
     Methods = ['buildContainer']

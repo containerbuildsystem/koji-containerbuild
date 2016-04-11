@@ -327,6 +327,19 @@ class CreateContainerTask(BaseTaskHandler):
             raise ContainerError("Build log finished but build still has not "
                                  "finished: %s." % build_response.status)
 
+    def _get_repositories(self, response):
+        repositories = []
+        try:
+            repo_dict = response.get_repositories()
+            if repo_dict:
+                for repos in repo_dict.values():
+                    repositories.extend(repos)
+        except Exception, error:
+            self.logger.error("Failed to get available repositories from: %r. "
+                              "Reason(%s): %s",
+                              repo_dict, type(error), error)
+        return repositories
+
     def handler(self, src, target_info, arch, scratch=False, yum_repourls=None,
                 branch=None, push_url=None):
         if not yum_repourls:

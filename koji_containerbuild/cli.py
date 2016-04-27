@@ -21,6 +21,7 @@
 #       Pavol Babincak <pbabinca@redhat.com>
 
 import os
+import json
 from koji import _
 from optparse import OptionParser
 
@@ -32,6 +33,18 @@ clikoji = None
 
 # matches hub's buildContainer parameter channel
 DEFAULT_CHANNEL = 'container'
+
+def print_task_result(task_id, result, weburl):
+    try:
+        result = json.loads(result)
+        result["koji_builds"] = ["%s/buildinfo?buildID=%s" % (weburl, build_id)
+                                 for build_id in result.get("koji_builds", [])]
+        result = json.dumps(result, sort_keys=True, indent=4)
+    except:
+        print "Unable to convert result output to JSON."
+
+    print "Task Result (%s):" % task_id
+    print result
 
 def handle_container_build(options, session, args):
     "Build a container"
@@ -117,6 +130,13 @@ def handle_container_build(options, session, args):
     if build_opts.wait or (build_opts.wait is None and not
                            clikoji._running_in_bg()):
         session.logout()
-        return clikoji.watch_tasks(session, [task_id], quiet=build_opts.quiet)
+        rv = clikoji.watch_tasks(session, [task_id], quiet=build_opts.quiet)
+
+        # Task completed and a result should be available.
+        if rv == 0:
+            result = session.getTaskResult(task_id)
+            print_task_result(task_id, result, options.weburl)
+
+        return rv
     else:
         return

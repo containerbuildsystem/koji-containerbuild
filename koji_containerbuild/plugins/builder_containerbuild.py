@@ -340,6 +340,15 @@ class CreateContainerTask(BaseTaskHandler):
                               repo_dict, type(error), error)
         return repositories
 
+    def _get_koji_build_id(self, response):
+        koji_build_id = None
+        if hasattr(response, "get_koji_build_id"):
+            koji_build_id = response.get_koji_build_id()
+        else:
+            self.logger.info("Koji content generator build ID not available.")
+
+        return koji_build_id
+
     def handler(self, src, target_info, arch, scratch=False, yum_repourls=None,
                 branch=None, push_url=None):
         if not yum_repourls:
@@ -438,12 +447,19 @@ class CreateContainerTask(BaseTaskHandler):
         self.logger.info("Image available in the following repositories: %r",
                          repositories)
 
+        koji_build_id = None
+        if response.is_succeeded():
+            koji_build_id = self._get_koji_build_id(response)
+
+        self.logger.info("Koji content generator build ID: %s", koji_build_id)
+
         containerdata = {
             'arch': arch,
             'task_id': self.id,
             'osbs_build_id': build_id,
             'files': [],
-            'repositories': repositories
+            'repositories': repositories,
+            'koji_build_id': koji_build_id,
         }
 
         return containerdata
@@ -609,6 +625,7 @@ class BuildContainerTask(BaseTaskHandler):
                                      opts.get('git_branch', None),
                                      opts.get('push_url', None))
             all_repositories = []
+            all_koji_builds = []
             for result in results.values():
                 self._raise_if_image_failed(result['osbs_build_id'])
                 try:
@@ -618,6 +635,10 @@ class BuildContainerTask(BaseTaskHandler):
                     self.logger.error("Failed to merge list of repositories "
                                       "%r. Reason (%s): %s", repository,
                                       type(error), error)
+                koji_build_id = result.get('koji_build_id')
+                if koji_build_id:
+                    all_koji_builds.append(koji_build_id)
+
         except (SystemExit, ServerExit, KeyboardInterrupt):
             # we do not trap these
             raise
@@ -625,9 +646,10 @@ class BuildContainerTask(BaseTaskHandler):
             # reraise the exception
             raise
 
-        report = ('Image available in following repositories:\n%s' %
-                  '\n'.join(all_repositories))
-        return report
+        return {
+            'repositories': all_repositories,
+            'koji_builds': all_koji_builds,
+        }
 
     def _raise_if_image_failed(self, osbs_build_id):
         build = self.osbs().get_build(osbs_build_id)

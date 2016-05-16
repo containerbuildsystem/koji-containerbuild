@@ -40,8 +40,9 @@ def print_task_result(task_id, result, weburl):
         result["koji_builds"] = ["%s/buildinfo?buildID=%s" % (weburl, build_id)
                                  for build_id in result.get("koji_builds", [])]
         result = json.dumps(result, sort_keys=True, indent=4)
-    except:
-        print "Unable to convert result output to JSON."
+    except ValueError:
+        # Unable to convert result output to JSON
+        pass
 
     print "Task Result (%s):" % task_id
     print result

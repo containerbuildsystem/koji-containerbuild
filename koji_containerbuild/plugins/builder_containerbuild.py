@@ -237,8 +237,7 @@ class LabelsWrapper(object):
 
     def get_expected_nvr(self):
         data = self.get_data_labels()
-        name = data['NAME'].split('/')[-1]
-        return "{0}-{1}-{2}".format(name, data['VERSION'], data['RELEASE'])
+        return "{0}-{1}-{2}".format(data['COMPONENT'], data['VERSION'], data['RELEASE'])
 
     def format_label(self, label_id):
         """Formats string with user-facing LABEL name and its alternatives"""
@@ -631,7 +630,7 @@ class BuildContainerTask(BaseTaskHandler):
                 try:
                     build_id = self.xmlrpc.getBuild(expected_nvr)['id']
                 except:
-                    self.logger.info("No build for %s found" % expected_nvr)
+                    self.logger.info("No build for %s found", expected_nvr)
                 else:
                     raise koji.BuildError(
                         "Build for %s already exists, id %s" % (expected_nvr, build_id))

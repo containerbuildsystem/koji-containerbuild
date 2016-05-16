@@ -235,6 +235,10 @@ class LabelsWrapper(object):
                 missing_labels.append(label_id)
         return missing_labels
 
+    def get_expected_nvr(self):
+        data = self.get_data_labels()
+        return "{0}-{1}-{2}".format(data['COMPONENT'], data['VERSION'], data['RELEASE'])
+
     def format_label(self, label_id):
         """Formats string with user-facing LABEL name and its alternatives"""
 
@@ -610,6 +614,7 @@ class BuildContainerTask(BaseTaskHandler):
                             "Dockerfile: %s.")
             raise koji.BuildError, (msg_template %
                                     ', '.join(formatted_labels_list))
+
         data = labels_wrapper.get_extra_data()
         admin_opts = self._get_admin_opts(opts)
         data.update(admin_opts)
@@ -619,6 +624,16 @@ class BuildContainerTask(BaseTaskHandler):
                                       "target": target}
             if not SCM.is_scm_url(src):
                 raise koji.BuildError('Invalid source specification: %s' % src)
+            # Scratch builds shouldn't be checked for nvr
+            if not self.opts.get('scratch'):
+                expected_nvr = labels_wrapper.get_expected_nvr()
+                try:
+                    build_id = self.xmlrpc.getBuild(expected_nvr)['id']
+                except:
+                    self.logger.info("No build for %s found", expected_nvr)
+                else:
+                    raise koji.BuildError(
+                        "Build for %s already exists, id %s" % (expected_nvr, build_id))
             results = self.runBuilds(src, target_info, archlist,
                                      opts.get('scratch', False),
                                      opts.get('yum_repourls', None),

@@ -377,6 +377,7 @@ class CreateContainerTask(BaseTaskHandler):
             'architecture': arch,
             'yum_repourls': yum_repourls,
             'scratch': scratch,
+            'koji_task_id': self.id,
         }
         if branch:
             create_build_args['git_branch'] = branch

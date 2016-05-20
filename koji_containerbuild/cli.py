@@ -34,6 +34,7 @@ clikoji = None
 # matches hub's buildContainer parameter channel
 DEFAULT_CHANNEL = 'container'
 
+
 def print_task_result(task_id, result, weburl):
     try:
         result = json.loads(result)
@@ -46,6 +47,7 @@ def print_task_result(task_id, result, weburl):
 
     print "Task Result (%s):" % task_id
     print result
+
 
 def handle_container_build(options, session, args):
     "Build a container"
@@ -80,6 +82,9 @@ def handle_container_build(options, session, args):
     parser.add_option("--channel-override",
                       help=_("Use a non-standard channel [default: %default]"),
                       default=DEFAULT_CHANNEL)
+    parser.add_option("--release",
+                      help=_("Set release label"),
+                      default=DEFAULT_CHANNEL)
     (build_opts, args) = parser.parse_args(args)
     if len(args) != 2:
         parser.error(_("Exactly two arguments (a build target and a SCM URL "
@@ -102,7 +107,7 @@ def handle_container_build(options, session, args):
             parser.error(_("Destination tag %s is locked" % dest_tag['name']))
     source = args[1]
     opts = {}
-    for key in ('scratch', 'epoch', 'yum_repourls', 'git_branch'):
+    for key in ('scratch', 'epoch', 'yum_repourls', 'git_branch', 'release'):
         val = getattr(build_opts, key)
         if val is not None:
             opts[key] = val

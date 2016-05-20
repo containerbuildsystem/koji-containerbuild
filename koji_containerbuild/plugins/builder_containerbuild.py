@@ -55,7 +55,6 @@ finally:
     fo.close()
 
 
-
 # List of LABEL identifiers used within Koji. Values doesn't need to correspond
 # to actual LABEL names. All these are required unless there exist default
 # value (see LABEL_DEFAULT_VALUES).
@@ -176,11 +175,12 @@ class FileWatcher(object):
 
 
 class LabelsWrapper(object):
-    def __init__(self, dockerfile_path, logger_name=None):
+    def __init__(self, dockerfile_path, logger_name=None, labels_override=None):
         self.dockerfile_path = dockerfile_path
         self._setup_logger(logger_name)
         self._parser = None
         self._label_data = {}
+        self._labels_override = labels_override or {}
 
     def _setup_logger(self, logger_name=None):
         if logger_name:
@@ -193,7 +193,10 @@ class LabelsWrapper(object):
     def get_labels(self):
         """returns all labels how they are found in Dockerfile"""
         self._parse()
-        return self._parser.labels
+        labels = self._parser.labels
+        if self._labels_override:
+            labels.update(self._labels_override)
+        return labels
 
     def get_data_labels(self):
         """Subset of labels found in Dockerfile which we are interested in
@@ -258,7 +261,6 @@ class CreateContainerTask(BaseTaskHandler):
         BaseTaskHandler.__init__(self, id, method, params, session, options,
                                  workdir)
         self._osbs = None
-
 
     def osbs(self):
         """Handler of OSBS object"""
@@ -353,10 +355,13 @@ class CreateContainerTask(BaseTaskHandler):
 
         return koji_build_id
 
-    def handler(self, src, target_info, arch, scratch=False, yum_repourls=None,
-                branch=None, push_url=None):
+    def handler(self, src, target_info, arch, scratch=False,
+                yum_repourls=None, branch=None, push_url=None,
+                labels=None):
         if not yum_repourls:
             yum_repourls = []
+        if not labels:
+            labels = {}
 
         this_task = self.session.getTaskInfo(self.id)
         self.logger.debug("This task: %r", this_task)
@@ -383,6 +388,8 @@ class CreateContainerTask(BaseTaskHandler):
             create_build_args['git_branch'] = branch
         if push_url:
             create_build_args['git_push_url'] = push_url
+        if labels:
+            create_build_args['labels'] = labels
         build_response = self.osbs().create_build(
             **create_build_args
         )
@@ -505,7 +512,8 @@ class BuildContainerTask(BaseTaskHandler):
             raise koji.BuildError("package (container)  %s is blocked for tag %s" % (name, target_info['dest_tag_name']))
 
     def runBuilds(self, src, target_info, arches, scratch=False,
-                yum_repourls=None, branch=None, push_url=None):
+                  yum_repourls=None, branch=None, push_url=None,
+                  labels=None):
         self.logger.debug("Spawning jobs for arches: %r" % (arches))
         subtasks = {}
         for arch in arches:
@@ -520,7 +528,8 @@ class BuildContainerTask(BaseTaskHandler):
                                                                 scratch,
                                                                 yum_repourls,
                                                                 branch,
-                                                                push_url],
+                                                                push_url,
+                                                                labels],
                                                        label='%s-container' % arch,
                                                        parent=self.id,
                                                        arch=taskarch)
@@ -537,7 +546,7 @@ class BuildContainerTask(BaseTaskHandler):
         buildconfig = self.session.getBuildConfig(build_tag, event=self.event_id)
         arches = buildconfig['arches']
         if not arches:
-            #XXX - need to handle this better
+            # XXX - need to handle this better
             raise koji.BuildError, "No arches for tag %(name)s [%(id)s]" % buildconfig
         tag_archlist = [koji.canonArch(a) for a in arches.split()]
         self.logger.debug('arches: %s', arches)
@@ -585,7 +594,6 @@ class BuildContainerTask(BaseTaskHandler):
             raise koji.BuildError, "Dockerfile file missing: %s" % fn
         return fn
 
-
     def _get_admin_opts(self, opts):
         epoch = opts.get('epoch', 0)
         if epoch:
@@ -593,6 +601,12 @@ class BuildContainerTask(BaseTaskHandler):
 
         return {'epoch': epoch}
 
+    def _get_labels_override(self, opts):
+        labels = {}
+        release = opts.get('release', None)
+        if release:
+            labels['release'] = release
+        return labels
 
     def handler(self, src, target, opts=None):
         if not opts:
@@ -606,7 +620,10 @@ class BuildContainerTask(BaseTaskHandler):
         archlist = self.getArchList(build_tag)
 
         dockerfile_path = self.fetchDockerfile(src)
-        labels_wrapper = LabelsWrapper(dockerfile_path, self.logger.name)
+        labels_override = self._get_labels_override(opts)
+        labels_wrapper = LabelsWrapper(dockerfile_path,
+                                       logger_name=self.logger.name,
+                                       labels_override=labels_override)
         missing_labels = labels_wrapper.get_missing_label_ids()
         if missing_labels:
             formatted_labels_list = [labels_wrapper.format_label(label_id) for
@@ -636,10 +653,12 @@ class BuildContainerTask(BaseTaskHandler):
                     raise koji.BuildError(
                         "Build for %s already exists, id %s" % (expected_nvr, build_id))
             results = self.runBuilds(src, target_info, archlist,
-                                     opts.get('scratch', False),
-                                     opts.get('yum_repourls', None),
-                                     opts.get('git_branch', None),
-                                     opts.get('push_url', None))
+                                     scratch=opts.get('scratch', False),
+                                     yum_repourls=opts.get('yum_repourls', None),
+                                     branch=opts.get('git_branch', None),
+                                     push_url=opts.get('push_url', None),
+                                     labels=labels_override,
+                                     )
             all_repositories = []
             all_koji_builds = []
             for result in results.values():

@@ -6,7 +6,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.6.1
+Version:        0.6.2
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -114,6 +114,16 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed May 25 2016 Brendan Reilly <breilly@redhat.com> 0.6.2-1
+- supply koji_task_id to osbs-client's create_build() (twaugh@redhat.com)
+- no need to warn about build result not being JSON (twaugh@redhat.com)
+- Use component label in nvr check (vrutkovs@redhat.com)
+- Don't check NVR for scratch builds and move nvr check closer to build object
+  creation (vrutkovs@redhat.com)
+- Don't start the build if package with this NVR already has been built
+  (vrutkovs@redhat.com)
+- Expose Koji CG build ID in CreateContainerTask (lucarval@redhat.com)
+
 * Mon Apr 11 2016 Brendan Reilly <breilly@redhat.com> 0.6.1-1
 - Reinstate _get_repositories() method (fixes #35) (twaugh@redhat.com)
 - Add back in bits required for streaming logs (fixes #33) (twaugh@redhat.com)

@@ -322,6 +322,7 @@ class CreateContainerTask(BaseTaskHandler):
         try:
             for line in build_logs:
                 outfile.write("%s\n" % line)
+                outfile.flush()
         except Exception, error:
             msg = "Exception (%s) while reading build logs: %s" % (type(error),
                                                                    error)

@@ -6,7 +6,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.6.2
+Version:        0.6.3
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -114,6 +114,10 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Thu Jun 02 2016 Brendan Reilly <breilly@redhat.com> 0.6.3-1
+- Fix task result output (lucarval@redhat.com)
+- Handle release parameter (lucarval@redhat.com)
+
 * Wed May 25 2016 Brendan Reilly <breilly@redhat.com> 0.6.2-1
 - supply koji_task_id to osbs-client's create_build() (twaugh@redhat.com)
 - no need to warn about build result not being JSON (twaugh@redhat.com)

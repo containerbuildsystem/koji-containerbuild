@@ -35,18 +35,32 @@ clikoji = None
 DEFAULT_CHANNEL = 'container'
 
 
+def print_value(value, level, indent, suffix=''):
+    offset = ' ' * level * indent
+    print ''.join([offset, str(value), suffix])
+
+
+def print_result(result, level=0, indent=2):
+    if isinstance(result, list):
+        for item in result:
+            print_result(item, level+1)
+    elif isinstance(result, dict):
+        for key, value in result.items():
+            print_value(key, level, indent, ':')
+            print_result(value, level+1)
+    else:
+        print_value(result, level, indent)
+
+
 def print_task_result(task_id, result, weburl):
     try:
-        result = json.loads(result)
         result["koji_builds"] = ["%s/buildinfo?buildID=%s" % (weburl, build_id)
                                  for build_id in result.get("koji_builds", [])]
-        result = json.dumps(result, sort_keys=True, indent=4)
-    except ValueError:
-        # Unable to convert result output to JSON
+    except TypeError:
         pass
 
     print "Task Result (%s):" % task_id
-    print result
+    print_result(result)
 
 
 def handle_container_build(options, session, args):

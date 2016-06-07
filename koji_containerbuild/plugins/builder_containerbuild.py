@@ -646,9 +646,9 @@ class BuildContainerTask(BaseTaskHandler):
             if not self.opts.get('scratch'):
                 expected_nvr = labels_wrapper.get_expected_nvr()
                 try:
-                    build_id = self.xmlrpc.getBuild(expected_nvr)['id']
+                    build_id = self.session.getBuild(expected_nvr)['id']
                 except:
-                    self.logger.info("No build for %s found", expected_nvr)
+                    self.logger.info("No build for %s found", expected_nvr, exc_info=True)
                 else:
                     raise koji.BuildError(
                         "Build for %s already exists, id %s" % (expected_nvr, build_id))

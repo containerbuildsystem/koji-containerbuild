@@ -389,7 +389,7 @@ class CreateContainerTask(BaseTaskHandler):
         if push_url:
             create_build_args['git_push_url'] = push_url
         if labels:
-            create_build_args['labels'] = labels
+            create_build_args['label'] = labels
         build_response = self.osbs().create_build(
             **create_build_args
         )

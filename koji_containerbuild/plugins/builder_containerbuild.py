@@ -89,6 +89,7 @@ LABEL_DATA_MAP = {
 # Default values for LABELs. If there exist default value here LABEL is
 # optional in Dockerfile.
 LABEL_DEFAULT_VALUES = {
+    'RELEASE': object(), # Symbol-like marker to indicate unique init value
     'ARCHITECTURE': 'x86_64',
 }
 
@@ -638,12 +639,20 @@ class BuildContainerTask(BaseTaskHandler):
         data.update(admin_opts)
 
         try:
+            auto_release = (data[LABEL_DATA_MAP['RELEASE']] ==
+                            LABEL_DEFAULT_VALUES['RELEASE'])
+            if auto_release:
+                # Do not expose default release value
+                del data[LABEL_DATA_MAP['RELEASE']]
+
             self.extra_information = {"src": src, "data": data,
                                       "target": target}
+
             if not SCM.is_scm_url(src):
                 raise koji.BuildError('Invalid source specification: %s' % src)
-            # Scratch builds shouldn't be checked for nvr
-            if not self.opts.get('scratch'):
+
+            # Scratch and auto release builds shouldn't be checked for nvr
+            if not self.opts.get('scratch') and not auto_release:
                 expected_nvr = labels_wrapper.get_expected_nvr()
                 try:
                     build_id = self.session.getBuild(expected_nvr)['id']
@@ -652,6 +661,7 @@ class BuildContainerTask(BaseTaskHandler):
                 else:
                     raise koji.BuildError(
                         "Build for %s already exists, id %s" % (expected_nvr, build_id))
+
             results = self.runBuilds(src, target_info, archlist,
                                      scratch=opts.get('scratch', False),
                                      yum_repourls=opts.get('yum_repourls', None),

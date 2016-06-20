@@ -453,6 +453,10 @@ class CreateContainerTask(BaseTaskHandler):
 
         self.logger.info("Response status: %r", response.is_succeeded())
 
+        if response.is_failed():
+            raise ContainerError('Image build failed. OSBS build id: %s' %
+                                 build_id)
+
         repositories = []
         if response.is_succeeded():
             repositories = self._get_repositories(response)
@@ -672,7 +676,6 @@ class BuildContainerTask(BaseTaskHandler):
             all_repositories = []
             all_koji_builds = []
             for result in results.values():
-                self._raise_if_image_failed(result['osbs_build_id'])
                 try:
                     repository = result.get('repositories')
                     all_repositories.extend(repository)
@@ -695,9 +698,3 @@ class BuildContainerTask(BaseTaskHandler):
             'repositories': all_repositories,
             'koji_builds': all_koji_builds,
         }
-
-    def _raise_if_image_failed(self, osbs_build_id):
-        build = self.osbs().get_build(osbs_build_id)
-        if build.is_failed():
-            raise ContainerError('Image build failed. OSBS build id: %s' %
-                                 osbs_build_id)

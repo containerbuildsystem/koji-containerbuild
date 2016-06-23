@@ -262,6 +262,7 @@ class CreateContainerTask(BaseTaskHandler):
         BaseTaskHandler.__init__(self, id, method, params, session, options,
                                  workdir)
         self._osbs = None
+        self._scratch_build = False
 
     def osbs(self):
         """Handler of OSBS object"""
@@ -276,6 +277,9 @@ class CreateContainerTask(BaseTaskHandler):
             osbs.logger.debug("osbs logger installed")
             os_conf = Configuration()
             build_conf = Configuration()
+            if self._scratch_build:
+                build_conf = Configuration(conf_section='scratch')
+                os_conf = Configuration(conf_section='scratch')
             self._osbs = OSBS(os_conf, build_conf)
             assert self._osbs
         return self._osbs
@@ -401,6 +405,7 @@ class CreateContainerTask(BaseTaskHandler):
             create_build_args['git_push_url'] = push_url
         if labels:
             create_build_args['labels'] = labels
+        self._scratch_build = scratch
         build_response = self.osbs().create_build(
             **create_build_args
         )
@@ -513,6 +518,9 @@ class BuildContainerTask(BaseTaskHandler):
         if not self._osbs:
             os_conf = Configuration()
             build_conf = Configuration()
+            if self.opts.get('scratch'):
+                os_conf = Configuration(conf_section='scratch')
+                build_conf = Configuration(conf_section='scratch')
             self._osbs = OSBS(os_conf, build_conf)
             assert self._osbs
         return self._osbs

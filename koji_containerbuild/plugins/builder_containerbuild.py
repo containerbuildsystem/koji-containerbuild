@@ -619,6 +619,9 @@ class BuildContainerTask(BaseTaskHandler):
         self.opts = opts
         data = {}
 
+        if self.opts.get('scratch'):
+            raise koji.BuildError, "Scratch builds are not yet supported"
+
         self.event_id = self.session.getLastEvent()['id']
         target_info = self.session.getBuildTarget(target, event=self.event_id)
         build_tag = target_info['build_tag']

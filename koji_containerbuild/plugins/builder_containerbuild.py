@@ -610,7 +610,7 @@ class BuildContainerTask(BaseTaskHandler):
         labels = {}
         release = opts.get('release', None)
         if release:
-            labels['release'] = release
+            labels['Release'] = release
         return labels
 
     def handler(self, src, target, opts=None):

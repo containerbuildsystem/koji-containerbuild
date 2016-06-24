@@ -6,7 +6,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.6.4
+Version:        0.6.5
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -114,6 +114,11 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri Jun 24 2016 Luiz Carvalho <lucarval@redhat.com> 0.6.5-1
+- Show build's error message if available (vrutkovs@redhat.com)
+- Disable scratch builds (vrutkovs@redhat.com)
+- Should use label 'Release' to set release (twaugh@redhat.com)
+
 * Wed Jun 22 2016 Brendan Reilly <breilly@redhat.com> 0.6.4-1
 - Fail createContainer if OpenShift build fails (mmilata@redhat.com)
 - Added a few unit tests (breilly@redhat.com)

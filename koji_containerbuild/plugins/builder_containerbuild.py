@@ -356,6 +356,15 @@ class CreateContainerTask(BaseTaskHandler):
 
         return koji_build_id
 
+    def _get_error_message(self, response):
+        error_message = None
+        if hasattr(response, "get_error_message"):
+            error_message = response.get_error_message()
+        else:
+            self.logger.info("Error message is not available")
+
+        return error_message
+
     def handler(self, src, target_info, arch, scratch=False,
                 yum_repourls=None, branch=None, push_url=None,
                 labels=None):
@@ -454,8 +463,13 @@ class CreateContainerTask(BaseTaskHandler):
         self.logger.info("Response status: %r", response.is_succeeded())
 
         if response.is_failed():
-            raise ContainerError('Image build failed. OSBS build id: %s' %
-                                 build_id)
+            error_message = self._get_error_message(response)
+            if error_message:
+                raise ContainerError('Image build failed. %s. OSBS build id: %s' %
+                                     (error_message, build_id))
+            else:
+                raise ContainerError('Image build failed. OSBS build id: %s' %
+                                     build_id)
 
         repositories = []
         if response.is_succeeded():

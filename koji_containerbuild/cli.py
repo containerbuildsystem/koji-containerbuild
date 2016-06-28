@@ -97,8 +97,7 @@ def handle_container_build(options, session, args):
                       help=_("Use a non-standard channel [default: %default]"),
                       default=DEFAULT_CHANNEL)
     parser.add_option("--release",
-                      help=_("Set release label"),
-                      default=DEFAULT_CHANNEL)
+                      help=_("Set release label"))
     (build_opts, args) = parser.parse_args(args)
     if len(args) != 2:
         parser.error(_("Exactly two arguments (a build target and a SCM URL "

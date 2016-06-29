@@ -9,7 +9,7 @@ class TitoDist(sdist):
 
 setup(
     name="koji-containerbuild",
-    version="0.6.5",
+    version="0.6.6",
     author="Pavol Babincak",
     author_email="pbabinca@redhat.com",
     description="Container build support for Koji buildsystem",

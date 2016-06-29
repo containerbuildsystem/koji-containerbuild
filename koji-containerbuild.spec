@@ -6,7 +6,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.6.5
+Version:        0.6.6
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -114,6 +114,12 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed Jun 29 2016 Luiz Carvalho <lucarval@redhat.com> 0.6.6-1
+- Use osbs 'scratch' configuration for scratch builds (vrutkovs@redhat.com)
+- Revert "Disable scratch builds" (vrutkovs@redhat.com)
+- make streamed logs line-buffered (twaugh@redhat.com)
+- Remove default value for release parameter (lucarval@redhat.com)
+
 * Fri Jun 24 2016 Luiz Carvalho <lucarval@redhat.com> 0.6.5-1
 - Show build's error message if available (vrutkovs@redhat.com)
 - Disable scratch builds (vrutkovs@redhat.com)

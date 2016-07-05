@@ -120,7 +120,7 @@ def handle_container_build(options, session, args):
             parser.error(_("Destination tag %s is locked" % dest_tag['name']))
     source = args[1]
     opts = {}
-    for key in ('scratch', 'epoch', 'yum_repourls', 'git_branch', 'release'):
+    for key in ('scratch', 'epoch', 'yum_repourls', 'git_branch'):
         val = getattr(build_opts, key)
         if val is not None:
             opts[key] = val

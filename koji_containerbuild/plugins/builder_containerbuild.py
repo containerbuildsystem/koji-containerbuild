@@ -176,12 +176,11 @@ class FileWatcher(object):
 
 
 class LabelsWrapper(object):
-    def __init__(self, dockerfile_path, logger_name=None, labels_override=None):
+    def __init__(self, dockerfile_path, logger_name=None):
         self.dockerfile_path = dockerfile_path
         self._setup_logger(logger_name)
         self._parser = None
         self._label_data = {}
-        self._labels_override = labels_override or {}
 
     def _setup_logger(self, logger_name=None):
         if logger_name:
@@ -194,10 +193,7 @@ class LabelsWrapper(object):
     def get_labels(self):
         """returns all labels how they are found in Dockerfile"""
         self._parse()
-        labels = self._parser.labels
-        if self._labels_override:
-            labels.update(self._labels_override)
-        return labels
+        return self._parser.labels
 
     def get_data_labels(self):
         """Subset of labels found in Dockerfile which we are interested in
@@ -371,12 +367,9 @@ class CreateContainerTask(BaseTaskHandler):
         return error_message
 
     def handler(self, src, target_info, arch, scratch=False,
-                yum_repourls=None, branch=None, push_url=None,
-                labels=None):
+                yum_repourls=None, branch=None, push_url=None):
         if not yum_repourls:
             yum_repourls = []
-        if not labels:
-            labels = {}
 
         this_task = self.session.getTaskInfo(self.id)
         self.logger.debug("This task: %r", this_task)
@@ -403,8 +396,6 @@ class CreateContainerTask(BaseTaskHandler):
             create_build_args['git_branch'] = branch
         if push_url:
             create_build_args['git_push_url'] = push_url
-        if labels:
-            create_build_args['labels'] = labels
         self._scratch_build = scratch
         build_response = self.osbs().create_build(
             **create_build_args
@@ -540,8 +531,7 @@ class BuildContainerTask(BaseTaskHandler):
             raise koji.BuildError("package (container)  %s is blocked for tag %s" % (name, target_info['dest_tag_name']))
 
     def runBuilds(self, src, target_info, arches, scratch=False,
-                  yum_repourls=None, branch=None, push_url=None,
-                  labels=None):
+                  yum_repourls=None, branch=None, push_url=None):
         self.logger.debug("Spawning jobs for arches: %r" % (arches))
         subtasks = {}
         for arch in arches:
@@ -557,7 +547,7 @@ class BuildContainerTask(BaseTaskHandler):
                                                                 yum_repourls,
                                                                 branch,
                                                                 push_url,
-                                                                labels],
+                                                                ],
                                                        label='%s-container' % arch,
                                                        parent=self.id,
                                                        arch=taskarch)
@@ -629,13 +619,6 @@ class BuildContainerTask(BaseTaskHandler):
 
         return {'epoch': epoch}
 
-    def _get_labels_override(self, opts):
-        labels = {}
-        release = opts.get('release', None)
-        if release:
-            labels['Release'] = release
-        return labels
-
     def handler(self, src, target, opts=None):
         if not opts:
             opts = {}
@@ -648,10 +631,8 @@ class BuildContainerTask(BaseTaskHandler):
         archlist = self.getArchList(build_tag)
 
         dockerfile_path = self.fetchDockerfile(src)
-        labels_override = self._get_labels_override(opts)
         labels_wrapper = LabelsWrapper(dockerfile_path,
-                                       logger_name=self.logger.name,
-                                       labels_override=labels_override)
+                                       logger_name=self.logger.name)
         missing_labels = labels_wrapper.get_missing_label_ids()
         if missing_labels:
             formatted_labels_list = [labels_wrapper.format_label(label_id) for
@@ -694,7 +675,6 @@ class BuildContainerTask(BaseTaskHandler):
                                      yum_repourls=opts.get('yum_repourls', None),
                                      branch=opts.get('git_branch', None),
                                      push_url=opts.get('push_url', None),
-                                     labels=labels_override,
                                      )
             all_repositories = []
             all_koji_builds = []

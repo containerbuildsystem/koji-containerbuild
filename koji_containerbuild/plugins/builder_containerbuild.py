@@ -413,7 +413,10 @@ class CreateContainerTask(BaseTaskHandler):
         koji.ensuredir(osbs_logs_dir)
         pid = os.fork()
         if pid:
-            self._incremental_upload_logs(pid)
+            try:
+                self._incremental_upload_logs(pid)
+            except koji.ActionNotAllowed:
+                self.osbs().cancel_build(build_id)
 
         else:
             full_output_name = os.path.join(osbs_logs_dir,
@@ -453,6 +456,7 @@ class CreateContainerTask(BaseTaskHandler):
             os._exit(0)
 
         response = self.osbs().wait_for_build_to_finish(build_id)
+
         self.logger.debug("OSBS build finished with status: %s. Build "
                           "response: %s.", response.status,
                           response.json)

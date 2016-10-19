@@ -11,6 +11,16 @@ import pytest
 import osbs
 from koji_containerbuild.plugins import builder_containerbuild
 
+
+class KojidMock(object):
+    """Mock the kojid module"""
+    def incremental_upload(self, session, fname, fd, uploadpath, logger=None):
+        pass
+
+
+builder_containerbuild.kojid = KojidMock()
+
+
 class TestBuilder(object):
     @pytest.mark.parametrize("resdir", ['test', 'test2'])
     def test_resultdir(self, resdir):

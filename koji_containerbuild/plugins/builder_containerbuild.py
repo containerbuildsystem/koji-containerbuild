@@ -48,11 +48,11 @@ from osbs.conf import Configuration
 # We need kojid module which isn't proper python module and not even in
 # site-package path.
 kojid_exe_path = '/usr/sbin/kojid'
-fo = file(kojid_exe_path, 'U')
 try:
-    kojid = imp.load_module('kojid', fo, fo.name, ('.py', 'U', 1))
-finally:
-    fo.close()
+    with file(kojid_exe_path, 'U') as fo:
+        kojid = imp.load_module('kojid', fo, fo.name, ('.py', 'U', 1))
+except IOError:
+    kojid = None
 
 
 # List of LABEL identifiers used within Koji. Values doesn't need to correspond
@@ -259,6 +259,9 @@ class CreateContainerTask(BaseTaskHandler):
                                  workdir)
         self._osbs = None
         self._scratch_build = False
+
+        # Check that the kojid module was successfully imported
+        assert kojid
 
     def osbs(self):
         """Handler of OSBS object"""

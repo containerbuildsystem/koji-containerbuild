@@ -263,9 +263,9 @@ class LabelsWrapper(object):
 
 
 class BuildContainerTask(BaseTaskHandler):
+    # Start builds via osbs for each arch (this might change soon)
     Methods = ['buildContainer']
-    # We mostly just wait on other tasks. Same value as for regular 'build'
-    # method.
+    # Same value as for regular 'build' method.
     _taskWeight = 2.0
 
     def __init__(self, id, method, params, session, options, workdir=None):

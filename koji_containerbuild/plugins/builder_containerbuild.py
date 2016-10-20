@@ -234,7 +234,7 @@ class LabelsWrapper(object):
         """Returns a list of additional tags to be applied to an image"""
         tags = []
         dockerfile_dir = os.path.dirname(self.dockerfile_path)
-        additional_tags_path = os.join(dockerfile_dir, 'additional-tags')
+        additional_tags_path = os.path.join(dockerfile_dir, 'additional-tags')
         try:
             with open(additional_tags_path, 'r') as fd:
                 for tag in fd:
@@ -709,14 +709,17 @@ class BuildContainerTask(BaseTaskHandler):
             # Make sure the longest tag for the docker image is no more than 128 chars
             # see https://github.com/docker/docker/issues/8445
 
-            version_release_tag = "%s-%s" % (LABEL_DATA_MAP['VERSION'], LABEL_DATA_MAP['RELEASE'])
             tags = labels_wrapper.get_additional_tags()
-            tags.append(version_release_tag)
-            longest_tag = max(tags, key=len)
-            if len(longest_tag) > 128:
-                raise koji.BuildError(
-                    "Docker cannot create image with a tag longer than 128,"
-                    "current version-release tag length is %s" % len(longest_tag))
+            if LABEL_DATA_MAP['RELEASE'] in data:
+                version_release_tag = "%s-%s" % (
+                    data[LABEL_DATA_MAP['VERSION']], data[LABEL_DATA_MAP['RELEASE']])
+                tags.append(version_release_tag)
+            if tags:
+                longest_tag = max(tags, key=len)
+                if len(longest_tag) > 128:
+                    raise koji.BuildError(
+                        "Docker cannot create image with a tag longer than 128, "
+                        "current version-release tag length is %s" % len(longest_tag))
 
             results = self.runBuilds(src, target_info, archlist,
                                      scratch=opts.get('scratch', False),

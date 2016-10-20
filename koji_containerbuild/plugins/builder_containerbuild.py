@@ -230,6 +230,20 @@ class LabelsWrapper(object):
             extra_data[extra_key] = value
         return extra_data
 
+    def get_additional_tags(self):
+        """Returns a list of additional tags to be applied to an image"""
+        tags = []
+        dockerfile_dir = os.path.dirname(self.dockerfile_path)
+        additional_tags_path = os.join(dockerfile_dir, 'additional-tags')
+        try:
+            with open(additional_tags_path, 'r') as fd:
+                for tag in fd:
+                    if '-' in tag:
+                        continue
+                    tags.append(tag.strip())
+        finally:
+            return tags
+
     def get_missing_label_ids(self):
         data = self.get_data_labels()
         missing_labels = []
@@ -633,6 +647,7 @@ class BuildContainerTask(BaseTaskHandler):
             raise koji.BuildError, "Dockerfile file missing: %s" % fn
         return fn
 
+
     def _get_admin_opts(self, opts):
         epoch = opts.get('epoch', 0)
         if epoch:
@@ -690,6 +705,18 @@ class BuildContainerTask(BaseTaskHandler):
                 else:
                     raise koji.BuildError(
                         "Build for %s already exists, id %s" % (expected_nvr, build_id))
+
+            # Make sure the longest tag for the docker image is no more than 128 chars
+            # see https://github.com/docker/docker/issues/8445
+
+            version_release_tag = "%s-%s" % (LABEL_DATA_MAP['VERSION'], LABEL_DATA_MAP['RELEASE'])
+            tags = labels_wrapper.get_additional_tags()
+            tags.append(version_release_tag)
+            longest_tag = max(tags, key=len)
+            if len(longest_tag) > 128:
+                raise koji.BuildError(
+                    "Docker cannot create image with a tag longer than 128,"
+                    "current version-release tag length is %s" % len(longest_tag))
 
             results = self.runBuilds(src, target_info, archlist,
                                      scratch=opts.get('scratch', False),

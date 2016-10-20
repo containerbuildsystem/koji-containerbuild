@@ -614,6 +614,23 @@ class BuildContainerTask(BaseTaskHandler):
                             "Dockerfile: %s.")
             raise koji.BuildError, (msg_template %
                                     ', '.join(formatted_labels_list))
+
+        # Make sure the longest tag for the docker image is no more than 128 chars
+        # see https://github.com/docker/docker/issues/8445
+
+        data = labels_wrapper.get_extra_data()
+        tags = labels_wrapper.get_additional_tags()
+        if LABEL_DATA_MAP['RELEASE'] in data:
+            version_release_tag = "%s-%s" % (
+                data[LABEL_DATA_MAP['VERSION']], data[LABEL_DATA_MAP['RELEASE']])
+            tags.append(version_release_tag)
+        if tags:
+            longest_tag = max(tags, key=len)
+            if len(longest_tag) > 128:
+                raise koji.BuildError(
+                    "Docker cannot create image with a tag longer than 128, "
+                    "current version-release tag length is %s" % len(longest_tag))
+
         return (labels_wrapper.get_extra_data(), labels_wrapper.get_expected_nvr())
 
     def handler(self, src, target, opts=None):
@@ -653,21 +670,6 @@ class BuildContainerTask(BaseTaskHandler):
                 else:
                     raise koji.BuildError(
                         "Build for %s already exists, id %s" % (expected_nvr, build_id))
-
-            # Make sure the longest tag for the docker image is no more than 128 chars
-            # see https://github.com/docker/docker/issues/8445
-
-            tags = labels_wrapper.get_additional_tags()
-            if LABEL_DATA_MAP['RELEASE'] in data:
-                version_release_tag = "%s-%s" % (
-                    data[LABEL_DATA_MAP['VERSION']], data[LABEL_DATA_MAP['RELEASE']])
-                tags.append(version_release_tag)
-            if tags:
-                longest_tag = max(tags, key=len)
-                if len(longest_tag) > 128:
-                    raise koji.BuildError(
-                        "Docker cannot create image with a tag longer than 128, "
-                        "current version-release tag length is %s" % len(longest_tag))
 
             results = self.runBuilds(src, target_info, archlist,
                                      scratch=opts.get('scratch', False),

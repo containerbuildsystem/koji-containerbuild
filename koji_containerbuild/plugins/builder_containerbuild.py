@@ -33,6 +33,7 @@ import urlgrabber
 import urlgrabber.grabber
 import dockerfile_parse
 import pycurl
+import signal
 
 import koji
 from koji.daemon import SCM
@@ -154,6 +155,9 @@ class FileWatcher(object):
                     fd.close()
                 fd = file(fpath, 'r')
             self._logs[fname] = (fd, stat_info.st_ino, stat_info.st_size, fpath)
+        except OSError:
+            self.logger.error("The build has been cancelled")
+            raise koji.ActionNotAllowed
         except:
             self.logger.error("Error reading mock log: %s", fpath)
             self.logger.error(''.join(traceback.format_exception(*sys.exc_info())))
@@ -406,6 +410,17 @@ class CreateContainerTask(BaseTaskHandler):
         build_id = build_response.get_build_name()
         self.logger.debug("OSBS build id: %r", build_id)
 
+        # When builds are cancelled the builder plugin process gets SIGINT and SIGKILL
+        # If osbs has started a build it should get cancelled
+        def sigint_handler(*args, **kwargs):
+            if not build_id:
+                return
+
+            self.logger.warn("Cannot read logs, cancelling build %s", build_id)
+            self.osbs().cancel_build(build_id)
+
+        signal.signal(signal.SIGINT, sigint_handler)
+
         self.logger.debug("Waiting for osbs build_id: %s to be scheduled.",
                           build_id)
         # we need to wait for kubelet to schedule the build, otherwise it's 500
@@ -419,8 +434,7 @@ class CreateContainerTask(BaseTaskHandler):
             try:
                 self._incremental_upload_logs(pid)
             except koji.ActionNotAllowed:
-                self.osbs().cancel_build(build_id)
-
+                pass
         else:
             full_output_name = os.path.join(osbs_logs_dir,
                                             'openshift-incremental.log')

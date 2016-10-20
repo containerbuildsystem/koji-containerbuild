@@ -691,6 +691,15 @@ class BuildContainerTask(BaseTaskHandler):
                     raise koji.BuildError(
                         "Build for %s already exists, id %s" % (expected_nvr, build_id))
 
+            # Make sure the longest tag for the docker image is no more than 128 chars
+            # see https://github.com/docker/docker/issues/8445
+
+            longest_tag = "%s-%s" % (LABEL_DATA_MAP['VERSION'], LABEL_DATA_MAP['RELEASE'])
+            if len(longest_tag) > 128:
+                raise koji.BuildError(
+                    "Docker cannot create image with a tag longer than 128,"
+                    "current version-release tag length is %s" % len(longest_tag))
+
             results = self.runBuilds(src, target_info, archlist,
                                      scratch=opts.get('scratch', False),
                                      yum_repourls=opts.get('yum_repourls', None),

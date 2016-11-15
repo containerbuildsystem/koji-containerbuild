@@ -6,7 +6,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.6.6
+Version:        0.7.1
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -114,6 +114,22 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Nov 15 2016 Luiz Carvalho <lucarval@redhat.com> 0.7.1-1
+- Move long tag check in checkLabels (vrutkovs@redhat.com)
+- Update tests and documentation after tasks have been merged
+  (vrutkovs@redhat.com)
+- Merge buildContainer and createContainer tasks (vrutkovs@redhat.com)
+- Pick the longest tag correctly (vrutkovs@redhat.com)
+- Pick the longest tag part among release and a list from additional-tags
+  (vrutkovs@redhat.com)
+- Reject a build if the longest tag is longer than 128 chars
+  (vrutkovs@redhat.com)
+- Trap build cancellation using signal handler (vrutkovs@redhat.com)
+- tests: make tests work (twaugh@redhat.com)
+- Cancel build when createContainer task is cancelled (throws
+  koji.GenericException) (vrutkovs@redhat.com)
+- Drop support for release parameter (lucarval@redhat.com)
+
 * Wed Jun 29 2016 Luiz Carvalho <lucarval@redhat.com> 0.6.6-1
 - Use osbs 'scratch' configuration for scratch builds (vrutkovs@redhat.com)
 - Revert "Disable scratch builds" (vrutkovs@redhat.com)

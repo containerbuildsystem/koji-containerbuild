@@ -388,21 +388,38 @@ class BuildContainerTask(BaseTaskHandler):
         elif pkg_cfg['blocked']:
             raise koji.BuildError("package (container)  %s is blocked for tag %s" % (name, target_info['dest_tag_name']))
 
+    def has_orchestrator(self):
+        method = getattr(self.osbs(), "create_orchestrator_build", None)
+        return callable(method)
+
     def runBuilds(self, src, target_info, arches, scratch=False,
                   yum_repourls=None, branch=None, push_url=None):
 
         self.logger.debug("Spawning jobs for arches: %r" % (arches))
 
         results = []
-        for arch in arches:
-            result = self.createContainer(
-                src, target_info, arch, scratch, yum_repourls, branch, push_url)
-            results.append(result)
+
+        kwargs = dict(
+            src=src,
+            target_info=target_info,
+            scratch=scratch,
+            yum_repourls=yum_repourls,
+            branch=branch,
+            push_url=push_url
+        )
+
+        if self.has_orchestrator():
+            kwargs["arches"] = arches
+        else:
+            kwargs["arch"] = arches[0]
+
+        results = [self.createContainer(**kwargs)]
 
         self.logger.debug("Results: %r", results)
         return results
 
-    def createContainer(self, src, target_info, arch, scratch, yum_repourls, branch, push_url):
+    def createContainer(self, src=None, target_info=None, arch=None, arches=None,
+                        scratch=None, yum_repourls=[], branch=None, push_url=None):
         if not yum_repourls:
             yum_repourls = []
 
@@ -427,13 +444,22 @@ class BuildContainerTask(BaseTaskHandler):
             'scratch': scratch,
             'koji_task_id': self.id,
         }
+        if arches:
+            create_build_args['platforms'] = arches
+            create_method = self.osbs().create_orchestrator_build
+        elif arch:
+            create_build_args['platform'] = arch
+            create_method = self.osbs().create_build
+        else:
+            raise ContainerError("Neither arch nor arches specified")
+
         if branch:
             create_build_args['git_branch'] = branch
         if push_url:
             create_build_args['git_push_url'] = push_url
-        build_response = self.osbs().create_build(
-            **create_build_args
-        )
+
+        self.logger.debug("Starting %s with params: '%s'", create_method, create_build_args)
+        build_response = create_method(**create_build_args)
         build_id = build_response.get_build_name()
         self.logger.debug("OSBS build id: %r", build_id)
 
@@ -593,7 +619,6 @@ class BuildContainerTask(BaseTaskHandler):
         if not os.path.exists(fn):
             raise koji.BuildError, "Dockerfile file missing: %s" % fn
         return fn
-
 
     def _get_admin_opts(self, opts):
         epoch = opts.get('epoch', 0)

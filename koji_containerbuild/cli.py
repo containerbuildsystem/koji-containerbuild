@@ -21,6 +21,7 @@
 #       Pavol Babincak <pbabinca@redhat.com>
 
 import os
+import json
 from koji import _
 from optparse import OptionParser
 
@@ -28,6 +29,38 @@ from optparse import OptionParser
 # This hack is here because koji CLI isn't a module but we need to use some of
 # its functions. And this CLI don't necessary be named koji.
 clikoji = None
+
+
+# matches hub's buildContainer parameter channel
+DEFAULT_CHANNEL = 'container'
+
+
+def print_value(value, level, indent, suffix=''):
+    offset = ' ' * level * indent
+    print ''.join([offset, str(value), suffix])
+
+
+def print_result(result, level=0, indent=2):
+    if isinstance(result, list):
+        for item in result:
+            print_result(item, level+1)
+    elif isinstance(result, dict):
+        for key, value in result.items():
+            print_value(key, level, indent, ':')
+            print_result(value, level+1)
+    else:
+        print_value(result, level, indent)
+
+
+def print_task_result(task_id, result, weburl):
+    try:
+        result["koji_builds"] = ["%s/buildinfo?buildID=%s" % (weburl, build_id)
+                                 for build_id in result.get("koji_builds", [])]
+    except TypeError:
+        pass
+
+    print "Task Result (%s):" % task_id
+    print_result(result)
 
 
 def handle_container_build(options, session, args):
@@ -60,6 +93,11 @@ def handle_container_build(options, session, args):
                              "times."))
     parser.add_option("--git-branch", metavar="GIT_BRANCH",
                       help=_("Git branch"))
+    parser.add_option("--channel-override",
+                      help=_("Use a non-standard channel [default: %default]"),
+                      default=DEFAULT_CHANNEL)
+    parser.add_option("--release",
+                      help=_("Set release label"))
     (build_opts, args) = parser.parse_args(args)
     if len(args) != 2:
         parser.error(_("Exactly two arguments (a build target and a SCM URL "
@@ -103,13 +141,21 @@ def handle_container_build(options, session, args):
         session.uploadWrapper(source, serverdir, callback=callback)
         print
         source = "%s/%s" % (serverdir, os.path.basename(source))
-    task_id = session.buildContainer(source, target, opts, priority=priority)
+    task_id = session.buildContainer(source, target, opts, priority=priority,
+                                     channel=build_opts.channel_override)
     if not build_opts.quiet:
         print "Created task:", task_id
         print "Task info: %s/taskinfo?taskID=%s" % (options.weburl, task_id)
     if build_opts.wait or (build_opts.wait is None and not
                            clikoji._running_in_bg()):
         session.logout()
-        return clikoji.watch_tasks(session, [task_id], quiet=build_opts.quiet)
+        rv = clikoji.watch_tasks(session, [task_id], quiet=build_opts.quiet)
+
+        # Task completed and a result should be available.
+        if rv == 0:
+            result = session.getTaskResult(task_id)
+            print_task_result(task_id, result, options.weburl)
+
+        return rv
     else:
         return

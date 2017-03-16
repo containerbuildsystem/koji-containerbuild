@@ -29,31 +29,25 @@ import logging
 import imp
 import time
 import traceback
-import urlgrabber
-import urlgrabber.grabber
 import dockerfile_parse
 import pycurl
+import signal
 
 import koji
 from koji.daemon import SCM
 from koji.tasks import ServerExit, BaseTaskHandler
 
-import osbs
-import osbs.core
-import osbs.api
-import osbs.http
 from osbs.api import OSBS
 from osbs.conf import Configuration
 
 # We need kojid module which isn't proper python module and not even in
 # site-package path.
 kojid_exe_path = '/usr/sbin/kojid'
-fo = file(kojid_exe_path, 'U')
 try:
-    kojid = imp.load_module('kojid', fo, fo.name, ('.py', 'U', 1))
-finally:
-    fo.close()
-
+    with file(kojid_exe_path, 'U') as fo:
+        kojid = imp.load_module('kojid', fo, fo.name, ('.py', 'U', 1))
+except IOError:
+    kojid = None
 
 
 # List of LABEL identifiers used within Koji. Values doesn't need to correspond
@@ -90,6 +84,7 @@ LABEL_DATA_MAP = {
 # Default values for LABELs. If there exist default value here LABEL is
 # optional in Dockerfile.
 LABEL_DEFAULT_VALUES = {
+    'RELEASE': object(), # Symbol-like marker to indicate unique init value
     'ARCHITECTURE': 'x86_64',
 }
 
@@ -154,6 +149,9 @@ class FileWatcher(object):
                     fd.close()
                 fd = file(fpath, 'r')
             self._logs[fname] = (fd, stat_info.st_ino, stat_info.st_size, fpath)
+        except OSError:
+            self.logger.error("The build has been cancelled")
+            raise koji.ActionNotAllowed
         except:
             self.logger.error("Error reading mock log: %s", fpath)
             self.logger.error(''.join(traceback.format_exception(*sys.exc_info())))
@@ -226,6 +224,20 @@ class LabelsWrapper(object):
             extra_data[extra_key] = value
         return extra_data
 
+    def get_additional_tags(self):
+        """Returns a list of additional tags to be applied to an image"""
+        tags = []
+        dockerfile_dir = os.path.dirname(self.dockerfile_path)
+        additional_tags_path = os.path.join(dockerfile_dir, 'additional-tags')
+        try:
+            with open(additional_tags_path, 'r') as fd:
+                for tag in fd:
+                    if '-' in tag:
+                        continue
+                    tags.append(tag.strip())
+        finally:
+            return tags
+
     def get_missing_label_ids(self):
         data = self.get_data_labels()
         missing_labels = []
@@ -234,6 +246,10 @@ class LabelsWrapper(object):
             if not data[label_id]:
                 missing_labels.append(label_id)
         return missing_labels
+
+    def get_expected_nvr(self):
+        data = self.get_data_labels()
+        return "{0}-{1}-{2}".format(data['COMPONENT'], data['VERSION'], data['RELEASE'])
 
     def format_label(self, label_id):
         """Formats string with user-facing LABEL name and its alternatives"""
@@ -246,8 +262,10 @@ class LabelsWrapper(object):
             return "%s (or %s)" % (label_map[0], " or ".join(label_map[1:]))
 
 
-class CreateContainerTask(BaseTaskHandler):
-    Methods = ['createContainer']
+class BuildContainerTask(BaseTaskHandler):
+    # Start builds via osbs for each arch (this might change soon)
+    Methods = ['buildContainer']
+    # Same value as for regular 'build' method.
     _taskWeight = 2.0
 
     def __init__(self, id, method, params, session, options, workdir=None):
@@ -255,109 +273,20 @@ class CreateContainerTask(BaseTaskHandler):
                                  workdir)
         self._osbs = None
 
-    def _download_logs(self, osbs_build_id):
-        file_names = []
-        fn = 'build.log'
-        build_log = os.path.join(self.workdir, fn)
-        self.logger.debug("Getting docker logs from OSBS")
-        build_log_contents = self.osbs().get_docker_build_logs(osbs_build_id)
-        self.logger.debug("Docker logs from OSBS retrieved")
-        outfile = open(build_log, 'w')
-        outfile.write(build_log_contents)
-        outfile.close()
-        self.logger.debug("Logs written to: %s" % build_log)
-        file_names.append(fn)
-
-        fn = 'openshift-final.log'
-        build_log = os.path.join(self.workdir, fn)
-        self.logger.debug("Getting OpenShift logs from OSBS")
-        build_log_contents = self.osbs().get_build_logs(osbs_build_id,
-                                                        follow=False)
-        self.logger.debug("Docker logs from OSBS retrieved")
-        outfile = open(build_log, 'w')
-        outfile.write(build_log_contents)
-        outfile.close()
-        file_names.append(fn)
-
-        return file_names
-
-    def _get_file_url(self, source_filename):
-        return "https://%s/image-export/%s/%s" % (self.osbs().os_conf.get_build_host(),
-                                                  self.nfs_dest_dir(),
-                                                  source_filename)
-
-    def _download_files(self, source_filename, target_filename=None):
-        if not target_filename:
-            target_filename = "image.tar"
-        localpath = os.path.join(self.workdir, target_filename)
-        remote_url = self._get_file_url(source_filename)
-        koji.ensuredir(self.workdir)
-        verify_ssl = self.osbs().os_conf.get_verify_ssl()
-        if verify_ssl:
-            ssl_verify_peer = 1
-            ssl_verify_host = 2
-        else:
-            ssl_verify_peer = 0
-            ssl_verify_host = 0
-        self.logger.debug("Going to download %r to %r.", remote_url, localpath)
-        if isinstance(remote_url, unicode):
-            remote_url = remote_url.encode('utf-8')
-            self.logger.debug("remote_url changed to %r", remote_url)
-        if isinstance(localpath, unicode):
-            localpath = localpath.encode('utf-8')
-            self.logger.debug("localpath changed to %r", localpath)
-        try:
-            output_filename = urlgrabber.urlgrab(remote_url,
-                                                 filename=localpath,
-                                                 ssl_verify_peer=ssl_verify_peer,
-                                                 ssl_verify_host=ssl_verify_host)
-        except urlgrabber.grabber.URLGrabError, error:
-            self.logger.info("Failed to download file from URL %s: %s.",
-                             remote_url, error)
-            return []
-        self.logger.debug("Output: %s.", output_filename)
-        return [output_filename]
-
-    def nfs_dest_dir(self):
-        return "task-%s" % self.id
+        # Check that the kojid module was successfully imported
+        assert kojid
 
     def osbs(self):
         """Handler of OSBS object"""
         if not self._osbs:
-            osbs.logger = logging.getLogger("%s.osbs" % self.logger.name)
-            osbs.core.logger = logging.getLogger("%s.osbs.core" %
-                                                 self.logger.name)
-            osbs.api.logger = logging.getLogger("%s.osbs.api" %
-                                                self.logger.name)
-            osbs.http.logger = logging.getLogger("%s.osbs.http" %
-                                                 self.logger.name)
-            osbs.logger.debug("osbs logger installed")
             os_conf = Configuration()
-            build_conf = Configuration(nfs_dest_dir=self.nfs_dest_dir())
+            build_conf = Configuration()
+            if self.opts.get('scratch'):
+                os_conf = Configuration(conf_section='scratch')
+                build_conf = Configuration(conf_section='scratch')
             self._osbs = OSBS(os_conf, build_conf)
             assert self._osbs
         return self._osbs
-
-    def _rpm_package_info(self, parts):
-        if len(parts) < 8:
-            self.logger.error("Too few number of fields in the list"
-                              " of rpms: %r", parts)
-            return
-        rpm = {
-            'name': parts[0],
-            'version': parts[1],
-            'release': parts[2],
-            'arch': parts[3],
-            'size': int(parts[5]),
-            'sigmd5': parts[6],
-            'buildtime': int(parts[7])
-        }
-
-        if parts[4] == '(none)':
-            rpm['epoch'] = None
-        else:
-            rpm['epoch'] = int(parts[4])
-        return rpm
 
     def getUploadPath(self):
         """Get the path that should be used when uploading files to
@@ -401,6 +330,7 @@ class CreateContainerTask(BaseTaskHandler):
         try:
             for line in build_logs:
                 outfile.write("%s\n" % line)
+                outfile.flush()
         except Exception, error:
             msg = "Exception (%s) while reading build logs: %s" % (type(error),
                                                                    error)
@@ -412,26 +342,6 @@ class CreateContainerTask(BaseTaskHandler):
         if (build_response.is_running() or build_response.is_pending()):
             raise ContainerError("Build log finished but build still has not "
                                  "finished: %s." % build_response.status)
-
-    def _get_rpm_packages(self, response):
-        rpmlist = []
-        try:
-            rpm_packages = response.get_rpm_packages()
-        except (KeyError, TypeError), error:
-            self.logger.error("Build response miss rpm-package: %s" % error)
-            rpm_packages = ''
-        if rpm_packages is None:
-            rpm_packages = ''
-        self.logger.debug("List of rpms: %s", rpm_packages)
-        for package in rpm_packages.split('\n'):
-            if len(package.strip()) == 0:
-                continue
-            parts = package.split(',')
-            rpm_info = self._rpm_package_info(parts)
-            if not rpm_info:
-                continue
-            rpmlist.append(rpm_info)
-        return rpmlist
 
     def _get_repositories(self, response):
         repositories = []
@@ -446,8 +356,53 @@ class CreateContainerTask(BaseTaskHandler):
                               repo_dict, type(error), error)
         return repositories
 
-    def handler(self, src, target_info, arch, output_template, scratch=False,
-                yum_repourls=None, branch=None, push_url=None):
+    def _get_koji_build_id(self, response):
+        koji_build_id = None
+        if hasattr(response, "get_koji_build_id"):
+            koji_build_id = response.get_koji_build_id()
+        else:
+            self.logger.info("Koji content generator build ID not available.")
+
+        return koji_build_id
+
+    def _get_error_message(self, response):
+        error_message = None
+        if hasattr(response, "get_error_message"):
+            error_message = response.get_error_message()
+        else:
+            self.logger.info("Error message is not available")
+
+        return error_message
+
+    def check_whitelist(self, name, target_info):
+        """Check if container name is whitelisted in destination tag
+
+        Raises with koji.BuildError if package is not whitelisted or blocked.
+        """
+        pkg_cfg = self.session.getPackageConfig(target_info['dest_tag_name'],
+                                                name)
+        self.logger.debug("%r" % pkg_cfg)
+        # Make sure package is on the list for this tag
+        if pkg_cfg is None:
+            raise koji.BuildError("package (container) %s not in list for tag %s" % (name, target_info['dest_tag_name']))
+        elif pkg_cfg['blocked']:
+            raise koji.BuildError("package (container)  %s is blocked for tag %s" % (name, target_info['dest_tag_name']))
+
+    def runBuilds(self, src, target_info, arches, scratch=False,
+                  yum_repourls=None, branch=None, push_url=None):
+
+        self.logger.debug("Spawning jobs for arches: %r" % (arches))
+
+        results = []
+        for arch in arches:
+            result = self.createContainer(
+                src, target_info, arch, scratch, yum_repourls, branch, push_url)
+            results.append(result)
+
+        self.logger.debug("Results: %r", results)
+        return results
+
+    def createContainer(self, src, target_info, arch, scratch, yum_repourls, branch, push_url):
         if not yum_repourls:
             yum_repourls = []
 
@@ -469,6 +424,8 @@ class CreateContainerTask(BaseTaskHandler):
             'target': target_info['name'],
             'architecture': arch,
             'yum_repourls': yum_repourls,
+            'scratch': scratch,
+            'koji_task_id': self.id,
         }
         if branch:
             create_build_args['git_branch'] = branch
@@ -480,6 +437,17 @@ class CreateContainerTask(BaseTaskHandler):
         build_id = build_response.get_build_name()
         self.logger.debug("OSBS build id: %r", build_id)
 
+        # When builds are cancelled the builder plugin process gets SIGINT and SIGKILL
+        # If osbs has started a build it should get cancelled
+        def sigint_handler(*args, **kwargs):
+            if not build_id:
+                return
+
+            self.logger.warn("Cannot read logs, cancelling build %s", build_id)
+            self.osbs().cancel_build(build_id)
+
+        signal.signal(signal.SIGINT, sigint_handler)
+
         self.logger.debug("Waiting for osbs build_id: %s to be scheduled.",
                           build_id)
         # we need to wait for kubelet to schedule the build, otherwise it's 500
@@ -490,8 +458,10 @@ class CreateContainerTask(BaseTaskHandler):
         koji.ensuredir(osbs_logs_dir)
         pid = os.fork()
         if pid:
-            self._incremental_upload_logs(pid)
-
+            try:
+                self._incremental_upload_logs(pid)
+            except koji.ActionNotAllowed:
+                pass
         else:
             full_output_name = os.path.join(osbs_logs_dir,
                                             'openshift-incremental.log')
@@ -530,41 +500,21 @@ class CreateContainerTask(BaseTaskHandler):
             os._exit(0)
 
         response = self.osbs().wait_for_build_to_finish(build_id)
+
         self.logger.debug("OSBS build finished with status: %s. Build "
                           "response: %s.", response.status,
                           response.json)
-        logs = self._download_logs(build_id)
 
         self.logger.info("Response status: %r", response.is_succeeded())
 
-        files = []
-        if response.is_succeeded() and response.get_tar_metadata_filename():
-            files = self._download_files(response.get_tar_metadata_filename(),
-                                         "image-%s.tar" % arch)
-
-        rpmlist = []
-        if response.is_succeeded():
-            rpmlist = self._get_rpm_packages(response)
-
-        self.logger.debug("rpm list:")
-        for rpm in rpmlist:
-            self.logger.debug("%(name)s-%(version)s-%(release)s.%(arch)s.rpm" %
-                              rpm)
-
-        repo_info = self.session.getRepo(target_info['build_tag'])
-        # TODO: copied from image build
-        # TODO: hack to make this work for now, need to refactor
-        if not scratch:
-            try:
-                br = kojid.BuildRoot(self.session, self.options,
-                                     target_info['build_tag'], arch,
-                                     self.id, repo_id=repo_info['id'])
-                br.markExternalRPMs(rpmlist)
-                # TODO: I'm not sure if this is ok
-                br.expire()
-            except Exception, error:
-                raise koji.PostBuildError("Failed to distuinguish external "
-                                          "rpms: %s" % error)
+        if response.is_failed():
+            error_message = self._get_error_message(response)
+            if error_message:
+                raise ContainerError('Image build failed. %s. OSBS build id: %s' %
+                                     (error_message, build_id))
+            else:
+                raise ContainerError('Image build failed. OSBS build id: %s' %
+                                     build_id)
 
         repositories = []
         if response.is_succeeded():
@@ -573,88 +523,22 @@ class CreateContainerTask(BaseTaskHandler):
         self.logger.info("Image available in the following repositories: %r",
                          repositories)
 
+        koji_build_id = None
+        if response.is_succeeded():
+            koji_build_id = self._get_koji_build_id(response)
+
+        self.logger.info("Koji content generator build ID: %s", koji_build_id)
+
         containerdata = {
             'arch': arch,
             'task_id': self.id,
-            'logs': logs,
             'osbs_build_id': build_id,
-            'rpmlist': rpmlist,
             'files': [],
-            'repositories': repositories
+            'repositories': repositories,
+            'koji_build_id': koji_build_id,
         }
 
-        # upload the build output
-        for filename in containerdata['logs']:
-            build_log = os.path.join(self.workdir, filename)
-            self.uploadFile(build_log)
-
-        if response.is_succeeded() and len(files) != 1:
-            self.logger.error("There should be only one container file but "
-                              "there are %d: %s", len(files), files)
-        else:
-            for filename in files:
-                full_path = os.path.join(self.workdir, filename)
-                self.uploadFile(full_path, remoteName=output_template)
-                containerdata['files'].append(os.path.basename(output_template))
-
         return containerdata
-
-
-class BuildContainerTask(BaseTaskHandler):
-    Methods = ['buildContainer']
-    # We mostly just wait on other tasks. Same value as for regular 'build'
-    # method.
-    _taskWeight = 0.2
-
-    def __init__(self, id, method, params, session, options, workdir=None):
-        BaseTaskHandler.__init__(self, id, method, params, session, options,
-                                 workdir)
-        self._osbs = None
-
-    def osbs(self):
-        """Handler of OSBS object"""
-        if not self._osbs:
-            os_conf = Configuration()
-            build_conf = Configuration()
-            self._osbs = OSBS(os_conf, build_conf)
-            assert self._osbs
-        return self._osbs
-
-    def check_whitelist(self, name, target_info):
-        """Check if container name is whitelisted in destination tag
-
-        Raises with koji.BuildError if package is not whitelisted or blocked.
-        """
-        pkg_cfg = self.session.getPackageConfig(target_info['dest_tag_name'],
-                                                name)
-        self.logger.debug("%r" % pkg_cfg)
-        # Make sure package is on the list for this tag
-        if pkg_cfg is None:
-            raise koji.BuildError("package (container) %s not in list for tag %s" % (name, target_info['dest_tag_name']))
-        elif pkg_cfg['blocked']:
-            raise koji.BuildError("package (container)  %s is blocked for tag %s" % (name, target_info['dest_tag_name']))
-
-    def runBuilds(self, src, target_info, arches, output_template,
-                  scratch=False, yum_repourls=None, branch=None, push_url=None):
-        subtasks = {}
-        for arch in arches:
-            subtasks[arch] = self.session.host.subtask(method='createContainer',
-                                                       arglist=[src,
-                                                                target_info,
-                                                                arch,
-                                                                output_template,
-                                                                scratch,
-                                                                yum_repourls,
-                                                                branch,
-                                                                push_url],
-                                                       label='container',
-                                                       parent=self.id)
-        self.logger.debug("Got image subtasks: %r", (subtasks))
-        self.logger.debug("Waiting on image subtasks...")
-        results = self.wait(subtasks.values(), all=True, failany=True)
-
-        self.logger.debug("Results: %r", results)
-        return results
 
     def getArchList(self, build_tag, extra=None):
         """Copied from build task"""
@@ -662,7 +546,7 @@ class BuildContainerTask(BaseTaskHandler):
         buildconfig = self.session.getBuildConfig(build_tag, event=self.event_id)
         arches = buildconfig['arches']
         if not arches:
-            #XXX - need to handle this better
+            # XXX - need to handle this better
             raise koji.BuildError, "No arches for tag %(name)s [%(id)s]" % buildconfig
         tag_archlist = [koji.canonArch(a) for a in arches.split()]
         self.logger.debug('arches: %s', arches)
@@ -710,17 +594,6 @@ class BuildContainerTask(BaseTaskHandler):
             raise koji.BuildError, "Dockerfile file missing: %s" % fn
         return fn
 
-    def _getOutputImageTemplate(self, **kwargs):
-        output_template = 'image.tar'
-        have_all_fields = True
-        for field in ['name', 'version', 'release', 'architecture']:
-            if field not in kwargs:
-                self.logger.info("Missing var for output image name: %s",
-                                 field)
-                have_all_fields = False
-        if have_all_fields:
-            output_template = "%(name)s-%(version)s-%(release)s-%(architecture)s.tar" % kwargs
-        return output_template
 
     def _get_admin_opts(self, opts):
         epoch = opts.get('epoch', 0)
@@ -729,22 +602,36 @@ class BuildContainerTask(BaseTaskHandler):
 
         return {'epoch': epoch}
 
-    def _get_dockerfile_labels(self, dockerfile_path, fields):
-        """Roughly corresponds to koji.get_header_fields()
+    def checkLabels(self, src):
+        dockerfile_path = self.fetchDockerfile(src)
+        labels_wrapper = LabelsWrapper(dockerfile_path,
+                                       logger_name=self.logger.name)
+        missing_labels = labels_wrapper.get_missing_label_ids()
+        if missing_labels:
+            formatted_labels_list = [labels_wrapper.format_label(label_id) for
+                                     label_id in missing_labels]
+            msg_template = ("Required LABELs haven't been found in "
+                            "Dockerfile: %s.")
+            raise koji.BuildError, (msg_template %
+                                    ', '.join(formatted_labels_list))
 
-        It differs from get_header_fields() which is ran on rpms that missing
-        fields are not considered to be error.
-        """
-        dockerfile_parse.parser.logger = logging.getLogger("%s.dockerfile_parse"
-                                                           % self.logger.name)
-        parser = dockerfile_parse.parser.DockerfileParser(dockerfile_path)
-        ret = {}
-        for f in fields:
-            try:
-                ret[f] = parser.labels[f]
-            except KeyError:
-                self.logger.info("No such label: %s", f)
-        return ret
+        # Make sure the longest tag for the docker image is no more than 128 chars
+        # see https://github.com/docker/docker/issues/8445
+
+        data = labels_wrapper.get_extra_data()
+        tags = labels_wrapper.get_additional_tags()
+        if LABEL_DATA_MAP['RELEASE'] in data:
+            version_release_tag = "%s-%s" % (
+                data[LABEL_DATA_MAP['VERSION']], data[LABEL_DATA_MAP['RELEASE']])
+            tags.append(version_release_tag)
+        if tags:
+            longest_tag = max(tags, key=len)
+            if len(longest_tag) > 128:
+                raise koji.BuildError(
+                    "Docker cannot create image with a tag longer than 128, "
+                    "current version-release tag length is %s" % len(longest_tag))
+
+        return (labels_wrapper.get_extra_data(), labels_wrapper.get_expected_nvr())
 
     def handler(self, src, target, opts=None):
         if not opts:
@@ -757,45 +644,42 @@ class BuildContainerTask(BaseTaskHandler):
         build_tag = target_info['build_tag']
         archlist = self.getArchList(build_tag)
 
-        dockerfile_path = self.fetchDockerfile(src)
-        labels_wrapper = LabelsWrapper(dockerfile_path, self.logger.name)
-        missing_labels = labels_wrapper.get_missing_label_ids()
-        if missing_labels:
-            formatted_labels_list = [labels_wrapper.format_label(label_id) for
-                                     label_id in missing_labels]
-            msg_template = ("Required LABELs haven't been found in "
-                            "Dockerfile: %s.")
-            raise koji.BuildError, (msg_template %
-                                    ', '.join(formatted_labels_list))
-        data = labels_wrapper.get_extra_data()
+        data, expected_nvr = self.checkLabels(src)
         admin_opts = self._get_admin_opts(opts)
         data.update(admin_opts)
 
-        # scratch builds do not get imported
-        if not self.opts.get('scratch'):
-
-            if not opts.get('skip_tag'):
-                self.check_whitelist(data['name'], target_info)
-            bld_info = self.session.host.initImageBuild(self.id, data)
         try:
+            auto_release = (data[LABEL_DATA_MAP['RELEASE']] ==
+                            LABEL_DEFAULT_VALUES['RELEASE'])
+            if auto_release:
+                # Do not expose default release value
+                del data[LABEL_DATA_MAP['RELEASE']]
+
             self.extra_information = {"src": src, "data": data,
                                       "target": target}
+
             if not SCM.is_scm_url(src):
                 raise koji.BuildError('Invalid source specification: %s' % src)
-            output_template = self._getOutputImageTemplate(**data)
+
+            # Scratch and auto release builds shouldn't be checked for nvr
+            if not self.opts.get('scratch') and not auto_release:
+                try:
+                    build_id = self.session.getBuild(expected_nvr)['id']
+                except:
+                    self.logger.info("No build for %s found", expected_nvr, exc_info=True)
+                else:
+                    raise koji.BuildError(
+                        "Build for %s already exists, id %s" % (expected_nvr, build_id))
+
             results = self.runBuilds(src, target_info, archlist,
-                                     output_template,
-                                     opts.get('scratch', False),
-                                     opts.get('yum_repourls', None),
-                                     opts.get('git_branch', None),
-                                     opts.get('push_url', None))
-            results_xmlrpc = {}
-            for task_id, result in results.items():
-                # get around an xmlrpc limitation, use arches for keys instead
-                results_xmlrpc[str(task_id)] = result
+                                     scratch=opts.get('scratch', False),
+                                     yum_repourls=opts.get('yum_repourls', None),
+                                     branch=opts.get('git_branch', None),
+                                     push_url=opts.get('push_url', None),
+                                     )
             all_repositories = []
-            for result in results.values():
-                self._raise_if_image_failed(result['osbs_build_id'])
+            all_koji_builds = []
+            for result in results:
                 try:
                     repository = result.get('repositories')
                     all_repositories.extend(repository)
@@ -803,42 +687,18 @@ class BuildContainerTask(BaseTaskHandler):
                     self.logger.error("Failed to merge list of repositories "
                                       "%r. Reason (%s): %s", repository,
                                       type(error), error)
-            if opts.get('scratch'):
-                # scratch builds do not get imported
-                self.session.host.moveImageBuildToScratch(self.id,
-                                                          results_xmlrpc)
-            else:
-                self.session.host.completeImageBuild(self.id,
-                                                     bld_info['id'],
-                                                     results_xmlrpc)
+                koji_build_id = result.get('koji_build_id')
+                if koji_build_id:
+                    all_koji_builds.append(koji_build_id)
+
         except (SystemExit, ServerExit, KeyboardInterrupt):
             # we do not trap these
             raise
         except:
-            if not self.opts.get('scratch'):
-                # scratch builds do not get imported
-                if bld_info:
-                    self.session.host.failBuild(self.id, bld_info['id'])
             # reraise the exception
             raise
 
-        # tag it
-        if not opts.get('scratch') and not opts.get('skip_tag'):
-            tag_task_id = self.session.host.subtask(
-                method='tagBuild',
-                arglist=[target_info['dest_tag'], bld_info['id'], False, None,
-                         True],
-                label='tag',
-                parent=self.id,
-                arch='noarch')
-            self.wait(tag_task_id)
-
-        report = ('Image available in following repositories:\n%s' %
-                  '\n'.join(all_repositories))
-        return report
-
-    def _raise_if_image_failed(self, osbs_build_id):
-        build = self.osbs().get_build(osbs_build_id)
-        if build.is_failed():
-            raise ContainerError('Image build failed. OSBS build id: %s' %
-                                 osbs_build_id)
+        return {
+            'repositories': all_repositories,
+            'koji_builds': all_koji_builds,
+        }

@@ -6,7 +6,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.5.5
+Version:        0.7.1
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -114,6 +114,81 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Nov 15 2016 Luiz Carvalho <lucarval@redhat.com> 0.7.1-1
+- Move long tag check in checkLabels (vrutkovs@redhat.com)
+- Update tests and documentation after tasks have been merged
+  (vrutkovs@redhat.com)
+- Merge buildContainer and createContainer tasks (vrutkovs@redhat.com)
+- Pick the longest tag correctly (vrutkovs@redhat.com)
+- Pick the longest tag part among release and a list from additional-tags
+  (vrutkovs@redhat.com)
+- Reject a build if the longest tag is longer than 128 chars
+  (vrutkovs@redhat.com)
+- Trap build cancellation using signal handler (vrutkovs@redhat.com)
+- tests: make tests work (twaugh@redhat.com)
+- Cancel build when createContainer task is cancelled (throws
+  koji.GenericException) (vrutkovs@redhat.com)
+- Drop support for release parameter (lucarval@redhat.com)
+
+* Wed Jun 29 2016 Luiz Carvalho <lucarval@redhat.com> 0.6.6-1
+- Use osbs 'scratch' configuration for scratch builds (vrutkovs@redhat.com)
+- Revert "Disable scratch builds" (vrutkovs@redhat.com)
+- make streamed logs line-buffered (twaugh@redhat.com)
+- Remove default value for release parameter (lucarval@redhat.com)
+
+* Fri Jun 24 2016 Luiz Carvalho <lucarval@redhat.com> 0.6.5-1
+- Show build's error message if available (vrutkovs@redhat.com)
+- Disable scratch builds (vrutkovs@redhat.com)
+- Should use label 'Release' to set release (twaugh@redhat.com)
+
+* Wed Jun 22 2016 Brendan Reilly <breilly@redhat.com> 0.6.4-1
+- Fail createContainer if OpenShift build fails (mmilata@redhat.com)
+- Added a few unit tests (breilly@redhat.com)
+- Make "Release" label optional (lucarval@redhat.com)
+- Use correct object for session during nvr check and log the error
+  (vrutkovs@redhat.com)
+
+* Thu Jun 02 2016 Brendan Reilly <breilly@redhat.com> 0.6.3-1
+- Fix task result output (lucarval@redhat.com)
+- Handle release parameter (lucarval@redhat.com)
+
+* Wed May 25 2016 Brendan Reilly <breilly@redhat.com> 0.6.2-1
+- supply koji_task_id to osbs-client's create_build() (twaugh@redhat.com)
+- no need to warn about build result not being JSON (twaugh@redhat.com)
+- Use component label in nvr check (vrutkovs@redhat.com)
+- Don't check NVR for scratch builds and move nvr check closer to build object
+  creation (vrutkovs@redhat.com)
+- Don't start the build if package with this NVR already has been built
+  (vrutkovs@redhat.com)
+- Expose Koji CG build ID in CreateContainerTask (lucarval@redhat.com)
+
+* Mon Apr 11 2016 Brendan Reilly <breilly@redhat.com> 0.6.1-1
+- Reinstate _get_repositories() method (fixes #35) (twaugh@redhat.com)
+- Add back in bits required for streaming logs (fixes #33) (twaugh@redhat.com)
+
+* Thu Apr 07 2016 Brendan Reilly <breilly@redhat.com> 0.6.0-1
+- remove un-necessary code for v2-only CG builds
+  (maxamillion@fedoraproject.org)
+- runBuilds: add debug for arches (dennis@ausil.us)
+- runBuilds make label unique and be able to build archfully (dennis@ausil.us)
+- Build process documentation - quick and dirty (pbabinca@redhat.com)
+
+* Mon Mar 14 2016 Pavol Babincak <pbabinca@redhat.com> 0.5.7-1
+- Updated docs how to create a release (pbabinca@redhat.com)
+- add some post-install instructions (admiller@redhat.com)
+- incorporated new osbs api for compression fix (breilly@redhat.com)
+
+* Tue Mar 08 2016 Pavol Babincak <pbabinca@redhat.com> 0.5.6-1
+- Backport spec file from Fedora (pbabinca@redhat.com)
+- Include docs in MANIFEST.in (pbabinca@redhat.com)
+- Use .md extension for build architecture (pbabinca@redhat.com)
+- quickfix for downloads always being .tar (breilly@redhat.com)
+- Channel override in CLI (pbabinca@redhat.com)
+- Build process documentation - quick and dirty (pbabinca@redhat.com)
+
+* Thu Feb 04 2016 Fedora Release Engineering <releng@fedoraproject.org> - 0.5.5-2
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_24_Mass_Rebuild
+
 * Fri Dec 04 2015 Pavol Babincak <pbabinca@redhat.com> 0.5.5-1
 - Add README.rst to a release (pbabinca@redhat.com)
 - Use %%global macro instead of %%define one (pbabinca@redhat.com)

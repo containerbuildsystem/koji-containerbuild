@@ -39,6 +39,7 @@ from koji.tasks import ServerExit, BaseTaskHandler
 
 from osbs.api import OSBS
 from osbs.conf import Configuration
+from osbs.exceptions import OsbsValidationException
 
 # We need kojid module which isn't proper python module and not even in
 # site-package path.
@@ -388,10 +389,6 @@ class BuildContainerTask(BaseTaskHandler):
         elif pkg_cfg['blocked']:
             raise koji.BuildError("package (container)  %s is blocked for tag %s" % (name, target_info['dest_tag_name']))
 
-    def has_orchestrator(self):
-        method = getattr(self.osbs(), "create_orchestrator_build", None)
-        return callable(method)
-
     def runBuilds(self, src, target_info, arches, scratch=False,
                   yum_repourls=None, branch=None, push_url=None):
 
@@ -405,20 +402,16 @@ class BuildContainerTask(BaseTaskHandler):
             scratch=scratch,
             yum_repourls=yum_repourls,
             branch=branch,
-            push_url=push_url
+            push_url=push_url,
+            arches=arches
         )
-
-        if self.has_orchestrator():
-            kwargs["arches"] = arches
-        else:
-            kwargs["arch"] = arches[0]
 
         results = [self.createContainer(**kwargs)]
 
         self.logger.debug("Results: %r", results)
         return results
 
-    def createContainer(self, src=None, target_info=None, arch=None, arches=None,
+    def createContainer(self, src=None, target_info=None, arches=None,
                         scratch=None, yum_repourls=[], branch=None, push_url=None):
         if not yum_repourls:
             yum_repourls = []
@@ -432,6 +425,10 @@ class BuildContainerTask(BaseTaskHandler):
         scm.assert_allowed(self.options.allowed_scms)
         git_uri = scm.get_git_uri()
         component = scm.get_component()
+        arch = None
+
+        if not arches:
+            raise ContainerError("arches aren't specified")
 
         create_build_args = {
             'git_uri': git_uri,
@@ -439,27 +436,29 @@ class BuildContainerTask(BaseTaskHandler):
             'user': owner_info['name'],
             'component': component,
             'target': target_info['name'],
-            'architecture': arch,
             'yum_repourls': yum_repourls,
             'scratch': scratch,
             'koji_task_id': self.id,
+            'architecture': arch
         }
-        if arches:
-            create_build_args['platforms'] = arches
-            create_method = self.osbs().create_orchestrator_build
-        elif arch:
-            create_build_args['platform'] = arch
-            create_method = self.osbs().create_build
-        else:
-            raise ContainerError("Neither arch nor arches specified")
-
         if branch:
             create_build_args['git_branch'] = branch
         if push_url:
             create_build_args['git_push_url'] = push_url
 
-        self.logger.debug("Starting %s with params: '%s'", create_method, create_build_args)
-        build_response = create_method(**create_build_args)
+        try:
+            create_method = self.osbs().create_orchestrator_build
+            self.logger.debug("Starting %s with params: '%s, platforms:%s'",
+                              create_method, create_build_args, arches)
+            build_response = create_method(platforms=arches, **create_build_args)
+        except (AttributeError, OsbsValidationException):
+            # Older osbs-client, or else orchestration not enabled
+            create_build_args['architecture'] = arch = arches[0]
+            create_method = self.osbs().create_build
+            self.logger.debug("Starting %s with params: '%s'",
+                              create_method, create_build_args)
+            build_response = create_method(**create_build_args)
+
         build_id = build_response.get_build_name()
         self.logger.debug("OSBS build id: %r", build_id)
 

@@ -12,6 +12,7 @@ import osbs
 import os
 import os.path
 from koji_containerbuild.plugins import builder_containerbuild
+from osbs.exceptions import OsbsValidationException
 
 
 class KojidMock(object):
@@ -113,11 +114,20 @@ class TestBuilder(object):
                 .and_return(build_response))
         else:
             (osbs
+                .should_receive('create_orchestrator_build')
+                .with_args(git_uri=git_uri, git_ref=git_ref, user='owner-name',
+                           component='fedora-docker', target='target-name',
+                           architecture=None, yum_repourls=[],
+                           platforms=['x86_64'], scratch=False, koji_task_id=task_id)
+                .once()
+                .and_raise(OsbsValidationException))
+
+            (osbs
                 .should_receive('create_build')
                 .with_args(git_uri=git_uri, git_ref=git_ref, user='owner-name',
                            component='fedora-docker', target='target-name',
                            architecture='x86_64', yum_repourls=[],
-                           platform='x86_64', scratch=False, koji_task_id=task_id)
+                           scratch=False, koji_task_id=task_id)
                 .once()
                 .and_return(build_response))
         (osbs

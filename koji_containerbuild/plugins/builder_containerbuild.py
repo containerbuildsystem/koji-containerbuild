@@ -672,6 +672,10 @@ class BuildContainerTask(BaseTaskHandler):
         admin_opts = self._get_admin_opts(opts)
         data.update(admin_opts)
 
+        # scratch builds do not get imported, and consequently not tagged
+        if not self.opts.get('scratch'):
+            self.check_whitelist(data[LABEL_DATA_MAP['COMPONENT']], target_info)
+
         try:
             auto_release = (data[LABEL_DATA_MAP['RELEASE']] ==
                             LABEL_DEFAULT_VALUES['RELEASE'])

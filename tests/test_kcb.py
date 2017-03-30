@@ -11,6 +11,7 @@ import pytest
 import osbs
 import os
 import os.path
+import koji
 from koji_containerbuild.plugins import builder_containerbuild
 from osbs.exceptions import OsbsValidationException
 
@@ -58,7 +59,7 @@ class TestBuilder(object):
             repositories.extend(repo)
         assert set(cct._get_repositories(response)) ^ set(repositories) == set([])
 
-    def _mock_session(self, last_event_id, task_id):
+    def _mock_session(self, last_event_id, task_id, pkg_info):
         session = flexmock()
         (session
             .should_receive('getLastEvent')
@@ -66,7 +67,8 @@ class TestBuilder(object):
         (session
             .should_receive('getBuildTarget')
             .with_args('target', event=last_event_id)
-            .and_return({'build_tag': 'build-tag', 'name': 'target-name'}))
+            .and_return({'build_tag': 'build-tag', 'name': 'target-name',
+                         'dest_tag_name': 'dest-tag'}))
         (session
             .should_receive('getBuildConfig')
             .with_args('build-tag', event=last_event_id)
@@ -79,10 +81,15 @@ class TestBuilder(object):
             .should_receive('getUser')
             .with_args('owner')
             .and_return({'name': 'owner-name'}))
+        (session
+            .should_receive('getPackageConfig')
+            .with_args('dest-tag', 'fedora-docker')
+            .and_return(pkg_info))
 
         return session
 
-    def _mock_osbs(self, koji_build_id, git_uri, git_ref, task_id, orchestrator=False):
+    def _mock_osbs(self, koji_build_id, git_uri, git_ref, task_id,
+                   orchestrator=False, build_not_started=False):
         build_response = flexmock()
         (build_response
             .should_receive('get_build_name')
@@ -110,7 +117,7 @@ class TestBuilder(object):
                            component='fedora-docker', target='target-name',
                            architecture=None, yum_repourls=[],
                            platforms=['x86_64'], scratch=False, koji_task_id=task_id)
-                .once()
+                .times(0 if build_not_started else 1)
                 .and_return(build_response))
         else:
             (osbs
@@ -119,7 +126,7 @@ class TestBuilder(object):
                            component='fedora-docker', target='target-name',
                            architecture=None, yum_repourls=[],
                            platforms=['x86_64'], scratch=False, koji_task_id=task_id)
-                .once()
+                .times(0 if build_not_started else 1)
                 .and_raise(OsbsValidationException))
 
             (osbs
@@ -128,7 +135,7 @@ class TestBuilder(object):
                            component='fedora-docker', target='target-name',
                            architecture='x86_64', yum_repourls=[],
                            scratch=False, koji_task_id=task_id)
-                .once()
+                .times(0 if build_not_started else 1)
                 .and_return(build_response))
         (osbs
             .should_receive('wait_for_build_to_get_scheduled')
@@ -163,12 +170,18 @@ class TestBuilder(object):
         src = git_uri + '#' + git_ref
         return {'git_uri': git_uri, 'git_ref': git_ref, 'src': src}
 
-    def test_osbs_build(self, tmpdir):
+    @pytest.mark.parametrize(('pkg_info', 'failure'), (
+        (None, 'not in list for tag'),
+        ({'blocked': True}, 'is blocked for'),
+        ({'blocked': False}, None),
+    ))
+    @pytest.mark.parametrize('orchestrator', (True, False))
+    def test_osbs_build(self, tmpdir, pkg_info, failure, orchestrator):
         task_id = 123
         last_event_id = 456
         koji_build_id = 999
 
-        session = self._mock_session(last_event_id, task_id)
+        session = self._mock_session(last_event_id, task_id, pkg_info)
         folders_info = self._mock_folders(str(tmpdir))
         src = self._mock_git_source()
         options = flexmock(allowed_scms='pkgs.example.com:/*:no')
@@ -191,52 +204,20 @@ class TestBuilder(object):
                                      git_uri=src['git_uri'],
                                      git_ref=src['git_ref'],
                                      task_id=task_id,
-                                     orchestrator=False)
-
-        task_response = task.handler(src['src'], 'target', opts={})
-
-        assert task_response == {
-            'repositories': ['unique-repo', 'primary-repo'],
-            'koji_builds': [koji_build_id]
-        }
-
-    def test_osbs_orchestrator_build(self, tmpdir):
-        task_id = 123
-        last_event_id = 456
-        koji_build_id = 999
-
-        session = self._mock_session(last_event_id, task_id)
-        folders_info = self._mock_folders(str(tmpdir))
-        src = self._mock_git_source()
-        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
-
-        task = builder_containerbuild.BuildContainerTask(id=task_id,
-                                                         method='buildContainer',
-                                                         params='params',
-                                                         session=session,
-                                                         options=options,
-                                                         workdir='workdir')
-
-        (flexmock(task)
-            .should_receive('fetchDockerfile')
-            .with_args(src['src'])
-            .and_return(folders_info['dockerfile_path']))
-        (flexmock(task)
-            .should_receive('_write_incremental_logs'))
-
-        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
-                                     git_uri=src['git_uri'],
-                                     git_ref=src['git_ref'],
-                                     task_id=task_id,
-                                     orchestrator=True)
+                                     orchestrator=orchestrator,
+                                     build_not_started=bool(failure))
         build_response = flexmock()
 
-        (flexmock(task._osbs)
-            .should_receive('crete_orchestrator_build'))
+        if failure:
+            with pytest.raises(koji.BuildError) as exc:
+                task.handler(src['src'], 'target', opts={})
 
-        task_response = task.handler(src['src'], 'target', opts={})
+            assert failure in str(exc)
 
-        assert task_response == {
-            'repositories': ['unique-repo', 'primary-repo'],
-            'koji_builds': [koji_build_id]
-        }
+        else:
+            task_response = task.handler(src['src'], 'target', opts={})
+
+            assert task_response == {
+                'repositories': ['unique-repo', 'primary-repo'],
+                'koji_builds': [koji_build_id]
+            }

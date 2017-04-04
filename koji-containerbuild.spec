@@ -6,7 +6,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.1
+Version:        0.7.2
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -114,6 +114,15 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Apr 04 2017 Robert Cerven <rcerven@redhat.com> 0.7.2-1
+- check if pkg can be tagged (lucarval@redhat.com)
+- orchestrator build can only successfully run if can_orchestrate option is
+  set, in osbs.conf otherwise will fallback to regular prod_build
+  (rcerven@redhat.com)
+- add unit testing for orchestrator builds (lucarval@redhat.com)
+- Use osbs-client's create_orchestrator_build method if available
+  (vrutkovs@redhat.com)
+
 * Tue Nov 15 2016 Luiz Carvalho <lucarval@redhat.com> 0.7.1-1
 - Move long tag check in checkLabels (vrutkovs@redhat.com)
 - Update tests and documentation after tasks have been merged

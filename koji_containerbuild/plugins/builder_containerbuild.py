@@ -538,8 +538,9 @@ class BuildContainerTask(BaseTaskHandler):
 
         if response.is_cancelled():
             this_task.cancel()
-            # FIXME - What kind of information do we want in here?
-            raise ContainerCancelled('Image build was cancelled by OSBS')
+            raise ContainerCancelled(
+                'Image build was cancelled by OSBS, maybe by automated rebuild.'
+            )
 
         elif response.is_failed():
             error_message = self._get_error_message(response)

@@ -94,6 +94,10 @@ class ContainerError(koji.GenericError):
     """Raised when container creation fails"""
     faultCode = 2001
 
+class ContainerCancelled(koji.GenericError):
+    """Raised when container creation is cancelled by OSBS"""
+    faultCode = 2002
+
 
 # TODO: push this to upstream koji
 class My_SCM(SCM):
@@ -532,7 +536,12 @@ class BuildContainerTask(BaseTaskHandler):
 
         self.logger.info("Response status: %r", response.is_succeeded())
 
-        if response.is_failed():
+        if response.is_cancelled():
+            this_task.cancel()
+            # FIXME - What kind of information do we want in here?
+            raise ContainerCancelled('Image build was cancelled by OSBS')
+
+        elif response.is_failed():
             error_message = self._get_error_message(response)
             if error_message:
                 raise ContainerError('Image build failed. %s. OSBS build id: %s' %

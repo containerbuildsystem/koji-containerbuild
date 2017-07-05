@@ -103,6 +103,9 @@ class TestBuilder(object):
             .should_receive('is_failed')
             .and_return(False))
         (build_finished_response
+            .should_receive('is_cancelled')
+            .and_return(False))
+        (build_finished_response
             .should_receive('get_koji_build_id')
             .and_return(koji_build_id))
         (build_finished_response

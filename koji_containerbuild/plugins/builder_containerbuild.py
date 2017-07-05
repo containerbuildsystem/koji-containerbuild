@@ -537,7 +537,7 @@ class BuildContainerTask(BaseTaskHandler):
         self.logger.info("Response status: %r", response.is_succeeded())
 
         if response.is_cancelled():
-            this_task.cancel()
+            self.session.cancelTask(self.id)
             raise ContainerCancelled(
                 'Image build was cancelled by OSBS, maybe by automated rebuild.'
             )

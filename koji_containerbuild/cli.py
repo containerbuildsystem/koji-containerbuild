@@ -109,7 +109,7 @@ def handle_container_build(options, session, args):
         from koji_cli.lib import _running_in_bg, activate_session
     except ImportError:
         # Create wrappers for backwards compatibility.
-        _running_in_bg = clikoij._running_in_bg
+        _running_in_bg = clikoji._running_in_bg
 
         def activate_session(session, options):
             try:

@@ -7,7 +7,7 @@
 
 Name:           koji-containerbuild
 Version:        0.7.2
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
 
@@ -114,6 +114,17 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Mon Jul 31 2017 Robert Cerven <rcerven@redhat.com> 0.7.2-2
+- Fix typo, koij -> koji (vrutkovs@redhat.com)
+- Update API for koji 1.13 changes:  * activate_session now requires two
+  parameters  * _running_in_bg moved to koji_cli.lib (vrutkovs@redhat.com)
+- fix tests, call correct koji api to cancel task
+  (maxamillion@fedoraproject.org)
+- add speculative message about osbs cancellation for autorebuild
+  (maxamillion@fedoraproject.org)
+- Cancel a koji task if the osbs task is cancelled
+  (maxamillion@fedoraproject.org)
+
 * Tue Apr 04 2017 Robert Cerven <rcerven@redhat.com> 0.7.2-1
 - check if pkg can be tagged (lucarval@redhat.com)
 - orchestrator build can only successfully run if can_orchestrate option is

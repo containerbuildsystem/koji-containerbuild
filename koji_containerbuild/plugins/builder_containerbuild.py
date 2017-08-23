@@ -179,11 +179,12 @@ class FileWatcher(object):
 
 
 class LabelsWrapper(object):
-    def __init__(self, dockerfile_path, logger_name=None):
+    def __init__(self, dockerfile_path, logger_name=None, label_overwrites=None):
         self.dockerfile_path = dockerfile_path
         self._setup_logger(logger_name)
         self._parser = None
         self._label_data = {}
+        self._label_overwrites = label_overwrites or {}
 
     def _setup_logger(self, logger_name=None):
         if logger_name:
@@ -214,6 +215,10 @@ class LabelsWrapper(object):
                                         LABEL_DEFAULT_VALUES.get(label_id,
                                                                  None))
             for label_name in LABEL_NAME_MAP[label_id]:
+                if label_name in self._label_overwrites:
+                    self._label_data[label_id] = self._label_overwrites[label_name]
+                    break
+
                 if label_name in parsed_labels:
                     self._label_data[label_id] = parsed_labels[label_name]
                     break
@@ -393,8 +398,9 @@ class BuildContainerTask(BaseTaskHandler):
         elif pkg_cfg['blocked']:
             raise koji.BuildError("package (container)  %s is blocked for tag %s" % (name, target_info['dest_tag_name']))
 
-    def runBuilds(self, src, target_info, arches, scratch=False,
-                  yum_repourls=None, branch=None, push_url=None):
+    def runBuilds(self, src, target_info, arches, scratch=False, isolated=False,
+                  yum_repourls=None, branch=None, push_url=None,
+                  koji_parent_build=None, release=None):
 
         self.logger.debug("Spawning jobs for arches: %r" % (arches))
 
@@ -404,10 +410,13 @@ class BuildContainerTask(BaseTaskHandler):
             src=src,
             target_info=target_info,
             scratch=scratch,
+            isolated=isolated,
             yum_repourls=yum_repourls,
             branch=branch,
             push_url=push_url,
-            arches=arches
+            arches=arches,
+            koji_parent_build=koji_parent_build,
+            release=release,
         )
 
         results = [self.createContainer(**kwargs)]
@@ -416,7 +425,9 @@ class BuildContainerTask(BaseTaskHandler):
         return results
 
     def createContainer(self, src=None, target_info=None, arches=None,
-                        scratch=None, yum_repourls=[], branch=None, push_url=None):
+                        scratch=None, isolated=None, yum_repourls=[],
+                        branch=None, push_url=None, koji_parent_build=None,
+                        release=None):
         if not yum_repourls:
             yum_repourls = []
 
@@ -451,10 +462,19 @@ class BuildContainerTask(BaseTaskHandler):
             create_build_args['git_push_url'] = push_url
 
         try:
+            orchestrator_create_build_args = create_build_args.copy()
+            orchestrator_create_build_args['platforms'] = arches
+            if koji_parent_build:
+                orchestrator_create_build_args['koji_parent_build'] = koji_parent_build
+            if isolated:
+                orchestrator_create_build_args['isolated'] = isolated
+            if release:
+                orchestrator_create_build_args['release'] = release
+
             create_method = self.osbs().create_orchestrator_build
-            self.logger.debug("Starting %s with params: '%s, platforms:%s'",
-                              create_method, create_build_args, arches)
-            build_response = create_method(platforms=arches, **create_build_args)
+            self.logger.debug("Starting %s with params: '%s",
+                              create_method, orchestrator_create_build_args)
+            build_response = create_method(**orchestrator_create_build_args)
         except (AttributeError, OsbsValidationException):
             # Older osbs-client, or else orchestration not enabled
             create_build_args['architecture'] = arch = arches[0]
@@ -636,10 +656,12 @@ class BuildContainerTask(BaseTaskHandler):
 
         return {'epoch': epoch}
 
-    def checkLabels(self, src):
+    def checkLabels(self, src, label_overwrites=None):
+        label_overwrites = label_overwrites or {}
         dockerfile_path = self.fetchDockerfile(src)
         labels_wrapper = LabelsWrapper(dockerfile_path,
-                                       logger_name=self.logger.name)
+                                       logger_name=self.logger.name,
+                                       label_overwrites=label_overwrites)
         missing_labels = labels_wrapper.get_missing_label_ids()
         if missing_labels:
             formatted_labels_list = [labels_wrapper.format_label(label_id) for
@@ -678,7 +700,12 @@ class BuildContainerTask(BaseTaskHandler):
         build_tag = target_info['build_tag']
         archlist = self.getArchList(build_tag)
 
-        data, expected_nvr = self.checkLabels(src)
+        label_overwrites = {}
+        release_overwrite = opts.get('release')
+        if release_overwrite:
+            label_overwrites = {LABEL_DATA_MAP['RELEASE']: release_overwrite}
+        data, expected_nvr = self.checkLabels(src, label_overwrites=label_overwrites)
+
         admin_opts = self._get_admin_opts(opts)
         data.update(admin_opts)
 
@@ -711,9 +738,12 @@ class BuildContainerTask(BaseTaskHandler):
 
             results = self.runBuilds(src, target_info, archlist,
                                      scratch=opts.get('scratch', False),
+                                     isolated=opts.get('isolated', False),
                                      yum_repourls=opts.get('yum_repourls', None),
                                      branch=opts.get('git_branch', None),
                                      push_url=opts.get('push_url', None),
+                                     koji_parent_build=opts.get('koji_parent_build'),
+                                     release=release_overwrite,
                                      )
             all_repositories = []
             all_koji_builds = []

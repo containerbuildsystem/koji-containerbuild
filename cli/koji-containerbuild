@@ -48,6 +48,7 @@ containerbuild_cli.clikoji = clikoji
 
 if __name__ == "__main__":
     clikoji.handle_container_build = containerbuild_cli.handle_container_build
+    clikoji.handle_flatpak_build = containerbuild_cli.handle_flatpak_build
     options, command, args = clikoji.get_options()
     # work around a bug in older koji versions
     if options.topdir:

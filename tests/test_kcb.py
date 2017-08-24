@@ -13,6 +13,7 @@ import os
 import os.path
 import koji
 from koji_containerbuild.plugins import builder_containerbuild
+from osbs.exceptions import OsbsValidationException
 try:
     from osbs.exceptions import OsbsOrchestratorNotEnabled
 except ImportError:
@@ -97,7 +98,7 @@ class TestBuilder(object):
         return session
 
     def _mock_osbs(self, koji_build_id, src, koji_task_id,
-                   orchestrator=False, build_not_started=False,
+                   orchestrator=False, flatpak=False, build_not_started=False,
                    create_build_args=None):
 
         create_build_args = create_build_args or {}
@@ -300,6 +301,67 @@ class TestBuilder(object):
             'koji_builds': [koji_build_id]
         }
 
+    @pytest.mark.parametrize(('module', 'should_raise'), [
+        ('fedora-docker:26', None),
+        ('fedora-docker:26:20170629185228', None),
+        ('NOTASPEC', (OsbsValidationException, "Module specification should be")),
+        (None, (koji.BuildError, "Module must be specified")),
+    ])
+    def test_flatpak_build(self, tmpdir, module, should_raise):
+        task_id = 123
+        last_event_id = 456
+        koji_build_id = 999
+
+        session = self._mock_session(last_event_id, task_id, { 'blocked': False })
+        folders_info = self._mock_folders(str(tmpdir))
+        src = self._mock_git_source()
+        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+
+        task = builder_containerbuild.BuildContainerTask(id=task_id,
+                                                         method='buildContainer',
+                                                         params='params',
+                                                         session=session,
+                                                         options=options,
+                                                         workdir='workdir')
+
+        (flexmock(task)
+            .should_receive('fetchDockerfile')
+            .with_args(src['src'])
+            .and_return(folders_info['dockerfile_path']))
+        (flexmock(task)
+            .should_receive('_write_incremental_logs'))
+
+        additional_args = {
+            'flatpak': True,
+            'module': module
+        }
+
+        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
+                                     src=src,
+                                     koji_task_id=task_id,
+                                     orchestrator=True, flatpak=True,
+                                     create_build_args=additional_args.copy(),
+                                     build_not_started=should_raise is not None)
+        build_response = flexmock()
+
+        if should_raise is None:
+            task_response = task.handler(src['src'], 'target', opts={
+                'flatpak': True,
+                'module': module
+            })
+            assert task_response == {
+                'repositories': ['unique-repo', 'primary-repo'],
+                'koji_builds': [koji_build_id]
+            }
+        else:
+            with pytest.raises(should_raise[0]) as exc_info:
+                task_response = task.handler(src['src'], 'target', opts={
+                    'flatpak': True,
+                    'module': module
+                })
+            assert should_raise[1] in str(exc_info)
+
+
     @pytest.mark.parametrize('orchestrator', (True, False))
     @pytest.mark.parametrize(('tag', 'release', 'is_oversized'), (
         ('t', None, False),
@@ -426,28 +488,33 @@ class TestBuilder(object):
         (True, True, True),
     ))
     @pytest.mark.parametrize(('epoch', 'repo_url', 'git_branch',
-                              'channel_override', 'release'), (
-        (None, None, 'master', None, None),
-        ('Tuesday', None, 'master', None, None),
-        (None, ['http://test'], 'master', None, None),
-        (None, ['http://test1', 'http://test2'], 'master', None, None),
-        (None, None, 'stable', None, None),
-        (None, None, 'master', 'override', None),
-        (None, None, 'master', None, 'test_release'),
+                              'channel_override'), (
+        (None, None, 'master', None),
+        ('Tuesday', None, 'master', None),
+        (None, ['http://test'], 'master', None),
+        (None, ['http://test1', 'http://test2'], 'master', None),
+        (None, None, 'stable', None),
+        (None, None, 'master', 'override'),
+        (None, None, 'master', None),
         ('Tuesday', ['http://test1', 'http://test2'],
-         'stable', 'override', 'test_release'),
+         'stable', 'override'),
     ))
-    @pytest.mark.parametrize(('isolated', 'koji_parent_build', 'arches'), (
-        (None, None, None),
-        (True, None, None),
-        (True, 'parent_build', None),
-        (None, None, ['noarch']),
-        (None, None, ['noarch', 'x86_64', 'arm64']),
-        (True, 'parent_build', ['noarch', 'x86_64', 'arm64']),
+    @pytest.mark.parametrize(('isolated', 'koji_parent_build', 'arches',
+                              'release', 'flatpak', 'module'), (
+        (None, None, None, None, None, None),
+        (None, None, None, 'test-release', None, None),
+        (True, None, None, None, None, None),
+        (True, None, None, 'test-release', None, None),
+        (True, 'parent_build', None, None, None, None),
+        (None, None, ['noarch'], None, None, None),
+        (None, None, ['noarch', 'x86_64', 'arm64'], None, None, None),
+        (True, 'parent_build', ['noarch', 'x86_64', 'arm64'], None, None, None),
+        (False, None, None, None, True, 'some-module:f26'),
     ))
     def test_cli_args(self, tmpdir, scratch, wait, quiet,
                       epoch, repo_url, git_branch, channel_override, release,
-                      isolated, koji_parent_build, arches):
+                      isolated, koji_parent_build, arches,
+                      flatpak, module):
         options = flexmock(allowed_scms='pkgs.example.com:/*:no')
         options.quiet = False
         test_args = ['test', 'test']
@@ -508,7 +575,15 @@ class TestBuilder(object):
                 test_args.append(arch)
                 expected_opts['arch_override'].append(arch)
 
-        build_opts, parsed_args, opts, _ = parse_arguments(options, test_args)
+        if flatpak:
+            expected_opts['flatpak'] = flatpak
+
+        if module:
+            test_args.append('--module')
+            test_args.append(module)
+            expected_opts['module'] = module
+
+        build_opts, parsed_args, opts, _ = parse_arguments(options, test_args, flatpak=flatpak)
         expected_quiet = quiet or options.quiet
         expected_channel = channel_override or 'container'
 
@@ -520,7 +595,10 @@ class TestBuilder(object):
         assert build_opts.yum_repourls == repo_url
         assert build_opts.git_branch == git_branch
         assert build_opts.channel_override == expected_channel
-        assert build_opts.release == release
+        if flatpak:
+            assert build_opts.module == module
+        else:
+            assert build_opts.release == release
 
         assert parsed_args == expected_args
         assert opts == expected_opts

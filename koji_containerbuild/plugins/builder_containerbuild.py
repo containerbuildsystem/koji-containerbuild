@@ -39,7 +39,10 @@ from koji.tasks import ServerExit, BaseTaskHandler
 
 from osbs.api import OSBS
 from osbs.conf import Configuration
-from osbs.exceptions import OsbsValidationException
+try:
+    from osbs.exceptions import OsbsOrchestratorNotEnabled
+except ImportError:
+    from osbs.exceptions import OsbsValidationException as OsbsOrchestratorNotEnabled
 
 # We need kojid module which isn't proper python module and not even in
 # site-package path.
@@ -475,7 +478,7 @@ class BuildContainerTask(BaseTaskHandler):
             self.logger.debug("Starting %s with params: '%s",
                               create_method, orchestrator_create_build_args)
             build_response = create_method(**orchestrator_create_build_args)
-        except (AttributeError, OsbsValidationException):
+        except (AttributeError, OsbsOrchestratorNotEnabled):
             # Older osbs-client, or else orchestration not enabled
             create_build_args['architecture'] = arch = arches[0]
             create_method = self.osbs().create_build

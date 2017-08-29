@@ -71,6 +71,8 @@ def handle_container_build(options, session, args):
     parser = OptionParser(usage=usage)
     parser.add_option("--scratch", action="store_true",
                       help=_("Perform a scratch build"))
+    parser.add_option("--isolated", action="store_true",
+                      help=_("Perform an isolated build"))
     parser.add_option("--wait", action="store_true",
                       help=_("Wait on the build, even if running in the "
                              "background"))
@@ -96,12 +98,17 @@ def handle_container_build(options, session, args):
                       help=_("Use a non-standard channel [default: %default]"),
                       default=DEFAULT_CHANNEL)
     parser.add_option("--release",
-                      help=_("Set release label"))
+                      help=_("Set release value"))
+    parser.add_option("--koji-parent-build",
+                      help=_("Overwrite parent image with image from koji build"))
     (build_opts, args) = parser.parse_args(args)
     if len(args) != 2:
         parser.error(_("Exactly two arguments (a build target and a SCM URL "
                        "or archive file) are required"))
         assert False
+
+    if build_opts.isolated and build_opts.scratch:
+        parser.error(_("Build cannot be both isolated and scratch"))
 
     # Koji API has changed - activate_session requires two arguments
     # _running_in_bg has been moved to koji_cli.lib
@@ -116,7 +123,7 @@ def handle_container_build(options, session, args):
                 clikoji.activate_session(session)
             except TypeError:
                 clikoji.activate_session(session, options)
-    
+
     activate_session(session, options)
 
     target = args[0]
@@ -135,7 +142,8 @@ def handle_container_build(options, session, args):
             parser.error(_("Destination tag %s is locked" % dest_tag['name']))
     source = args[1]
     opts = {}
-    for key in ('scratch', 'epoch', 'yum_repourls', 'git_branch'):
+    for key in ('scratch', 'epoch', 'yum_repourls', 'git_branch', 'release', 'isolated',
+                'koji_parent_build'):
         val = getattr(build_opts, key)
         if val is not None:
             opts[key] = val

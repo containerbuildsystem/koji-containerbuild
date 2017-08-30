@@ -62,6 +62,16 @@ def print_task_result(task_id, result, weburl):
 
 
 def parse_arguments(options, args):
+    def arches_parser(option, opt_str, value, parser):
+        value = parser.values.ensure_value(option.dest, [])
+        for arg in parser.rargs:
+            # stop when we hit a new arguments
+            if arg[:2] == "--" and len(arg) > 2:
+                break
+            value.append(arg)
+        del parser.rargs[:len(value)]
+        setattr(parser.values, option.dest, value)
+
     "Build a container"
     usage = _("usage: %prog container-build [options] target <scm url or "
               "archive path>")
@@ -72,6 +82,11 @@ def parse_arguments(options, args):
                       help=_("Perform a scratch build"))
     parser.add_option("--isolated", action="store_true",
                       help=_("Perform an isolated build"))
+    parser.add_option("--arches", dest='arch_override',
+                      action="callback", callback=arches_parser,
+                      help=_("Requires --scratch. Limit a scratch build to "
+                             "the specified arches. May specify multiple "
+                             "arches at once."))
     parser.add_option("--wait", action="store_true",
                       help=_("Wait on the build, even if running in the "
                              "background"))
@@ -106,8 +121,8 @@ def parse_arguments(options, args):
                        "or archive file) are required"))
         assert False
     opts = {}
-    for key in ('scratch', 'epoch', 'yum_repourls', 'release',
-                'git_branch', 'isolated', 'koji_parent_build'):
+    for key in ('scratch', 'arch_override', 'epoch', 'yum_repourls',
+                'release', 'git_branch', 'isolated', 'koji_parent_build'):
         val = getattr(build_opts, key)
         if val is not None:
             opts[key] = val

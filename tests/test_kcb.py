@@ -438,15 +438,17 @@ class TestBuilder(object):
         ('Tuesday', ['http://test1', 'http://test2'],
          'http://test.git', 'override', 'test_release'),
     ))
-    @pytest.mark.parametrize(('isolated', 'koji_parent_build'), (
-        (None, None),
-        (True, None),
-        (None, 'parent_build'),
-        (True, 'parent_build'),
+    @pytest.mark.parametrize(('isolated', 'koji_parent_build', 'arches'), (
+        (None, None, None),
+        (True, None, None),
+        (True, 'parent_build', None),
+        (None, None, ['noarch']),
+        (None, None, ['noarch', 'x86_64', 'arm64']),
+        (True, 'parent_build', ['noarch', 'x86_64', 'arm64']),
     ))
     def test_cli_args(self, tmpdir, scratch, wait, quiet, noprogress,
                       epoch, repo_url, git_branch, channel_override, release,
-                      isolated, koji_parent_build):
+                      isolated, koji_parent_build, arches):
         options = flexmock(allowed_scms='pkgs.example.com:/*:no')
         options.quiet = False
         test_args = ['test', 'test']
@@ -503,10 +505,19 @@ class TestBuilder(object):
             test_args.append('--isolated')
             expected_opts['isolated'] = isolated
 
+        if arches:
+            test_args.append('--arches')
+            expected_opts['arch_override'] = []
+            for arch in arches:
+                test_args.append(arch)
+                expected_opts['arch_override'].append(arch)
+
         build_opts, parsed_args, opts, _ = parse_arguments(options, test_args)
         expected_quiet = quiet or options.quiet
         expected_channel = channel_override or 'container'
+
         assert build_opts.scratch == scratch
+        assert build_opts.arch_override == arches
         assert build_opts.wait == wait
         assert build_opts.quiet == expected_quiet
         assert build_opts.epoch == epoch

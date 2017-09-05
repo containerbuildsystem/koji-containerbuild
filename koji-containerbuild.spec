@@ -6,7 +6,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.3
+Version:        0.7.4
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -114,6 +114,10 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Sep 05 2017 Robert Cerven <rcerven@redhat.com> 0.7.4-1
+- Use OsbsOrchestratorNotEnabled exception (lucarval@redhat.com)
+- Add support for isolated builds (lucarval@redhat.com)
+
 * Mon Jul 31 2017 Robert Cerven <rcerven@redhat.com> 0.7.3-1
 - Fix typo, koij -> koji (vrutkovs@redhat.com)
 - Update API for koji 1.13 changes:  * activate_session now requires two

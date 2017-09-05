@@ -95,8 +95,6 @@ def parse_arguments(options, args):
     parser.add_option("--quiet", action="store_true",
                       help=_("Do not print the task information"),
                       default=options.quiet)
-    parser.add_option("--noprogress", action="store_true",
-                      help=_("Do not display progress of the upload"))
     parser.add_option("--background", action="store_true",
                       help=_("Run the build at a lower priority"))
     parser.add_option("--epoch",
@@ -117,10 +115,12 @@ def parse_arguments(options, args):
                       help=_("Overwrite parent image with image from koji build"))
     build_opts, args = parser.parse_args(args)
     if len(args) != 2:
-        parser.error(_("Exactly two arguments (a build target and a SCM URL "
-                       "or archive file) are required"))
+        parser.error(_("Exactly two arguments (a build target and a SCM URL) "
+                       "are required"))
         assert False
     opts = {}
+    if not build_opts.git_branch:
+        parser.error(_("git-branch must be specified"))
     for key in ('scratch', 'arch_override', 'epoch', 'yum_repourls',
                 'release', 'git_branch', 'isolated', 'koji_parent_build'):
         val = getattr(build_opts, key)
@@ -173,19 +173,10 @@ def handle_container_build(options, session, args):
     if build_opts.background:
         # relative to koji.PRIO_DEFAULT
         priority = 5
-    # try to check that source is an archive
     if '://' not in source:
-        # treat source as an archive and upload it
-        if not build_opts.quiet:
-            print "Uploading archive: %s" % source
-        serverdir = clikoji._unique_path('cli-build')
-        if _running_in_bg() or build_opts.noprogress or build_opts.quiet:
-            callback = None
-        else:
-            callback = clikoji._progress_callback
-        session.uploadWrapper(source, serverdir, callback=callback)
-        print
-        source = "%s/%s" % (serverdir, os.path.basename(source))
+        parser.error(_("scm URL does not look like an URL to a source repository"))
+    if '#' not in source:
+        parser.error(_("scm URL must be of the form <url_to_repository>#<revision>)"))
     task_id = session.buildContainer(source, target, opts, priority=priority,
                                      channel=build_opts.channel_override)
     if not build_opts.quiet:

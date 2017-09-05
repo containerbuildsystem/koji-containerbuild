@@ -415,28 +415,27 @@ class TestBuilder(object):
             task.handler(src['src'], 'target', opts=additional_args)
         assert 'already exists' in str(exc_info.value)
 
-    # split into multiple groups of five to minimize run time and complexity
-    @pytest.mark.parametrize(('scratch', 'wait', 'quiet',
-                              'noprogress'), (
-        (None, None, None, None),
-        (True, None, None, None),
-        (None, True, None, None),
-        (None, None, True, None),
-        (None, None, False, None),
-        (None, None, None, True),
-        (True, True, True, True),
+    # split into multiple groups to minimize run time and complexity
+    @pytest.mark.parametrize(('scratch', 'wait', 'quiet'), (
+        (None, None, None),
+        (True, None, None),
+        (None, True, None),
+        (None, None, True),
+        (None, None, False),
+        (None, None, None),
+        (True, True, True),
     ))
     @pytest.mark.parametrize(('epoch', 'repo_url', 'git_branch',
                               'channel_override', 'release'), (
-        (None, None, None, None, None),
-        ('Tuesday', None, None, None, None),
-        (None, ['http://test'], None, None, None),
-        (None, ['http://test1', 'http://test2'], None, None, None),
-        (None, None, 'http://test.git', None, None),
-        (None, None, None, 'override', None),
-        (None, None, None, None, 'test_release'),
+        (None, None, 'master', None, None),
+        ('Tuesday', None, 'master', None, None),
+        (None, ['http://test'], 'master', None, None),
+        (None, ['http://test1', 'http://test2'], 'master', None, None),
+        (None, None, 'stable', None, None),
+        (None, None, 'master', 'override', None),
+        (None, None, 'master', None, 'test_release'),
         ('Tuesday', ['http://test1', 'http://test2'],
-         'http://test.git', 'override', 'test_release'),
+         'stable', 'override', 'test_release'),
     ))
     @pytest.mark.parametrize(('isolated', 'koji_parent_build', 'arches'), (
         (None, None, None),
@@ -446,7 +445,7 @@ class TestBuilder(object):
         (None, None, ['noarch', 'x86_64', 'arm64']),
         (True, 'parent_build', ['noarch', 'x86_64', 'arm64']),
     ))
-    def test_cli_args(self, tmpdir, scratch, wait, quiet, noprogress,
+    def test_cli_args(self, tmpdir, scratch, wait, quiet,
                       epoch, repo_url, git_branch, channel_override, release,
                       isolated, koji_parent_build, arches):
         options = flexmock(allowed_scms='pkgs.example.com:/*:no')
@@ -466,9 +465,6 @@ class TestBuilder(object):
 
         if quiet:
             test_args.append('--quiet')
-
-        if noprogress:
-            test_args.append('--noprogress')
 
         if epoch:
             test_args.append('--epoch')
@@ -521,7 +517,6 @@ class TestBuilder(object):
         assert build_opts.wait == wait
         assert build_opts.quiet == expected_quiet
         assert build_opts.epoch == epoch
-        assert build_opts.noprogress == noprogress
         assert build_opts.yum_repourls == repo_url
         assert build_opts.git_branch == git_branch
         assert build_opts.channel_override == expected_channel

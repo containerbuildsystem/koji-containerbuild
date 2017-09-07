@@ -335,13 +335,13 @@ class BuildContainerTask(BaseTaskHandler):
         log_filename = os.path.join(logs_dir, log_basename)
 
         self.logger.info("Will write follow log: %s", log_basename)
-        outfile = open(log_filename, 'w')
+        outfile = open(log_filename, 'wb')
         try:
             for line in log:
-                outfile.write("%s\n" % line)
-            outfile.flush()
+                outfile.write(("%s\n" % line).encode('utf-8'))
+                outfile.flush()
         except Exception, error:
-            msg = "Exception (%s) while reading build logs: %s" % (type(error),
+            msg = "Exception (%s) while writing build logs: %s" % (type(error),
                                                                    error)
             raise ContainerError(msg)
         finally:
@@ -356,15 +356,15 @@ class BuildContainerTask(BaseTaskHandler):
             if platform not in platform_logs:
                 prefix = 'orchestrator' if platform is None else platform
                 log_filename = os.path.join(logs_dir, "%s.log" % prefix)
-                platform_logs[platform] = open(log_filename, 'w')
+                platform_logs[platform] = open(log_filename, 'wb')
             try:
                 platform_logs[platform].write((entry.line + '\n').encode('utf-8'))
+                platform_logs[platform].flush()
             except Exception, error:
-                msg = "Exception (%s) while reading build logs: %s" % (type(error),
+                msg = "Exception (%s) while writing build logs: %s" % (type(error),
                                                                        error)
                 raise ContainerError(msg)
-        for platform, logfile in platform_logs.items():
-            logfile.flush()
+        for logfile in platform_logs.values():
             logfile.close()
             self.logger.info("%s written", logfile.name)
 

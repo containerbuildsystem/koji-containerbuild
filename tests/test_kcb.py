@@ -13,7 +13,10 @@ import os
 import os.path
 import koji
 from koji_containerbuild.plugins import builder_containerbuild
-from osbs.exceptions import OsbsValidationException
+try:
+    from osbs.exceptions import OsbsOrchestratorNotEnabled
+except ImportError:
+    from osbs.exceptions import OsbsValidationException as OsbsOrchestratorNotEnabled
 
 
 USE_DEFAULT_PKG_INFO = object()
@@ -145,7 +148,7 @@ class TestBuilder(object):
                 .should_receive('create_orchestrator_build')
                 .with_args(koji_task_id=koji_task_id, **create_build_args)
                 .times(0 if build_not_started else 1)
-                .and_raise(OsbsValidationException))
+                .and_raise(OsbsOrchestratorNotEnabled))
 
             legacy_args = create_build_args.copy()
             legacy_args.pop('platforms', None)

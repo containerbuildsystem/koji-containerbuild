@@ -330,11 +330,16 @@ class BuildContainerTask(BaseTaskHandler):
         finally:
             watcher.clean()
 
-    def _write_combined_log(self, log, logs_dir):
+    def _write_combined_log(self, build_id, logs_dir):
         log_basename = 'openshift-incremental.log'
         log_filename = os.path.join(logs_dir, log_basename)
 
         self.logger.info("Will write follow log: %s", log_basename)
+        try:
+            log = self.osbs().get_build_logs(build_id, follow=True)
+        except Exception, error:
+            msg = "Exception while waiting for build logs: %s" % error
+            raise ContainerError(msg)
         outfile = open(log_filename, 'wb')
         try:
             for line in log:
@@ -348,8 +353,13 @@ class BuildContainerTask(BaseTaskHandler):
             outfile.close()
         self.logger.info("%s written", log_basename)
 
-    def _write_demultiplexed_logs(self, logs, logs_dir):
+    def _write_demultiplexed_logs(self, build_id, logs_dir):
         self.logger.info("Will write demuxed logs in: %s/", logs_dir)
+        try:
+            logs = self.osbs().get_orchestrator_build_logs(build_id, follow=True)
+        except Exception, error:
+            msg = "Exception while waiting for orchestrator build logs: %s" % error
+            raise ContainerError(msg)
         platform_logs = {}
         for entry in logs:
             platform = entry.platform
@@ -370,22 +380,10 @@ class BuildContainerTask(BaseTaskHandler):
 
     def _write_incremental_logs(self, build_id, logs_dir):
         build_logs = None
-        demux_logs = False
         if hasattr(self.osbs(), 'get_orchestrator_build_logs'):
-            demux_logs = True
-        try:
-            if demux_logs:
-                build_logs = self.osbs().get_orchestrator_build_logs(build_id, follow=True)
-            else:
-                build_logs = self.osbs().get_build_logs(build_id, follow=True)
-        except Exception, error:
-            msg = "Exception while waiting for build logs: %s" % error
-            raise ContainerError(msg)
-
-        if demux_logs:
-            self._write_demultiplexed_logs(build_logs, logs_dir)
+            self._write_demultiplexed_logs(build_id, logs_dir)
         else:
-            self._write_combined_log(build_logs, logs_dir)
+            self._write_combined_log(build_id, logs_dir)
 
         build_response = self.osbs().get_build(build_id)
         if (build_response.is_running() or build_response.is_pending()):

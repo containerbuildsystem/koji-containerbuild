@@ -7,6 +7,7 @@ of the BSD license. See the LICENSE file for details.
 
 from flexmock import flexmock
 from textwrap import dedent
+from collections import namedtuple
 import pytest
 import osbs
 import os
@@ -29,6 +30,10 @@ class KojidMock(object):
 
 
 builder_containerbuild.kojid = KojidMock()
+LogEntry = namedtuple('LogEntry', ['platform', 'line'])
+logs = [LogEntry(None, 'orchestrator'),
+        LogEntry('x86_64', 'Hurray for bacon: \u2017'),
+        LogEntry('x86_64', 'line 2')]
 
 
 class TestBuilder(object):
@@ -165,6 +170,17 @@ class TestBuilder(object):
         (osbs
             .should_receive('wait_for_build_to_get_scheduled')
             .with_args('os-build-id'))
+        (osbs.should_receive('cancel_build').never)
+        if orchestrator:
+            (osbs
+                .should_receive('get_orchestrator_build_logs')
+                .with_args(build_id='os-build-id', follow=True)
+                .and_return(logs))
+        else:
+            (osbs
+                .should_receive('get_build_logs')
+                .with_args(build_id='os-build-id', follow=True)
+                .and_return(logs))
         (osbs
             .should_receive('wait_for_build_to_finish')
             .with_args('os-build-id')
@@ -195,6 +211,9 @@ class TestBuilder(object):
         work_dir = os.path.join(tmpdir, 'work_dir')
         os.mkdir(work_dir)
 
+        log_dir = os.path.join(work_dir, 'osbslogs')
+        os.mkdir(log_dir)
+
         return {'dockerfile_path': dockerfile_path}
 
     def _mock_git_source(self):
@@ -224,7 +243,8 @@ class TestBuilder(object):
                                                          params='params',
                                                          session=session,
                                                          options=options,
-                                                         workdir='workdir')
+                                                         workdir='workdir',
+                                                         demux=orchestrator)
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
@@ -232,6 +252,12 @@ class TestBuilder(object):
             .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
+        if orchestrator:
+            (flexmock(task)
+                .should_receive('_write_demultiplexed_logs'))
+        else:
+            (flexmock(task)
+                .should_receive('_write_combined_log'))
 
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,
@@ -278,7 +304,8 @@ class TestBuilder(object):
                                                          params='params',
                                                          session=session,
                                                          options=options,
-                                                         workdir='workdir')
+                                                         workdir='workdir',
+                                                         demux=orchestrator)
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
@@ -286,6 +313,12 @@ class TestBuilder(object):
             .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
+        if orchestrator:
+            (flexmock(task)
+                .should_receive('_write_demultiplexed_logs'))
+        else:
+            (flexmock(task)
+                .should_receive('_write_combined_log'))
 
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,
@@ -324,7 +357,8 @@ class TestBuilder(object):
                                                          params='params',
                                                          session=session,
                                                          options=options,
-                                                         workdir='workdir')
+                                                         workdir='workdir',
+                                                         demux=orchestrator)
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
@@ -332,6 +366,12 @@ class TestBuilder(object):
             .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
+        if orchestrator:
+            (flexmock(task)
+                .should_receive('_write_demultiplexed_logs'))
+        else:
+            (flexmock(task)
+                .should_receive('_write_combined_log'))
 
         additional_args = {}
         if release:
@@ -392,7 +432,8 @@ class TestBuilder(object):
                                                          params='params',
                                                          session=session,
                                                          options=options,
-                                                         workdir='workdir')
+                                                         workdir='workdir',
+                                                         demux=orchestrator)
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
@@ -400,6 +441,12 @@ class TestBuilder(object):
             .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
+        if orchestrator:
+            (flexmock(task)
+                .should_receive('_write_demultiplexed_logs'))
+        else:
+            (flexmock(task)
+                .should_receive('_write_combined_log'))
 
         additional_args = {}
         if param_release:

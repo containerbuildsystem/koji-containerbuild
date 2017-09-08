@@ -281,10 +281,11 @@ class BuildContainerTask(BaseTaskHandler):
     # Same value as for regular 'build' method.
     _taskWeight = 2.0
 
-    def __init__(self, id, method, params, session, options, workdir=None):
+    def __init__(self, id, method, params, session, options, workdir=None, demux=True):
         BaseTaskHandler.__init__(self, id, method, params, session, options,
                                  workdir)
         self._osbs = None
+        self.demux = demux
 
         # Check that the kojid module was successfully imported
         assert kojid
@@ -380,7 +381,7 @@ class BuildContainerTask(BaseTaskHandler):
 
     def _write_incremental_logs(self, build_id, logs_dir):
         build_logs = None
-        if hasattr(self.osbs(), 'get_orchestrator_build_logs'):
+        if self.demux and hasattr(self.osbs(), 'get_orchestrator_build_logs'):
             self._write_demultiplexed_logs(build_id, logs_dir)
         else:
             self._write_combined_log(build_id, logs_dir)

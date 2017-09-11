@@ -17,6 +17,7 @@ try:
     from osbs.exceptions import OsbsOrchestratorNotEnabled
 except ImportError:
     from osbs.exceptions import OsbsValidationException as OsbsOrchestratorNotEnabled
+from koji_containerbuild.cli import parse_arguments
 
 
 USE_DEFAULT_PKG_INFO = object()
@@ -413,3 +414,118 @@ class TestBuilder(object):
         with pytest.raises(koji.BuildError) as exc_info:
             task.handler(src['src'], 'target', opts=additional_args)
         assert 'already exists' in str(exc_info.value)
+
+    # split into multiple groups of five to minimize run time and complexity
+    @pytest.mark.parametrize(('scratch', 'wait', 'quiet',
+                              'noprogress'), (
+        (None, None, None, None),
+        (True, None, None, None),
+        (None, True, None, None),
+        (None, None, True, None),
+        (None, None, False, None),
+        (None, None, None, True),
+        (True, True, True, True),
+    ))
+    @pytest.mark.parametrize(('epoch', 'repo_url', 'git_branch',
+                              'channel_override', 'release'), (
+        (None, None, None, None, None),
+        ('Tuesday', None, None, None, None),
+        (None, ['http://test'], None, None, None),
+        (None, ['http://test1', 'http://test2'], None, None, None),
+        (None, None, 'http://test.git', None, None),
+        (None, None, None, 'override', None),
+        (None, None, None, None, 'test_release'),
+        ('Tuesday', ['http://test1', 'http://test2'],
+         'http://test.git', 'override', 'test_release'),
+    ))
+    @pytest.mark.parametrize(('isolated', 'koji_parent_build', 'arches'), (
+        (None, None, None),
+        (True, None, None),
+        (True, 'parent_build', None),
+        (None, None, ['noarch']),
+        (None, None, ['noarch', 'x86_64', 'arm64']),
+        (True, 'parent_build', ['noarch', 'x86_64', 'arm64']),
+    ))
+    def test_cli_args(self, tmpdir, scratch, wait, quiet, noprogress,
+                      epoch, repo_url, git_branch, channel_override, release,
+                      isolated, koji_parent_build, arches):
+        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options.quiet = False
+        test_args = ['test', 'test']
+        expected_args = ['test', 'test']
+        expected_opts = {}
+
+        if scratch:
+            test_args.append('--scratch')
+            expected_opts['scratch'] = scratch
+
+        if wait:
+            test_args.append('--wait')
+        elif wait is False:
+            test_args.append('--nowait')
+
+        if quiet:
+            test_args.append('--quiet')
+
+        if noprogress:
+            test_args.append('--noprogress')
+
+        if epoch:
+            test_args.append('--epoch')
+            test_args.append(epoch)
+            expected_opts['epoch'] = epoch
+
+        if repo_url:
+            expected_opts['yum_repourls'] = []
+            for url in repo_url:
+                test_args.append('--repo-url')
+                test_args.append(url)
+                expected_opts['yum_repourls'].append(url)
+
+        if git_branch:
+            test_args.append('--git-branch')
+            test_args.append(git_branch)
+            expected_opts['git_branch'] = git_branch
+
+        if channel_override:
+            test_args.append('--channel-override')
+            test_args.append(channel_override)
+
+        if release:
+            test_args.append('--release')
+            test_args.append(release)
+            expected_opts['release'] = release
+
+        if koji_parent_build:
+            test_args.append('--koji-parent-build')
+            test_args.append(koji_parent_build)
+            expected_opts['koji_parent_build'] = koji_parent_build
+
+        if isolated:
+            test_args.append('--isolated')
+            expected_opts['isolated'] = isolated
+
+        if arches:
+            test_args.append('--arches')
+            expected_opts['arch_override'] = []
+            for arch in arches:
+                test_args.append(arch)
+                expected_opts['arch_override'].append(arch)
+
+        build_opts, parsed_args, opts, _ = parse_arguments(options, test_args)
+        expected_quiet = quiet or options.quiet
+        expected_channel = channel_override or 'container'
+
+        assert build_opts.scratch == scratch
+        assert build_opts.arch_override == arches
+        assert build_opts.wait == wait
+        assert build_opts.quiet == expected_quiet
+        assert build_opts.epoch == epoch
+        assert build_opts.noprogress == noprogress
+        assert build_opts.yum_repourls == repo_url
+        assert build_opts.git_branch == git_branch
+        assert build_opts.channel_override == expected_channel
+        assert build_opts.release == release
+
+        assert parsed_args == expected_args
+        assert opts == expected_opts

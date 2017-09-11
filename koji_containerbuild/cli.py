@@ -21,7 +21,6 @@
 #       Pavol Babincak <pbabinca@redhat.com>
 
 import os
-import json
 from koji import _
 from optparse import OptionParser
 
@@ -62,7 +61,17 @@ def print_task_result(task_id, result, weburl):
     print_result(result)
 
 
-def handle_container_build(options, session, args):
+def parse_arguments(options, args):
+    def arches_parser(option, opt_str, value, parser):
+        value = parser.values.ensure_value(option.dest, [])
+        for arg in parser.rargs:
+            # stop when we hit a new arguments
+            if arg[:2] == "--" and len(arg) > 2:
+                break
+            value.append(arg)
+        del parser.rargs[:len(value)]
+        setattr(parser.values, option.dest, value)
+
     "Build a container"
     usage = _("usage: %prog container-build [options] target <scm url or "
               "archive path>")
@@ -73,6 +82,11 @@ def handle_container_build(options, session, args):
                       help=_("Perform a scratch build"))
     parser.add_option("--isolated", action="store_true",
                       help=_("Perform an isolated build"))
+    parser.add_option("--arches", dest='arch_override',
+                      action="callback", callback=arches_parser,
+                      help=_("Requires --scratch. Limit a scratch build to "
+                             "the specified arches. May specify multiple "
+                             "arches at once."))
     parser.add_option("--wait", action="store_true",
                       help=_("Wait on the build, even if running in the "
                              "background"))
@@ -101,11 +115,24 @@ def handle_container_build(options, session, args):
                       help=_("Set release value"))
     parser.add_option("--koji-parent-build",
                       help=_("Overwrite parent image with image from koji build"))
-    (build_opts, args) = parser.parse_args(args)
+    build_opts, args = parser.parse_args(args)
     if len(args) != 2:
         parser.error(_("Exactly two arguments (a build target and a SCM URL "
                        "or archive file) are required"))
         assert False
+    opts = {}
+    for key in ('scratch', 'arch_override', 'epoch', 'yum_repourls',
+                'release', 'git_branch', 'isolated', 'koji_parent_build'):
+        val = getattr(build_opts, key)
+        if val is not None:
+            opts[key] = val
+    # create the parser in this function and return it to
+    # simplify the unit test cases
+    return build_opts, args, opts, parser
+
+
+def handle_container_build(options, session, args):
+    build_opts, args, opts, parser = parse_arguments(options, args)
 
     if build_opts.isolated and build_opts.scratch:
         parser.error(_("Build cannot be both isolated and scratch"))
@@ -141,12 +168,7 @@ def handle_container_build(options, session, args):
         if dest_tag['locked'] and not build_opts.scratch:
             parser.error(_("Destination tag %s is locked" % dest_tag['name']))
     source = args[1]
-    opts = {}
-    for key in ('scratch', 'epoch', 'yum_repourls', 'git_branch', 'release', 'isolated',
-                'koji_parent_build'):
-        val = getattr(build_opts, key)
-        if val is not None:
-            opts[key] = val
+
     priority = None
     if build_opts.background:
         # relative to koji.PRIO_DEFAULT

@@ -43,6 +43,11 @@ try:
     from osbs.exceptions import OsbsOrchestratorNotEnabled
 except ImportError:
     from osbs.exceptions import OsbsValidationException as OsbsOrchestratorNotEnabled
+try:
+    from osbs.utils import split_module_spec
+    osbs_flatpak_support = True
+except ImportError:
+    osbs_flatpak_support = False
 
 # We need kojid module which isn't proper python module and not even in
 # site-package path.
@@ -438,7 +443,8 @@ class BuildContainerTask(BaseTaskHandler):
 
     def runBuilds(self, src, target_info, arches, scratch=False, isolated=False,
                   yum_repourls=None, branch=None, push_url=None,
-                  koji_parent_build=None, release=None):
+                  koji_parent_build=None, release=None,
+                  flatpak=False, module=None):
 
         self.logger.debug("Spawning jobs for arches: %r" % (arches))
 
@@ -455,6 +461,8 @@ class BuildContainerTask(BaseTaskHandler):
             arches=arches,
             koji_parent_build=koji_parent_build,
             release=release,
+            flatpak=flatpak,
+            module=module
         )
 
         results = [self.createContainer(**kwargs)]
@@ -465,7 +473,7 @@ class BuildContainerTask(BaseTaskHandler):
     def createContainer(self, src=None, target_info=None, arches=None,
                         scratch=None, isolated=None, yum_repourls=[],
                         branch=None, push_url=None, koji_parent_build=None,
-                        release=None):
+                        release=None, flatpak=False, module=None):
         if not yum_repourls:
             yum_repourls = []
 
@@ -498,6 +506,10 @@ class BuildContainerTask(BaseTaskHandler):
             create_build_args['git_branch'] = branch
         if push_url:
             create_build_args['git_push_url'] = push_url
+        if flatpak:
+            create_build_args['flatpak'] = True
+        if module:
+            create_build_args['module'] = module
 
         try:
             orchestrator_create_build_args = create_build_args.copy()
@@ -734,12 +746,30 @@ class BuildContainerTask(BaseTaskHandler):
         build_tag = target_info['build_tag']
         archlist = self.getArchList(build_tag)
 
-        label_overwrites = {}
-        release_overwrite = opts.get('release')
-        if release_overwrite:
-            label_overwrites = {LABEL_DATA_MAP['RELEASE']: release_overwrite}
-        data, expected_nvr = self.checkLabels(src, label_overwrites=label_overwrites)
+        flatpak = opts.get('flatpak', False)
+        if flatpak:
+            if not osbs_flatpak_support:
+                raise koji.BuildError("osbs-client on koji builder doesn't have Flatpak support")
+            module = opts.get('module', None)
+            if not module:
+                raise koji.BuildError("Module must be specified for a Flatpak build")
 
+            module_name, module_stream, module_version = split_module_spec(module)
+
+            data = {
+                'name': module_name,
+                'version': module_stream,
+            }
+
+            if module_version is not None:
+                data['release'] = module_version
+            release_overwrite = None
+        else:
+            label_overwrites = {}
+            release_overwrite = opts.get('release')
+            if release_overwrite:
+                label_overwrites = {LABEL_DATA_MAP['RELEASE']: release_overwrite}
+            data, expected_nvr = self.checkLabels(src, label_overwrites=label_overwrites)
         admin_opts = self._get_admin_opts(opts)
         data.update(admin_opts)
 
@@ -748,11 +778,15 @@ class BuildContainerTask(BaseTaskHandler):
             self.check_whitelist(data[LABEL_DATA_MAP['COMPONENT']], target_info)
 
         try:
-            auto_release = (data[LABEL_DATA_MAP['RELEASE']] ==
-                            LABEL_DEFAULT_VALUES['RELEASE'])
-            if auto_release:
-                # Do not expose default release value
-                del data[LABEL_DATA_MAP['RELEASE']]
+            # Flatpak builds append .<N> to the release generated from module version
+            if flatpak:
+                auto_release = True
+            else:
+                auto_release = (data[LABEL_DATA_MAP['RELEASE']] ==
+                                LABEL_DEFAULT_VALUES['RELEASE'])
+                if auto_release:
+                    # Do not expose default release value
+                    del data[LABEL_DATA_MAP['RELEASE']]
 
             self.extra_information = {"src": src, "data": data,
                                       "target": target}
@@ -778,6 +812,8 @@ class BuildContainerTask(BaseTaskHandler):
                                      push_url=opts.get('push_url', None),
                                      koji_parent_build=opts.get('koji_parent_build'),
                                      release=release_overwrite,
+                                     flatpak=flatpak,
+                                     module=opts.get('module', None),
                                      )
             all_repositories = []
             all_koji_builds = []

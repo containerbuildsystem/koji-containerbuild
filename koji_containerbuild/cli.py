@@ -61,7 +61,7 @@ def print_task_result(task_id, result, weburl):
     print_result(result)
 
 
-def parse_arguments(options, args):
+def parse_arguments(options, args, flatpak):
     def arches_parser(option, opt_str, value, parser):
         value = parser.values.ensure_value(option.dest, [])
         for arg in parser.rargs:
@@ -73,15 +73,22 @@ def parse_arguments(options, args):
         setattr(parser.values, option.dest, value)
 
     "Build a container"
-    usage = _("usage: %prog container-build [options] target <scm url or "
-              "archive path>")
+    if flatpak:
+        usage = _("usage: %prog flatpak-build [options] target <scm url>")
+    else:
+        usage = _("usage: %prog container-build [options] target <scm url or "
+                  "archive path>")
     usage += _("\n(Specify the --help global option for a list of other help "
                "options)")
     parser = OptionParser(usage=usage)
+    if flatpak:
+        parser.add_option("-m", "--module", metavar="NAME:STREAM[:VERSION]",
+                          help="module to build against")
     parser.add_option("--scratch", action="store_true",
                       help=_("Perform a scratch build"))
-    parser.add_option("--isolated", action="store_true",
-                      help=_("Perform an isolated build"))
+    if not flatpak:
+        parser.add_option("--isolated", action="store_true",
+                          help=_("Perform an isolated build"))
     parser.add_option("--arches", dest='arch_override',
                       action="callback", callback=arches_parser,
                       help=_("Requires --scratch. Limit a scratch build to "
@@ -95,8 +102,6 @@ def parse_arguments(options, args):
     parser.add_option("--quiet", action="store_true",
                       help=_("Do not print the task information"),
                       default=options.quiet)
-    parser.add_option("--noprogress", action="store_true",
-                      help=_("Do not display progress of the upload"))
     parser.add_option("--background", action="store_true",
                       help=_("Run the build at a lower priority"))
     parser.add_option("--epoch",
@@ -111,18 +116,31 @@ def parse_arguments(options, args):
     parser.add_option("--channel-override",
                       help=_("Use a non-standard channel [default: %default]"),
                       default=DEFAULT_CHANNEL)
-    parser.add_option("--release",
-                      help=_("Set release value"))
-    parser.add_option("--koji-parent-build",
-                      help=_("Overwrite parent image with image from koji build"))
+    if not flatpak:
+        parser.add_option("--release",
+                          help=_("Set release value"))
+        parser.add_option("--koji-parent-build",
+                          help=_("Overwrite parent image with image from koji build"))
     build_opts, args = parser.parse_args(args)
     if len(args) != 2:
-        parser.error(_("Exactly two arguments (a build target and a SCM URL "
-                       "or archive file) are required"))
+        parser.error(_("Exactly two arguments (a build target and a SCM URL) "
+                       "are required"))
         assert False
     opts = {}
-    for key in ('scratch', 'arch_override', 'epoch', 'yum_repourls',
-                'release', 'git_branch', 'isolated', 'koji_parent_build'):
+    if not build_opts.git_branch:
+        parser.error(_("git-branch must be specified"))
+
+    keys = ('scratch', 'arch_override', 'epoch', 'yum_repourls',
+            'git_branch')
+
+    if flatpak:
+        if not build_opts.module:
+            parser.error(_("module must be specified"))
+        opts['flatpak'] = True
+        keys += ('module',)
+    else:
+        keys += ('release', 'isolated', 'koji_parent_build')
+    for key in keys:
         val = getattr(build_opts, key)
         if val is not None:
             opts[key] = val
@@ -131,8 +149,8 @@ def parse_arguments(options, args):
     return build_opts, args, opts, parser
 
 
-def handle_container_build(options, session, args):
-    build_opts, args, opts, parser = parse_arguments(options, args)
+def handle_build(options, session, args, flatpak):
+    build_opts, args, opts, parser = parse_arguments(options, args, flatpak)
 
     if build_opts.isolated and build_opts.scratch:
         parser.error(_("Build cannot be both isolated and scratch"))
@@ -173,19 +191,10 @@ def handle_container_build(options, session, args):
     if build_opts.background:
         # relative to koji.PRIO_DEFAULT
         priority = 5
-    # try to check that source is an archive
     if '://' not in source:
-        # treat source as an archive and upload it
-        if not build_opts.quiet:
-            print "Uploading archive: %s" % source
-        serverdir = clikoji._unique_path('cli-build')
-        if _running_in_bg() or build_opts.noprogress or build_opts.quiet:
-            callback = None
-        else:
-            callback = clikoji._progress_callback
-        session.uploadWrapper(source, serverdir, callback=callback)
-        print
-        source = "%s/%s" % (serverdir, os.path.basename(source))
+        parser.error(_("scm URL does not look like an URL to a source repository"))
+    if '#' not in source:
+        parser.error(_("scm URL must be of the form <url_to_repository>#<revision>)"))
     task_id = session.buildContainer(source, target, opts, priority=priority,
                                      channel=build_opts.channel_override)
     if not build_opts.quiet:
@@ -203,3 +212,9 @@ def handle_container_build(options, session, args):
         return rv
     else:
         return
+
+def handle_container_build(options, session, args):
+    return handle_build(options, session, args, flatpak=False)
+
+def handle_flatpak_build(options, session, args):
+    return handle_build(options, session, args, flatpak=True)

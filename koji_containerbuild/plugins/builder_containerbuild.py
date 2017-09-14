@@ -281,10 +281,11 @@ class BuildContainerTask(BaseTaskHandler):
     # Same value as for regular 'build' method.
     _taskWeight = 2.0
 
-    def __init__(self, id, method, params, session, options, workdir=None):
+    def __init__(self, id, method, params, session, options, workdir=None, demux=True):
         BaseTaskHandler.__init__(self, id, method, params, session, options,
                                  workdir)
         self._osbs = None
+        self.demux = demux
 
         # Check that the kojid module was successfully imported
         assert kojid
@@ -330,27 +331,61 @@ class BuildContainerTask(BaseTaskHandler):
         finally:
             watcher.clean()
 
-    def _write_incremental_logs(self, build_id, log_filename):
-        log_basename = os.path.basename(log_filename)
+    def _write_combined_log(self, build_id, logs_dir):
+        log_basename = 'openshift-incremental.log'
+        log_filename = os.path.join(logs_dir, log_basename)
+
         self.logger.info("Will write follow log: %s", log_basename)
         try:
-            build_logs = self.osbs().get_build_logs(build_id,
-                                                    follow=True)
+            log = self.osbs().get_build_logs(build_id, follow=True)
         except Exception, error:
             msg = "Exception while waiting for build logs: %s" % error
             raise ContainerError(msg)
-        outfile = open(log_filename, 'w')
+        outfile = open(log_filename, 'wb')
         try:
-            for line in build_logs:
-                outfile.write("%s\n" % line)
+            for line in log:
+                outfile.write(("%s\n" % line).encode('utf-8'))
                 outfile.flush()
         except Exception, error:
-            msg = "Exception (%s) while reading build logs: %s" % (type(error),
+            msg = "Exception (%s) while writing build logs: %s" % (type(error),
                                                                    error)
             raise ContainerError(msg)
         finally:
             outfile.close()
         self.logger.info("%s written", log_basename)
+
+    def _write_demultiplexed_logs(self, build_id, logs_dir):
+        self.logger.info("Will write demuxed logs in: %s/", logs_dir)
+        try:
+            logs = self.osbs().get_orchestrator_build_logs(build_id, follow=True)
+        except Exception, error:
+            msg = "Exception while waiting for orchestrator build logs: %s" % error
+            raise ContainerError(msg)
+        platform_logs = {}
+        for entry in logs:
+            platform = entry.platform
+            if platform not in platform_logs:
+                prefix = 'orchestrator' if platform is None else platform
+                log_filename = os.path.join(logs_dir, "%s.log" % prefix)
+                platform_logs[platform] = open(log_filename, 'wb')
+            try:
+                platform_logs[platform].write((entry.line + '\n').encode('utf-8'))
+                platform_logs[platform].flush()
+            except Exception, error:
+                msg = "Exception (%s) while writing build logs: %s" % (type(error),
+                                                                       error)
+                raise ContainerError(msg)
+        for logfile in platform_logs.values():
+            logfile.close()
+            self.logger.info("%s written", logfile.name)
+
+    def _write_incremental_logs(self, build_id, logs_dir):
+        build_logs = None
+        if self.demux and hasattr(self.osbs(), 'get_orchestrator_build_logs'):
+            self._write_demultiplexed_logs(build_id, logs_dir)
+        else:
+            self._write_combined_log(build_id, logs_dir)
+
         build_response = self.osbs().get_build(build_id)
         if (build_response.is_running() or build_response.is_pending()):
             raise ContainerError("Build log finished but build still has not "
@@ -515,9 +550,6 @@ class BuildContainerTask(BaseTaskHandler):
             except koji.ActionNotAllowed:
                 pass
         else:
-            full_output_name = os.path.join(osbs_logs_dir,
-                                            'openshift-incremental.log')
-
             # Make sure curl is initialized again otherwise connections via SSL
             # fails with NSS error -8023 and curl_multi.info_read()
             # returns error code 35 (SSL CONNECT failed).
@@ -536,8 +568,7 @@ class BuildContainerTask(BaseTaskHandler):
             max_retries = 30
             while retry < max_retries:
                 try:
-                    self._write_incremental_logs(build_id,
-                                                 full_output_name)
+                    self._write_incremental_logs(build_id, osbs_logs_dir)
                 except Exception, error:
                     self.logger.info("Error while saving incremental logs "
                                      "(retry #%d): %s", retry, error)

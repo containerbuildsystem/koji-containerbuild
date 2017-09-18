@@ -152,6 +152,9 @@ def parse_arguments(options, args, flatpak):
         opts['flatpak'] = True
         keys += ('module',)
     else:
+        if build_opts.isolated and build_opts.scratch:
+            parser.error(_("Build cannot be both isolated and scratch"))
+
         keys += ('release', 'isolated', 'koji_parent_build')
 
     if build_opts.arch_override:
@@ -168,9 +171,6 @@ def parse_arguments(options, args, flatpak):
 
 def handle_build(options, session, args, flatpak):
     build_opts, args, opts, parser = parse_arguments(options, args, flatpak)
-
-    if build_opts.isolated and build_opts.scratch:
-        parser.error(_("Build cannot be both isolated and scratch"))
 
     activate_session(session, options)
 

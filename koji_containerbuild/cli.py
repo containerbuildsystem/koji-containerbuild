@@ -24,6 +24,28 @@ import os
 from koji import _
 from optparse import OptionParser
 
+# Koji API has changed - activate_session requires two arguments
+# _running_in_bg has been moved to koji_cli.lib
+# parse_arches has been added to koji_cli.lib
+try:
+    from koji_cli.lib import _running_in_bg, activate_session, parse_arches
+except ImportError:
+    # Create wrappers for backwards compatibility.
+    def _running_in_bg(*args, **kwargs):
+        return clikoji._running_in_bg(*args, **kwargs)
+
+    def parse_arches(arches):
+        # Prior to being moved to koji_cli.lib, this used to be hard
+        # coded like this:
+        return ' '.join(arches.replace(',', ' ').split())
+
+    def activate_session(session, options):
+        try:
+            clikoji.activate_session(session)
+        except TypeError:
+            clikoji.activate_session(session, options)
+
+
 # Caller needs to set this to module which corresponds to /bin/koji
 # This hack is here because koji CLI isn't a module but we need to use some of
 # its functions. And this CLI don't necessary be named koji.
@@ -62,16 +84,6 @@ def print_task_result(task_id, result, weburl):
 
 
 def parse_arguments(options, args, flatpak):
-    def arches_parser(option, opt_str, value, parser):
-        value = parser.values.ensure_value(option.dest, [])
-        for arg in parser.rargs:
-            # stop when we hit a new arguments
-            if arg[:2] == "--" and len(arg) > 2:
-                break
-            value.append(arg)
-        del parser.rargs[:len(value)]
-        setattr(parser.values, option.dest, value)
-
     "Build a container"
     if flatpak:
         usage = _("usage: %prog flatpak-build [options] target <scm url>")
@@ -89,11 +101,9 @@ def parse_arguments(options, args, flatpak):
     if not flatpak:
         parser.add_option("--isolated", action="store_true",
                           help=_("Perform an isolated build"))
-    parser.add_option("--arches", dest='arch_override',
-                      action="callback", callback=arches_parser,
+    parser.add_option("--arch-override",
                       help=_("Requires --scratch. Limit a scratch build to "
-                             "the specified arches. May specify multiple "
-                             "arches at once."))
+                             "the specified arches. Comma or space separated."))
     parser.add_option("--wait", action="store_true",
                       help=_("Wait on the build, even if running in the "
                              "background"))
@@ -126,12 +136,15 @@ def parse_arguments(options, args, flatpak):
         parser.error(_("Exactly two arguments (a build target and a SCM URL) "
                        "are required"))
         assert False
+
+    if build_opts.arch_override and not build_opts.scratch:
+        parser.error(_("--arch-override is only allowed for --scratch builds"))
+
     opts = {}
     if not build_opts.git_branch:
         parser.error(_("git-branch must be specified"))
 
-    keys = ('scratch', 'arch_override', 'epoch', 'yum_repourls',
-            'git_branch')
+    keys = ('scratch', 'epoch', 'yum_repourls', 'git_branch')
 
     if flatpak:
         if not build_opts.module:
@@ -140,6 +153,10 @@ def parse_arguments(options, args, flatpak):
         keys += ('module',)
     else:
         keys += ('release', 'isolated', 'koji_parent_build')
+
+    if build_opts.arch_override:
+        opts['arch_override'] = parse_arches(build_opts.arch_override)
+
     for key in keys:
         val = getattr(build_opts, key)
         if val is not None:
@@ -154,20 +171,6 @@ def handle_build(options, session, args, flatpak):
 
     if build_opts.isolated and build_opts.scratch:
         parser.error(_("Build cannot be both isolated and scratch"))
-
-    # Koji API has changed - activate_session requires two arguments
-    # _running_in_bg has been moved to koji_cli.lib
-    try:
-        from koji_cli.lib import _running_in_bg, activate_session
-    except ImportError:
-        # Create wrappers for backwards compatibility.
-        _running_in_bg = clikoji._running_in_bg
-
-        def activate_session(session, options):
-            try:
-                clikoji.activate_session(session)
-            except TypeError:
-                clikoji.activate_session(session, options)
 
     activate_session(session, options)
 

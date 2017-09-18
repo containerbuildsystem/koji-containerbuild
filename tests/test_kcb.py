@@ -525,14 +525,17 @@ class TestBuilder(object):
         assert 'already exists' in str(exc_info.value)
 
     # split into multiple groups to minimize run time and complexity
-    @pytest.mark.parametrize(('scratch', 'wait', 'quiet'), (
-        (None, None, None),
-        (True, None, None),
-        (None, True, None),
-        (None, None, True),
-        (None, None, False),
-        (None, None, None),
-        (True, True, True),
+    @pytest.mark.parametrize(('scratch', 'arch_override', 'wait', 'quiet'), (
+        (None, None, None, None),
+        (True, None, None, None),
+        (True, 'noarch,x86_64,arm64', None, None),
+        (True, 'noarch x86_64 arm64', None, None),
+        (True, 'x86_64', None, None),
+        (None, None, True, None),
+        (None, None, None, True),
+        (None, None, None, False),
+        (None, None, None, None),
+        (True, None, True, True),
     ))
     @pytest.mark.parametrize(('epoch', 'repo_url', 'git_branch',
                               'channel_override'), (
@@ -546,21 +549,22 @@ class TestBuilder(object):
         ('Tuesday', ['http://test1', 'http://test2'],
          'stable', 'override'),
     ))
-    @pytest.mark.parametrize(('isolated', 'koji_parent_build', 'arches',
+    @pytest.mark.parametrize(('isolated', 'koji_parent_build',
                               'release', 'flatpak', 'module'), (
-        (None, None, None, None, None, None),
-        (None, None, None, 'test-release', None, None),
-        (True, None, None, None, None, None),
-        (True, None, None, 'test-release', None, None),
-        (True, 'parent_build', None, None, None, None),
-        (None, None, ['noarch'], None, None, None),
-        (None, None, ['noarch', 'x86_64', 'arm64'], None, None, None),
-        (True, 'parent_build', ['noarch', 'x86_64', 'arm64'], None, None, None),
-        (False, None, None, None, True, 'some-module:f26'),
+        (None, None, None, None, None),
+        (None, None, 'test-release', None, None),
+        (True, None, None, None, None),
+        (True, None, 'test-release', None, None),
+        (True, 'parent_build', None, None, None),
+        (None, None, None, None, None),
+        (None, None, None, None, None),
+        (None, None, None, None, None),
+        (True, 'parent_build', None, None, None),
+        (False, None, None, True, 'some-module:f26'),
     ))
     def test_cli_args(self, tmpdir, scratch, wait, quiet,
                       epoch, repo_url, git_branch, channel_override, release,
-                      isolated, koji_parent_build, arches,
+                      isolated, koji_parent_build, arch_override,
                       flatpak, module):
         options = flexmock(allowed_scms='pkgs.example.com:/*:no')
         options.quiet = False
@@ -615,12 +619,10 @@ class TestBuilder(object):
             test_args.append('--isolated')
             expected_opts['isolated'] = isolated
 
-        if arches:
-            test_args.append('--arches')
-            expected_opts['arch_override'] = []
-            for arch in arches:
-                test_args.append(arch)
-                expected_opts['arch_override'].append(arch)
+        if arch_override:
+            test_args.append('--arch-override')
+            test_args.append(arch_override)
+            expected_opts['arch_override'] = arch_override.replace(',', ' ')
 
         if flatpak:
             expected_opts['flatpak'] = flatpak
@@ -635,7 +637,7 @@ class TestBuilder(object):
         expected_channel = channel_override or 'container'
 
         assert build_opts.scratch == scratch
-        assert build_opts.arch_override == arches
+        assert build_opts.arch_override == arch_override
         assert build_opts.wait == wait
         assert build_opts.quiet == expected_quiet
         assert build_opts.epoch == epoch
@@ -646,6 +648,43 @@ class TestBuilder(object):
             assert build_opts.module == module
         else:
             assert build_opts.release == release
+
+        assert parsed_args == expected_args
+        assert opts == expected_opts
+
+    @pytest.mark.parametrize(('scratch', 'arch_override', 'valid'), (
+        (True, 'x86_64', True),
+        (True, 'x86_64,ppc64le', True),
+        (True, 'x86_64 ppc64le', True),
+        (False, 'x86_64', False),
+        (False, 'x86_64,ppc64le', False),
+        (False, 'x86_64 ppc64le', False),
+    ))
+    def test_arch_override_restriction(self, tmpdir, scratch, arch_override, valid):
+        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options.quiet = False
+        test_args = ['test', 'test', '--git-branch', 'the-branch']
+        expected_args = ['test', 'test']
+        expected_opts = {'git_branch': 'the-branch'}
+
+        if scratch:
+            test_args.append('--scratch')
+            expected_opts['scratch'] = scratch
+
+        if arch_override:
+            test_args.append('--arch-override')
+            test_args.append(arch_override)
+            expected_opts['arch_override'] = arch_override.replace(',', ' ')
+
+        if not valid:
+            with pytest.raises(SystemExit):
+                parse_arguments(options, test_args, flatpak=False)
+            return
+
+        build_opts, parsed_args, opts, _ = parse_arguments(options, test_args, flatpak=False)
+
+        assert build_opts.scratch == scratch
+        assert build_opts.arch_override == arch_override
 
         assert parsed_args == expected_args
         assert opts == expected_opts

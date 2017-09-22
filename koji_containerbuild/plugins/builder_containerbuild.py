@@ -37,6 +37,7 @@ import koji
 from koji.daemon import SCM, incremental_upload
 from koji.tasks import ServerExit, BaseTaskHandler
 
+import osbs
 from osbs.api import OSBS
 from osbs.conf import Configuration
 try:
@@ -283,6 +284,8 @@ class BuildContainerTask(BaseTaskHandler):
         self._osbs = None
         self.demux = demux
 
+        self._log_handler_added = False
+
     def osbs(self):
         """Handler of OSBS object"""
         if not self._osbs:
@@ -293,7 +296,25 @@ class BuildContainerTask(BaseTaskHandler):
                 build_conf = Configuration(conf_section='scratch')
             self._osbs = OSBS(os_conf, build_conf)
             assert self._osbs
+            self.setup_osbs_logging()
+
         return self._osbs
+
+    def setup_osbs_logging(self):
+        # Setting handler more than once will cause duplicated log lines.
+        # Log handler will persist in child process.
+        if not self._log_handler_added:
+            osbs_logger = logging.getLogger(osbs.__name__)
+            osbs_logger.setLevel(logging.INFO)
+            log_file = os.path.join(self.resultdir(), 'osbs-client.log')
+            handler = logging.FileHandler(filename=log_file)
+            # process (PID) is useful because a buildContainer task forks main process
+            formatter = logging.Formatter(
+                '%(asctime)s - %(process)d - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            osbs_logger.addHandler(handler)
+
+            self._log_handler_added = True
 
     def getUploadPath(self):
         """Get the path that should be used when uploading files to
@@ -301,7 +322,10 @@ class BuildContainerTask(BaseTaskHandler):
         return koji.pathinfo.taskrelpath(self.id)
 
     def resultdir(self):
-        return os.path.join(self.workdir, 'osbslogs')
+        path = os.path.join(self.workdir, 'osbslogs')
+        if not os.path.exists(path):
+            os.makedirs(path)
+        return path
 
     def _incremental_upload_logs(self, child_pid):
         resultdir = self.resultdir()

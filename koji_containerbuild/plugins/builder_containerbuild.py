@@ -34,7 +34,7 @@ import pycurl
 import signal
 
 import koji
-from koji.daemon import SCM
+from koji.daemon import SCM, incremental_upload
 from koji.tasks import ServerExit, BaseTaskHandler
 
 from osbs.api import OSBS
@@ -48,15 +48,6 @@ try:
     osbs_flatpak_support = True
 except ImportError:
     osbs_flatpak_support = False
-
-# We need kojid module which isn't proper python module and not even in
-# site-package path.
-kojid_exe_path = '/usr/sbin/kojid'
-try:
-    with file(kojid_exe_path, 'U') as fo:
-        kojid = imp.load_module('kojid', fo, fo.name, ('.py', 'U', 1))
-except IOError:
-    kojid = None
 
 
 # List of LABEL identifiers used within Koji. Values doesn't need to correspond
@@ -292,9 +283,6 @@ class BuildContainerTask(BaseTaskHandler):
         self._osbs = None
         self.demux = demux
 
-        # Check that the kojid module was successfully imported
-        assert kojid
-
     def osbs(self):
         """Handler of OSBS object"""
         if not self._osbs:
@@ -331,8 +319,7 @@ class BuildContainerTask(BaseTaskHandler):
                     if result is False:
                         return
                     (fd, fname) = result
-                    kojid.incremental_upload(self.session, fname, fd,
-                                             uploadpath, logger=self.logger)
+                    incremental_upload(self.session, fname, fd, uploadpath, logger=self.logger)
         finally:
             watcher.clean()
 

@@ -24,13 +24,14 @@ from koji_containerbuild.cli import parse_arguments
 
 USE_DEFAULT_PKG_INFO = object()
 
-class KojidMock(object):
-    """Mock the kojid module"""
-    def incremental_upload(self, session, fname, fd, uploadpath, logger=None):
-        pass
+
+def mock_incremental_upload(session, fname, fd, uploadpath, logger=None):
+    pass
 
 
-builder_containerbuild.kojid = KojidMock()
+builder_containerbuild.incremental_upload = mock_incremental_upload
+
+
 LogEntry = namedtuple('LogEntry', ['platform', 'line'])
 logs = [LogEntry(None, 'orchestrator'),
         LogEntry('x86_64', 'Hurray for bacon: \u2017'),

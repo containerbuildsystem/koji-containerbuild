@@ -1,8 +1,7 @@
 # ## Linux
 .cache
 .coverage
-build/
-!.gitignore
+/build/
 /dist/
 
 # ## Python

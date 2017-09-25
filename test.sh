@@ -25,7 +25,7 @@ else
   PIP_PKG="python-pip"
   PIP="pip"
   PKG="yum"
-  PKG_EXTRA="yum-utils epel-release git-core koji python-dockerfile-parse"
+  PKG_EXTRA="yum-utils git-core koji python-dockerfile-parse"
   BUILDDEP="yum-builddep"
   PYTHON="python"
   PYTEST="py.test"
@@ -36,6 +36,7 @@ if [[ $(docker ps -q -f name=$CONTAINER_NAME | wc -l) -eq 0 ]]; then
 fi
 
 # Install dependencies
+if [[ $OS != "fedora" ]]; then $RUN $PKG install -y epel-release; fi
 $RUN $PKG install -y $PKG_EXTRA
 $RUN $BUILDDEP -y koji-containerbuild.spec
 # Install package

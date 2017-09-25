@@ -34,9 +34,10 @@ import pycurl
 import signal
 
 import koji
-from koji.daemon import SCM
+from koji.daemon import SCM, incremental_upload
 from koji.tasks import ServerExit, BaseTaskHandler
 
+import osbs
 from osbs.api import OSBS
 from osbs.conf import Configuration
 try:
@@ -48,15 +49,6 @@ try:
     osbs_flatpak_support = True
 except ImportError:
     osbs_flatpak_support = False
-
-# We need kojid module which isn't proper python module and not even in
-# site-package path.
-kojid_exe_path = '/usr/sbin/kojid'
-try:
-    with file(kojid_exe_path, 'U') as fo:
-        kojid = imp.load_module('kojid', fo, fo.name, ('.py', 'U', 1))
-except IOError:
-    kojid = None
 
 
 # List of LABEL identifiers used within Koji. Values doesn't need to correspond
@@ -292,8 +284,7 @@ class BuildContainerTask(BaseTaskHandler):
         self._osbs = None
         self.demux = demux
 
-        # Check that the kojid module was successfully imported
-        assert kojid
+        self._log_handler_added = False
 
     def osbs(self):
         """Handler of OSBS object"""
@@ -305,7 +296,25 @@ class BuildContainerTask(BaseTaskHandler):
                 build_conf = Configuration(conf_section='scratch')
             self._osbs = OSBS(os_conf, build_conf)
             assert self._osbs
+            self.setup_osbs_logging()
+
         return self._osbs
+
+    def setup_osbs_logging(self):
+        # Setting handler more than once will cause duplicated log lines.
+        # Log handler will persist in child process.
+        if not self._log_handler_added:
+            osbs_logger = logging.getLogger(osbs.__name__)
+            osbs_logger.setLevel(logging.INFO)
+            log_file = os.path.join(self.resultdir(), 'osbs-client.log')
+            handler = logging.FileHandler(filename=log_file)
+            # process (PID) is useful because a buildContainer task forks main process
+            formatter = logging.Formatter(
+                '%(asctime)s - %(process)d - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            osbs_logger.addHandler(handler)
+
+            self._log_handler_added = True
 
     def getUploadPath(self):
         """Get the path that should be used when uploading files to
@@ -313,7 +322,10 @@ class BuildContainerTask(BaseTaskHandler):
         return koji.pathinfo.taskrelpath(self.id)
 
     def resultdir(self):
-        return os.path.join(self.workdir, 'osbslogs')
+        path = os.path.join(self.workdir, 'osbslogs')
+        if not os.path.exists(path):
+            os.makedirs(path)
+        return path
 
     def _incremental_upload_logs(self, child_pid):
         resultdir = self.resultdir()
@@ -331,8 +343,7 @@ class BuildContainerTask(BaseTaskHandler):
                     if result is False:
                         return
                     (fd, fname) = result
-                    kojid.incremental_upload(self.session, fname, fd,
-                                             uploadpath, logger=self.logger)
+                    incremental_upload(self.session, fname, fd, uploadpath, logger=self.logger)
         finally:
             watcher.clean()
 

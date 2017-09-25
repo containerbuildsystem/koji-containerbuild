@@ -1,5 +1,7 @@
 # ## Linux
-.*
+.cache
+.coverage
+build/
 !.gitignore
 /dist/
 

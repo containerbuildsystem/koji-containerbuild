@@ -7,7 +7,7 @@
 
 Name:           koji-containerbuild
 Version:        0.7.4
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
 
@@ -55,7 +55,6 @@ Requires:   koji-containerbuild
 Requires:   osbs-client
 Requires:   python-urlgrabber
 Requires:   python-dockerfile-parse
-Requires:   python-pycurl
 
 %description builder
 Builder plugin that extend Koji to communicate with OpenShift build system and

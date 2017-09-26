@@ -1,6 +1,7 @@
 # ## Linux
-.*
-!.gitignore
+.cache
+.coverage
+/build/
 /dist/
 
 # ## Python

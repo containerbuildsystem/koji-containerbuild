@@ -19,11 +19,7 @@ setup(
         'koji_containerbuild',
         'koji_containerbuild.plugins',
     ],
-    install_requires=[
-        "koji",
-        "osbs",
-        #"distutils",
-    ],
+    install_requires=[],
     scripts=['cli/koji-containerbuild'],
     classifiers=[
         "Development Status :: 3 - Alpha",

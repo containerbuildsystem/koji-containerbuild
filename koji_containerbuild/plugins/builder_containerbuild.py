@@ -30,7 +30,6 @@ import imp
 import time
 import traceback
 import dockerfile_parse
-import pycurl
 import signal
 
 import koji
@@ -573,13 +572,7 @@ class BuildContainerTask(BaseTaskHandler):
             except koji.ActionNotAllowed:
                 pass
         else:
-            # Make sure curl is initialized again otherwise connections via SSL
-            # fails with NSS error -8023 and curl_multi.info_read()
-            # returns error code 35 (SSL CONNECT failed).
-            # See http://permalink.gmane.org/gmane.comp.web.curl.library/38759
             self._osbs = None
-            self.logger.debug("Running pycurl global cleanup")
-            pycurl.global_cleanup()
 
             # Following retry code is here mainly to workaround bug which causes
             # connection drop while reading logs after about 5 minutes.

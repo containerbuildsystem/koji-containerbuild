@@ -6,7 +6,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.4
+Version:        0.7.5
 Release:        2%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -113,6 +113,29 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed Oct 04 2017 Robert Cerven <rcerven@redhat.com> 0.7.5-2
+- test.sh: install epel-release for centos first (vrutkovs@redhat.com)
+- Run tests in Travis CI using containers (vrutkovs@redhat.com)
+- setup.py: remove bogus install_requires (vrutkovs@redhat.com)
+- Remove pycurl (vrutkovs@redhat.com)
+- Add FileHandler for osbs module (lucarval@redhat.com)
+- Fix test_cli_args unit test (lucarval@redhat.com)
+- Remove kojid module loading (lucarval@redhat.com)
+- Don't check for isolated option if flatpak is specified (vrutkovs@redhat.com)
+- Use arch-override as str (lucarval@redhat.com)
+- test_kcb: initial infra for improved logging self-tests/verification
+  (jarod@redhat.com)
+- builder_containerbuild: clean up and simplify demux/non-demux split
+  (jarod@redhat.com)
+- builder_containerbuild: write cleanups (jarod@redhat.com)
+- builder_containerbuild: use get_orchestrator_build_logs api
+  (jarod@redhat.com)
+- Flatpak support (otaylor@fishsoup.net)
+- Clean up container-build CLI (otaylor@fishsoup.net)
+- cli: add --arches argument option (mlangsdo@redhat.com)
+- cli: write a test case for the arguments parser (mlangsdo@redhat.com)
+- tests: throw OsbsOrchestratorNotEnabled if available (otaylor@fishsoup.net)
+
 * Tue Sep 05 2017 Robert Cerven <rcerven@redhat.com> 0.7.4-1
 - Use OsbsOrchestratorNotEnabled exception (lucarval@redhat.com)
 - Add support for isolated builds (lucarval@redhat.com)

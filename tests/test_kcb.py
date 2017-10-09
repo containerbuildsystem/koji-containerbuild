@@ -117,6 +117,7 @@ class TestBuilder(object):
         create_build_args.setdefault('scratch', False)
         create_build_args.setdefault('platforms', ['x86_64'])
         create_build_args.setdefault('architecture', None)
+        create_build_args.pop('arch_override', None)
 
         if not create_build_args.get('isolated'):
             create_build_args.pop('isolated', None)
@@ -719,3 +720,63 @@ class TestBuilder(object):
 
         assert parsed_args == expected_args
         assert opts == expected_opts
+
+    @pytest.mark.parametrize('orchestrator', (True, False))
+    @pytest.mark.parametrize(('additional_args', 'raises'), (
+        ({'scratch': True, 'arch_override': 'x86_64'}, False),
+        ({'scratch': True, 'arch_override': ''}, False),
+        ({'scratch': False, 'arch_override': 'x86_64'}, True),
+        ({'scratch': False, 'arch_override': ''}, False),
+        ({'isolated': True, 'arch_override': 'x86_64'}, True),
+        ({'isolated': True, 'arch_override': ''}, False),
+        ({'isolated': False, 'arch_override': 'x86_64'}, True),
+        ({'isolated': False, 'arch_override': ''}, False),
+    ))
+    def test_arch_override(self, tmpdir, orchestrator, additional_args, raises):
+        koji_task_id = 123
+        last_event_id = 456
+        koji_build_id = 999
+
+        session = self._mock_session(last_event_id, koji_task_id)
+        folders_info = self._mock_folders(str(tmpdir))
+        src = self._mock_git_source()
+        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+
+        task = builder_containerbuild.BuildContainerTask(id=koji_task_id,
+                                                         method='buildContainer',
+                                                         params='params',
+                                                         session=session,
+                                                         options=options,
+                                                         workdir='workdir',
+                                                         demux=orchestrator)
+
+        (flexmock(task)
+            .should_receive('fetchDockerfile')
+            .with_args(src['src'])
+            .and_return(folders_info['dockerfile_path']))
+        (flexmock(task)
+            .should_receive('_write_incremental_logs'))
+        if orchestrator:
+            (flexmock(task)
+                .should_receive('_write_demultiplexed_logs'))
+        else:
+            (flexmock(task)
+                .should_receive('_write_combined_log'))
+
+        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
+                                     src=src,
+                                     koji_task_id=koji_task_id,
+                                     orchestrator=orchestrator,
+                                     build_not_started=raises,
+                                     create_build_args=additional_args.copy())
+
+        if raises:
+            with pytest.raises(koji.BuildError):
+                task.handler(src['src'], 'target', opts=additional_args)
+        else:
+            task_response = task.handler(src['src'], 'target', opts=additional_args)
+
+            assert task_response == {
+                'repositories': ['unique-repo', 'primary-repo'],
+                'koji_builds': [koji_build_id]
+            }

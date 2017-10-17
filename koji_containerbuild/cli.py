@@ -217,7 +217,9 @@ def handle_build(options, session, args, flatpak):
         return
 
 def handle_container_build(options, session, args):
+    "[build] Build a container"
     return handle_build(options, session, args, flatpak=False)
 
 def handle_flatpak_build(options, session, args):
+    "[build] Build a flatpak"
     return handle_build(options, session, args, flatpak=True)

@@ -7,7 +7,7 @@
 
 Name:           koji-containerbuild
 Version:        0.7.5
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
 
@@ -113,6 +113,11 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Mon Nov 06 2017 Robert Cerven <rcerven@redhat.com> 0.7.5-3
+- Added docstring to CLI (tkopecek@redhat.com)
+- raise error when arches_override are used for non-scratch builds
+  (rcerven@redhat.com)
+
 * Wed Oct 04 2017 Robert Cerven <rcerven@redhat.com> 0.7.5-2
 - test.sh: install epel-release for centos first (vrutkovs@redhat.com)
 - Run tests in Travis CI using containers (vrutkovs@redhat.com)

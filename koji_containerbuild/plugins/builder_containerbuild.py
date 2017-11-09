@@ -33,6 +33,11 @@ import dockerfile_parse
 import signal
 
 import koji
+
+# this is present because in some versions of koji, callback functions assume koji.plugin is
+# imported
+import koji.plugin
+
 from koji.daemon import SCM, incremental_upload
 from koji.tasks import ServerExit, BaseTaskHandler
 
@@ -678,7 +683,7 @@ class BuildContainerTask(BaseTaskHandler):
             raise koji.BuildError("No matching arches were found")
         return archdict.keys()
 
-    def fetchDockerfile(self, src):
+    def fetchDockerfile(self, src, build_tag):
         """
         Gets Dockerfile. Roughly corresponds to getSRPM method of build task
         """
@@ -693,8 +698,14 @@ class BuildContainerTask(BaseTaskHandler):
 
         koji.ensuredir(uploadpath)
 
+        self.run_callbacks('preSCMCheckout', scminfo=scm.get_info(), build_tag=build_tag,
+                           scratch=self.opts.get('scratch', False))
+
         # Check out sources from the SCM
         sourcedir = scm.checkout(scmdir, self.session, uploadpath, logfile)
+
+        self.run_callbacks("postSCMCheckout", scminfo=scm.get_info(), build_tag=build_tag,
+                           scratch=self.opts.get('scratch', False), srcdir=sourcedir)
 
         fn = os.path.join(sourcedir, 'Dockerfile')
         if not os.path.exists(fn):
@@ -708,9 +719,9 @@ class BuildContainerTask(BaseTaskHandler):
 
         return {'epoch': epoch}
 
-    def checkLabels(self, src, label_overwrites=None):
+    def checkLabels(self, src, build_tag, label_overwrites=None):
         label_overwrites = label_overwrites or {}
-        dockerfile_path = self.fetchDockerfile(src)
+        dockerfile_path = self.fetchDockerfile(src, build_tag)
         labels_wrapper = LabelsWrapper(dockerfile_path,
                                        logger_name=self.logger.name,
                                        label_overwrites=label_overwrites)
@@ -775,7 +786,8 @@ class BuildContainerTask(BaseTaskHandler):
             release_overwrite = opts.get('release')
             if release_overwrite:
                 label_overwrites = {LABEL_DATA_MAP['RELEASE']: release_overwrite}
-            data, expected_nvr = self.checkLabels(src, label_overwrites=label_overwrites)
+            data, expected_nvr = self.checkLabels(src, label_overwrites=label_overwrites,
+                                                  build_tag=build_tag)
         admin_opts = self._get_admin_opts(opts)
         data.update(admin_opts)
 

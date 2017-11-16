@@ -200,7 +200,7 @@ class TestBuilder(object):
                 LABEL version=25
                 """)
 
-        source_dir = os.path.join(tmpdir, 'source')
+        source_dir = os.path.join(tmpdir, 'sources')
         dockerfile_path = os.path.join(source_dir, 'Dockerfile')
         os.mkdir(source_dir)
         with open(dockerfile_path, 'w') as f:
@@ -251,7 +251,7 @@ class TestBuilder(object):
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
-            .with_args(src['src'])
+            .with_args(src['src'], 'build-tag')
             .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
@@ -283,6 +283,66 @@ class TestBuilder(object):
                 'koji_builds': [koji_build_id]
             }
 
+    def test_private_branch(self, tmpdir):
+        git_uri = 'git://pkgs.example.com/rpms/fedora-docker'
+        git_ref = 'private-test1'
+        source = git_uri + '#' + git_ref
+
+        koji_task_id = 123
+        last_event_id = 456
+
+        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        folders_info = self._mock_folders(str(tmpdir))
+
+        pkg_info = {'blocked': False}
+        session = flexmock()
+        (session
+            .should_receive('getLastEvent')
+            .and_return({'id': last_event_id}))
+        (session
+            .should_receive('getBuildTarget')
+            .with_args('target', event=last_event_id)
+            .and_return({'build_tag': 'build-tag', 'name': 'target-name',
+                         'dest_tag_name': 'dest-tag'}))
+        (session
+            .should_receive('getBuildConfig')
+            .with_args('build-tag', event=last_event_id)
+            .and_return({'arches': 'x86_64'}))
+        (session
+            .should_receive('getTaskInfo')
+            .with_args(koji_task_id, request=True)
+            .and_return({'owner': 'owner'}))
+        (session
+            .should_receive('getUser')
+            .with_args('owner')
+            .and_return({'name': 'owner-name'}))
+        (session
+            .should_receive('getPackageConfig')
+            .with_args('dest-tag', 'fedora-docker')
+            .and_return(pkg_info))
+
+        task = builder_containerbuild.BuildContainerTask(id=koji_task_id,
+                                                         method='buildContainer',
+                                                         params='params',
+                                                         session=session,
+                                                         options=options,
+                                                         workdir=str(tmpdir),
+                                                         demux=True)
+        (flexmock(task)
+            .should_receive('getUploadDir')
+            .and_return(str(tmpdir)))
+        (flexmock(task)
+            .should_receive('run_callbacks')
+            .times(2))
+
+        (flexmock(koji.daemon.SCM)
+            .should_receive('checkout')
+            .and_return(folders_info['dockerfile_path']))
+        (flexmock(os.path)
+            .should_receive('exists')
+            .and_return(True))
+        task.fetchDockerfile(source, 'build_tag')
+
     @pytest.mark.parametrize('orchestrator', (True, False))
     @pytest.mark.parametrize('additional_args', (
         {'koji_parent_build': 'fedora-26-99'},
@@ -312,7 +372,7 @@ class TestBuilder(object):
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
-            .with_args(src['src'])
+            .with_args(src['src'], 'build-tag')
             .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
@@ -361,7 +421,7 @@ class TestBuilder(object):
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
-            .with_args(src['src'])
+            .with_args(src['src'], 'build-tag')
             .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
@@ -426,7 +486,7 @@ class TestBuilder(object):
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
-            .with_args(src['src'])
+            .with_args(src['src'], 'build-tag')
             .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
@@ -501,7 +561,7 @@ class TestBuilder(object):
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
-            .with_args(src['src'])
+            .with_args(src['src'], 'build-tag')
             .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
@@ -752,7 +812,7 @@ class TestBuilder(object):
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
-            .with_args(src['src'])
+            .with_args(src['src'], 'build-tag')
             .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))

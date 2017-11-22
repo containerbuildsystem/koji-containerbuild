@@ -126,6 +126,12 @@ def parse_arguments(options, args, flatpak):
     parser.add_option("--channel-override",
                       help=_("Use a non-standard channel [default: %default]"),
                       default=DEFAULT_CHANNEL)
+    parser.add_option("--signing-intent",
+                      help=_("Signing intent of the ODCS composes [default: %default]"),
+                      default=None, dest='signing_intent')
+    parser.add_option("--compose-id",
+                      help=_("ODCS composes used. May be used multiple times"),
+                      dest='compose_ids', action='append', metavar="COMPOSE_ID")
     if not flatpak:
         parser.add_option("--release",
                           help=_("Set release value"))
@@ -140,11 +146,14 @@ def parse_arguments(options, args, flatpak):
     if build_opts.arch_override and not build_opts.scratch:
         parser.error(_("--arch-override is only allowed for --scratch builds"))
 
+    if build_opts.signing_intent and build_opts.compose_ids:
+        parser.error(_("--signing-intent cannot be used with --compose-id"))
+
     opts = {}
     if not build_opts.git_branch:
         parser.error(_("git-branch must be specified"))
 
-    keys = ('scratch', 'epoch', 'yum_repourls', 'git_branch')
+    keys = ('scratch', 'epoch', 'yum_repourls', 'git_branch', 'signing_intent', 'compose_ids')
 
     if flatpak:
         if not build_opts.module:

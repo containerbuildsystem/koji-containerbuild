@@ -459,7 +459,8 @@ class BuildContainerTask(BaseTaskHandler):
     def runBuilds(self, src, target_info, arches, scratch=False, isolated=False,
                   yum_repourls=None, branch=None, push_url=None,
                   koji_parent_build=None, release=None,
-                  flatpak=False, module=None):
+                  flatpak=False, module=None, signing_intent=None,
+                  compose_ids=None):
 
         self.logger.debug("Spawning jobs for arches: %r" % (arches))
 
@@ -477,7 +478,9 @@ class BuildContainerTask(BaseTaskHandler):
             koji_parent_build=koji_parent_build,
             release=release,
             flatpak=flatpak,
-            module=module
+            module=module,
+            signing_intent=signing_intent,
+            compose_ids=compose_ids
         )
 
         results = [self.createContainer(**kwargs)]
@@ -488,7 +491,8 @@ class BuildContainerTask(BaseTaskHandler):
     def createContainer(self, src=None, target_info=None, arches=None,
                         scratch=None, isolated=None, yum_repourls=[],
                         branch=None, push_url=None, koji_parent_build=None,
-                        release=None, flatpak=False, module=None):
+                        release=None, flatpak=False, module=None, signing_intent=None,
+                        compose_ids=None):
         if not yum_repourls:
             yum_repourls = []
 
@@ -504,7 +508,10 @@ class BuildContainerTask(BaseTaskHandler):
         arch = None
 
         if not arches:
-            raise ContainerError("arches aren't specified")
+            raise koji.BuildError("arches aren't specified")
+
+        if signing_intent and compose_ids:
+            raise koji.BuildError("signing_intent used with compose_ids")
 
         create_build_args = {
             'git_uri': git_uri,
@@ -515,7 +522,7 @@ class BuildContainerTask(BaseTaskHandler):
             'yum_repourls': yum_repourls,
             'scratch': scratch,
             'koji_task_id': self.id,
-            'architecture': arch
+            'architecture': arch,
         }
         if branch:
             create_build_args['git_branch'] = branch
@@ -529,6 +536,10 @@ class BuildContainerTask(BaseTaskHandler):
         try:
             orchestrator_create_build_args = create_build_args.copy()
             orchestrator_create_build_args['platforms'] = arches
+            if signing_intent:
+                orchestrator_create_build_args['signing_intent'] = signing_intent
+            if compose_ids:
+                orchestrator_create_build_args['compose_ids'] = compose_ids
             if koji_parent_build:
                 orchestrator_create_build_args['koji_parent_build'] = koji_parent_build
             if isolated:
@@ -832,6 +843,8 @@ class BuildContainerTask(BaseTaskHandler):
                                      release=release_overwrite,
                                      flatpak=flatpak,
                                      module=opts.get('module', None),
+                                     compose_ids=opts.get('compose_ids', None),
+                                     signing_intent=opts.get('signing_intent', None),
                                      )
             all_repositories = []
             all_koji_builds = []

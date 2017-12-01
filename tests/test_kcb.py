@@ -806,11 +806,62 @@ class TestBuilder(object):
         assert parsed_args == expected_args
         assert opts == expected_opts
 
+    @pytest.mark.parametrize((
+        'compose_ids', 'signing_intent', 'yum_repourls', 'valid'
+    ), (
+        (None, None, None, True),
+        ([1, 2, 3], None, None, True),
+        (None, 'intent1', None, True),
+        (None, None, ['www.repo.com'], True),
+        ([1, 2, 3], 'intent1', None, False),
+        ([1, 2, 3], None, ['www.repo.com'], False),
+        ([1, 2, 3], 'intent1', ['www.repo.com'], False),
+    ))
+    def test_compose_id_arg_restrictions(self, tmpdir, compose_ids, signing_intent, yum_repourls,
+                                         valid):
+        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options.quiet = False
+        test_args = ['test', 'test', '--git-branch', 'the-branch']
+        expected_args = ['test', 'test']
+        expected_opts = {'git_branch': 'the-branch'}
+
+        if compose_ids:
+            for ci in compose_ids:
+                test_args.append('--compose-id')
+                test_args.append(ci)
+            expected_opts['compose_ids'] = compose_ids
+
+        if signing_intent:
+            test_args.append('--signing-intent')
+            test_args.append(signing_intent)
+            expected_opts['signing_intent'] = signing_intent
+
+        if yum_repourls:
+            for yru in yum_repourls:
+                test_args.append('--repo-url')
+                test_args.append(yru)
+            expected_opts['yum_repourls'] = yum_repourls
+
+        if not valid:
+            with pytest.raises(SystemExit):
+                parse_arguments(options, test_args, flatpak=False)
+            return
+
+        build_opts, parsed_args, opts, _ = parse_arguments(options, test_args, flatpak=False)
+
+        assert build_opts.compose_ids == compose_ids
+        assert build_opts.signing_intent == signing_intent
+        assert build_opts.yum_repourls == yum_repourls
+
+        assert parsed_args == expected_args
+        assert opts == expected_opts
+
     @pytest.mark.parametrize(('additional_args', 'raises'), (
         ({}, False),
         ({'compose_ids': [1, 2]}, False),
         ({'signing_intent': 'intent1'}, False),
-        ({'compose_ids': [1, 2], 'signing_intent': 'intent1'}, True)
+        ({'compose_ids': [1, 2], 'signing_intent': 'intent1'}, True),
+        ({'compose_ids': [1, 2], 'yum_repourls': ['www.repo.com']}, True)
     ))
     def test_compose_ids_and_signing_intent(self, tmpdir, additional_args, raises):
         koji_task_id = 123

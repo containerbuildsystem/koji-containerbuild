@@ -513,6 +513,9 @@ class BuildContainerTask(BaseTaskHandler):
         if signing_intent and compose_ids:
             raise koji.BuildError("signing_intent used with compose_ids")
 
+        if compose_ids and yum_repourls:
+            raise koji.BuildError("compose_ids used with repo_url")
+
         create_build_args = {
             'git_uri': git_uri,
             'git_ref': scm.revision,

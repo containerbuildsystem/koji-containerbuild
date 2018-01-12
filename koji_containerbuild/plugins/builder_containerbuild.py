@@ -593,27 +593,10 @@ class BuildContainerTask(BaseTaskHandler):
         else:
             self._osbs = None
 
-            # Following retry code is here mainly to workaround bug which causes
-            # connection drop while reading logs after about 5 minutes.
-            # OpenShift bug with description:
-            # https://github.com/openshift/origin/issues/2348
-            # and upstream bug in Kubernetes:
-            # https://github.com/GoogleCloudPlatform/kubernetes/issues/9013
-            retry = 0
-            max_retries = 30
-            while retry < max_retries:
-                try:
-                    self._write_incremental_logs(build_id, osbs_logs_dir)
-                except Exception, error:
-                    self.logger.info("Error while saving incremental logs "
-                                     "(retry #%d): %s", retry, error)
-                    retry += 1
-                    time.sleep(10)
-                    continue
-                break
-            else:
-                self.logger.info("Gave up trying to save incremental logs "
-                                 "after #%d retries.", retry)
+            try:
+                self._write_incremental_logs(build_id, osbs_logs_dir)
+            except Exception, error:
+                self.logger.info("Error while saving incremental logs: %s", error)
                 os._exit(1)
             os._exit(0)
 

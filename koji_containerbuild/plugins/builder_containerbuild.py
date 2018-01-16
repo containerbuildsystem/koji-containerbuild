@@ -361,17 +361,16 @@ class BuildContainerTask(BaseTaskHandler):
         except Exception, error:
             msg = "Exception while waiting for build logs: %s" % error
             raise ContainerError(msg)
-        outfile = open(log_filename, 'wb')
-        try:
-            for line in log:
-                outfile.write(("%s\n" % line).encode('utf-8'))
-                outfile.flush()
-        except Exception, error:
-            msg = "Exception (%s) while writing build logs: %s" % (type(error),
-                                                                   error)
-            raise ContainerError(msg)
-        finally:
-            outfile.close()
+        with open(log_filename, 'wb') as outfile:
+            try:
+                for line in log:
+                    outfile.write(("%s\n" % line).encode('utf-8'))
+                    outfile.flush()
+            except Exception, error:
+                msg = "Exception (%s) while writing build logs: %s" % (type(error),
+                                                                       error)
+                raise ContainerError(msg)
+
         self.logger.info("%s written", log_basename)
 
     def _write_demultiplexed_logs(self, build_id, logs_dir):

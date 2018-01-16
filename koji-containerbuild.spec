@@ -6,7 +6,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.6
+Version:        0.7.7
 Release:        2%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -113,6 +113,17 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Jan 16 2018 Robert Cerven <rcerven@redhat.com> 0.7.7-2
+- Disable rawhide testing (lucarval@redhat.com)
+- Make Docker relabel the volume (lucarval@redhat.com)
+- travis.yml: F25 is EOL, use F27 instead (vrutkovs@redhat.com)
+- Disallow use of yum_repourls with compose_ids (bfontecc@redhat.com)
+- tests: install specific versions of test package to avoid test packages
+  update breaks (vrutkovs@redhat.com)
+- Add compose_ids and signing_intent options (bfontecc@redhat.com)
+- Disallow private branches for non-scratch container builds
+  (bfontecc@redhat.com)
+
 * Mon Nov 06 2017 Robert Cerven <rcerven@redhat.com> 0.7.6-2
 - Added docstring to CLI (tkopecek@redhat.com)
 - raise error when arches_override are used for non-scratch builds

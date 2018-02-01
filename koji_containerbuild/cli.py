@@ -93,9 +93,6 @@ def parse_arguments(options, args, flatpak):
     usage += _("\n(Specify the --help global option for a list of other help "
                "options)")
     parser = OptionParser(usage=usage)
-    if flatpak:
-        parser.add_option("-m", "--module", metavar="NAME:STREAM[:VERSION]",
-                          help="module to build against")
     parser.add_option("--scratch", action="store_true",
                       help=_("Perform a scratch build"))
     if not flatpak:
@@ -161,10 +158,7 @@ def parse_arguments(options, args, flatpak):
     keys = ('scratch', 'epoch', 'yum_repourls', 'git_branch', 'signing_intent', 'compose_ids')
 
     if flatpak:
-        if not build_opts.module:
-            parser.error(_("module must be specified"))
         opts['flatpak'] = True
-        keys += ('module',)
     else:
         if build_opts.isolated and build_opts.scratch:
             parser.error(_("Build cannot be both isolated and scratch"))

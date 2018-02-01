@@ -404,13 +404,7 @@ class TestBuilder(object):
             'koji_builds': [koji_build_id]
         }
 
-    @pytest.mark.parametrize(('module', 'should_raise'), [
-        ('fedora-docker:26', None),
-        ('fedora-docker:26:20170629185228', None),
-        ('NOTASPEC', (OsbsValidationException, "Module specification should be")),
-        (None, (koji.BuildError, "Module must be specified")),
-    ])
-    def test_flatpak_build(self, tmpdir, module, should_raise):
+    def test_flatpak_build(self, tmpdir):
         task_id = 123
         last_event_id = 456
         koji_build_id = 999
@@ -436,7 +430,6 @@ class TestBuilder(object):
 
         additional_args = {
             'flatpak': True,
-            'module': module
         }
 
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
@@ -444,25 +437,16 @@ class TestBuilder(object):
                                      koji_task_id=task_id,
                                      orchestrator=True, flatpak=True,
                                      create_build_args=additional_args.copy(),
-                                     build_not_started=should_raise is not None)
+                                     build_not_started=False)
         build_response = flexmock()
 
-        if should_raise is None:
-            task_response = task.handler(src['src'], 'target', opts={
-                'flatpak': True,
-                'module': module
-            })
-            assert task_response == {
-                'repositories': ['unique-repo', 'primary-repo'],
-                'koji_builds': [koji_build_id]
-            }
-        else:
-            with pytest.raises(should_raise[0]) as exc_info:
-                task_response = task.handler(src['src'], 'target', opts={
-                    'flatpak': True,
-                    'module': module
-                })
-            assert should_raise[1] in str(exc_info)
+        task_response = task.handler(src['src'], 'target', opts={
+            'flatpak': True,
+        })
+        assert task_response == {
+            'repositories': ['unique-repo', 'primary-repo'],
+            'koji_builds': [koji_build_id]
+        }
 
 
     @pytest.mark.parametrize('orchestrator', (True, False))
@@ -617,24 +601,20 @@ class TestBuilder(object):
          'stable', 'override', None, None),
     ))
     @pytest.mark.parametrize(('scratch', 'isolated', 'koji_parent_build',
-                              'release', 'flatpak', 'module'), (
-        (None, None, None, None, None, None),
-        (None, None, None, 'test-release', None, None),
-        (None, True, None, None, None, None),
-        (None, True, None, 'test-release', None, None),
-        (None, True, 'parent_build', None, None, None),
-        (None, None, None, None, None, None),
-        (None, None, None, None, None, None),
-        (None, None, None, None, None, None),
-        (None, True, 'parent_build', None, None, None),
-        (None, False, None, None, True, 'some-module:f26'),
-        (True, False, None, None, True, 'some-module:f26'),
-        (True, None, None, None, None, None),
-        (True, None, 'parent_build', None, None, None),
+                              'release', 'flatpak'), (
+        (None, None, None, None, None),
+        (None, None, None, 'test-release', None),
+        (None, True, None, None, None),
+        (None, True, None, 'test-release', None),
+        (None, True, 'parent_build', None, None),
+        (None, False, None, None, True),
+        (True, False, None, None, True),
+        (True, None, None, None, None),
+        (True, None, 'parent_build', None, None),
     ))
     def test_cli_args(self, tmpdir, scratch, wait, quiet,
                       epoch, repo_url, git_branch, channel_override, release,
-                      isolated, koji_parent_build, flatpak, module, compose_ids,
+                      isolated, koji_parent_build, flatpak, compose_ids,
                       signing_intent):
         options = flexmock(allowed_scms='pkgs.example.com:/*:no')
         options.quiet = False
@@ -692,11 +672,6 @@ class TestBuilder(object):
         if flatpak:
             expected_opts['flatpak'] = flatpak
 
-        if module:
-            test_args.append('--module')
-            test_args.append(module)
-            expected_opts['module'] = module
-
         if compose_ids:
             expected_opts['compose_ids'] = []
             for cid in compose_ids:
@@ -720,9 +695,7 @@ class TestBuilder(object):
         assert build_opts.yum_repourls == repo_url
         assert build_opts.git_branch == git_branch
         assert build_opts.channel_override == expected_channel
-        if flatpak:
-            assert build_opts.module == module
-        else:
+        if not flatpak:
             assert build_opts.release == release
         assert build_opts.compose_ids == compose_ids
         assert build_opts.signing_intent == signing_intent

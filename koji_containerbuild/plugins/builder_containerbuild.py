@@ -458,7 +458,7 @@ class BuildContainerTask(BaseTaskHandler):
     def runBuilds(self, src, target_info, arches, scratch=False, isolated=False,
                   yum_repourls=None, branch=None, push_url=None,
                   koji_parent_build=None, release=None,
-                  flatpak=False, module=None, signing_intent=None,
+                  flatpak=False, signing_intent=None,
                   compose_ids=None):
 
         self.logger.debug("Spawning jobs for arches: %r" % (arches))
@@ -477,7 +477,6 @@ class BuildContainerTask(BaseTaskHandler):
             koji_parent_build=koji_parent_build,
             release=release,
             flatpak=flatpak,
-            module=module,
             signing_intent=signing_intent,
             compose_ids=compose_ids
         )
@@ -490,7 +489,7 @@ class BuildContainerTask(BaseTaskHandler):
     def createContainer(self, src=None, target_info=None, arches=None,
                         scratch=None, isolated=None, yum_repourls=[],
                         branch=None, push_url=None, koji_parent_build=None,
-                        release=None, flatpak=False, module=None, signing_intent=None,
+                        release=None, flatpak=False, signing_intent=None,
                         compose_ids=None):
         if not yum_repourls:
             yum_repourls = []
@@ -532,8 +531,6 @@ class BuildContainerTask(BaseTaskHandler):
             create_build_args['git_push_url'] = push_url
         if flatpak:
             create_build_args['flatpak'] = True
-        if module:
-            create_build_args['module'] = module
 
         try:
             orchestrator_create_build_args = create_build_args.copy()
@@ -763,19 +760,6 @@ class BuildContainerTask(BaseTaskHandler):
         if flatpak:
             if not osbs_flatpak_support:
                 raise koji.BuildError("osbs-client on koji builder doesn't have Flatpak support")
-            module = opts.get('module', None)
-            if not module:
-                raise koji.BuildError("Module must be specified for a Flatpak build")
-
-            module_name, module_stream, module_version = split_module_spec(module)
-
-            data = {
-                'name': module_name,
-                'version': module_stream,
-            }
-
-            if module_version is not None:
-                data['release'] = module_version
             release_overwrite = None
         else:
             label_overwrites = {}
@@ -788,7 +772,7 @@ class BuildContainerTask(BaseTaskHandler):
         data.update(admin_opts)
 
         # scratch builds do not get imported, and consequently not tagged
-        if not self.opts.get('scratch'):
+        if not self.opts.get('scratch') and not flatpak:
             self.check_whitelist(data[LABEL_DATA_MAP['COMPONENT']], target_info)
 
         try:
@@ -827,7 +811,6 @@ class BuildContainerTask(BaseTaskHandler):
                                      koji_parent_build=opts.get('koji_parent_build'),
                                      release=release_overwrite,
                                      flatpak=flatpak,
-                                     module=opts.get('module', None),
                                      compose_ids=opts.get('compose_ids', None),
                                      signing_intent=opts.get('signing_intent', None),
                                      )

@@ -6,8 +6,8 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.7
-Release:        2%{?dist}
+Version:        0.7.8
+Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
 
@@ -113,6 +113,11 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri Mar 23 2018 Robert Cerven <rcerven@redhat.com> 0.7.8-1
+- cleanup flatpak (rcerven@redhat.com)
+- Use with-open-as instead of open-try-finally-close (twaugh@redhat.com)
+- remove retries of reading logs (rcerven@redhat.com)
+
 * Tue Jan 16 2018 Robert Cerven <rcerven@redhat.com> 0.7.7-2
 - Disable rawhide testing (lucarval@redhat.com)
 - Make Docker relabel the volume (lucarval@redhat.com)

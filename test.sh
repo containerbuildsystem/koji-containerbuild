@@ -37,7 +37,7 @@ fi
 if [[ $OS != "fedora" ]]; then $RUN $PKG install -y epel-release; fi
 $RUN $PKG install -y $PKG_EXTRA
 $RUN $BUILDDEP -y koji-containerbuild.spec
-# Install package
+# Install pip package
 $RUN $PKG install -y $PIP_PKG
 if [[ $PYTHON_VERSION == 3 && $OS_VERSION == rawhide ]]; then
   # https://fedoraproject.org/wiki/Changes/Making_sudo_pip_safe
@@ -45,6 +45,12 @@ if [[ $PYTHON_VERSION == 3 && $OS_VERSION == rawhide ]]; then
 fi
 
 # Install other dependencies for tests
+if [[ $PYTHON_VERSION == 3 ]]; then
+  OSBS_CLIENT_DEPS="python3-PyYAML"
+else
+  OSBS_CLIENT_DEPS="PyYAML"
+fi
+$RUN $PKG install -y $OSBS_CLIENT_DEPS
 
 # Install latest osbs-client by installing dependencies from the master branch
 # and running pip install with '--no-deps' to avoid compilation

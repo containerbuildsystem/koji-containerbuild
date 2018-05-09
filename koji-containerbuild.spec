@@ -1,3 +1,12 @@
+# Enable Python 3 builds for Fedora
+%if 0%{?fedora}
+%bcond_without python3
+# If the definition isn't available for python3_pkgversion, define it
+%{?!python3_pkgversion:%global python3_pkgversion 3}
+%else
+%bcond_with python3
+%endif
+
 %if 0%{?rhel} && 0%{?rhel} <= 6
 %{!?__python2: %global __python2 /usr/bin/python2}
 %{!?python2_sitelib: %global python2_sitelib %(%{__python2} -c "from distutils.sysconfig import get_python_lib; print get_python_lib()")}
@@ -61,16 +70,28 @@ Builder plugin that extend Koji to communicate with OpenShift build system and
 build layered container images.
 
 
-%package cli
+%package -n python2-%{name}-cli
 License:    LGPLv2
 Summary:    CLI that communicates with Koji to control building layered container images
 Group:      Applications/System
-Requires:   koji
-Requires:   koji-containerbuild
+Requires:   python2-koji >= 1.13
 
-%description cli
+%description -n python2-%{name}-cli
 Builder plugin that extend Koji to communicate with OpenShift build system and
 build layered container images.
+
+%if 0%{with python3}
+%package -n python3-%{name}-cli
+License:    LGPLv2
+Summary:    CLI that communicates with Koji to control building layered container images
+Group:      Applications/System
+Requires:   %{python3_pkgversion}-koji >= 1.13
+
+%description -n python3-%{name}-cli
+Builder plugin that extend Koji to communicate with OpenShift build system and
+build layered container images.
+%endif
+
 
 %prep
 %setup -q
@@ -83,12 +104,15 @@ build layered container images.
 %install
 rm -rf $RPM_BUILD_ROOT
 %{__python2} setup.py install -O1 --skip-build --root $RPM_BUILD_ROOT
-%{__install} -d $RPM_BUILD_ROOT%{_bindir}
-%{__install} -p -m 0755 cli/koji-containerbuild $RPM_BUILD_ROOT%{_bindir}/koji-containerbuild
 %{__install} -d $RPM_BUILD_ROOT%{_prefix}/lib/koji-hub-plugins
 %{__install} -p -m 0644 %{module}/plugins/hub_containerbuild.py $RPM_BUILD_ROOT%{_prefix}/lib/koji-hub-plugins/hub_containerbuild.py
 %{__install} -d $RPM_BUILD_ROOT%{_prefix}/lib/koji-builder-plugins
 %{__install} -p -m 0644 %{module}/plugins/builder_containerbuild.py $RPM_BUILD_ROOT%{_prefix}/lib/koji-builder-plugins/builder_containerbuild.py
+
+%{__install} -d $RPM_BUILD_ROOT%{python2_sitelib}/koji_cli_plugins
+%{__install} -d $RPM_BUILD_ROOT%{python3_sitelib}/koji_cli_plugins
+%{__install} -p -m 0644 %{module}/plugins/cli_containerbuild.py $RPM_BUILD_ROOT%{python2_sitelib}/koji_cli_plugins/cli_containerbuild.py
+%{__install} -p -m 0644 %{module}/plugins/cli_containerbuild.py $RPM_BUILD_ROOT%{python3_sitelib}/koji_cli_plugins/cli_containerbuild.py
 
 
 %files
@@ -99,8 +123,13 @@ rm -rf $RPM_BUILD_ROOT
 %endif
 %license LICENSE
 
-%files cli
-%{_bindir}/*
+%files -n python2-%{name}-cli
+%{python2_sitelib}/koji_cli_plugins
+
+%if 0%{with python3}
+%files -n python%{python3_pkgversion}-%{name}-cli
+%{python3_sitelib}/koji_cli_plugins
+%endif
 
 %files hub
 %{_prefix}/lib/koji-hub-plugins/hub_containerbuild.py*

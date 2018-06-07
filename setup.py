@@ -20,7 +20,6 @@ setup(
         'koji_containerbuild.plugins',
     ],
     install_requires=[],
-    scripts=['cli/koji-containerbuild'],
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Topic :: Internet",

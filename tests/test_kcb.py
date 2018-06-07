@@ -19,7 +19,7 @@ try:
     from osbs.exceptions import OsbsOrchestratorNotEnabled
 except ImportError:
     from osbs.exceptions import OsbsValidationException as OsbsOrchestratorNotEnabled
-from koji_containerbuild.cli import parse_arguments
+from koji_containerbuild.plugins.cli_containerbuild import parse_arguments
 
 
 USE_DEFAULT_PKG_INFO = object()

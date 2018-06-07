@@ -20,36 +20,9 @@
 # Authors:
 #       Pavol Babincak <pbabinca@redhat.com>
 
-import os
-from koji import _
-from optparse import OptionParser
-
-# Koji API has changed - activate_session requires two arguments
-# _running_in_bg has been moved to koji_cli.lib
-# parse_arches has been added to koji_cli.lib
-try:
-    from koji_cli.lib import _running_in_bg, activate_session, parse_arches
-except ImportError:
-    # Create wrappers for backwards compatibility.
-    def _running_in_bg(*args, **kwargs):
-        return clikoji._running_in_bg(*args, **kwargs)
-
-    def parse_arches(arches):
-        # Prior to being moved to koji_cli.lib, this used to be hard
-        # coded like this:
-        return ' '.join(arches.replace(',', ' ').split())
-
-    def activate_session(session, options):
-        try:
-            clikoji.activate_session(session)
-        except TypeError:
-            clikoji.activate_session(session, options)
-
-
-# Caller needs to set this to module which corresponds to /bin/koji
-# This hack is here because koji CLI isn't a module but we need to use some of
-# its functions. And this CLI don't necessary be named koji.
-clikoji = None
+from koji.plugin import export_cli
+from koji_cli.lib import _, activate_session, parse_arches, \
+                         OptionParser, watch_tasks, _running_in_bg
 
 # matches hub's buildContainer parameter channel
 DEFAULT_CHANNEL = 'container'
@@ -57,7 +30,7 @@ DEFAULT_CHANNEL = 'container'
 
 def print_value(value, level, indent, suffix=''):
     offset = ' ' * level * indent
-    print ''.join([offset, str(value), suffix])
+    print(''.join([offset, str(value), suffix]))
 
 
 def print_result(result, level=0, indent=2):
@@ -79,7 +52,7 @@ def print_task_result(task_id, result, weburl):
     except TypeError:
         pass
 
-    print "Task Result (%s):" % task_id
+    print("Task Result (%s):" % task_id)
     print_result(result)
 
 
@@ -209,11 +182,11 @@ def handle_build(options, session, args, flatpak):
     task_id = session.buildContainer(source, target, opts, priority=priority,
                                      channel=build_opts.channel_override)
     if not build_opts.quiet:
-        print "Created task:", task_id
-        print "Task info: %s/taskinfo?taskID=%s" % (options.weburl, task_id)
+        print("Created task: %s" % task_id)
+        print("Task info: %s/taskinfo?taskID=%s" % (options.weburl, task_id))
     if build_opts.wait or (build_opts.wait is None and not _running_in_bg()):
         session.logout()
-        rv = clikoji.watch_tasks(session, [task_id], quiet=build_opts.quiet)
+        rv = watch_tasks(session, [task_id], quiet=build_opts.quiet)
 
         # Task completed and a result should be available.
         if rv == 0:
@@ -224,10 +197,12 @@ def handle_build(options, session, args, flatpak):
     else:
         return
 
+@export_cli
 def handle_container_build(options, session, args):
     "[build] Build a container"
     return handle_build(options, session, args, flatpak=False)
 
+@export_cli
 def handle_flatpak_build(options, session, args):
     "[build] Build a flatpak"
     return handle_build(options, session, args, flatpak=True)

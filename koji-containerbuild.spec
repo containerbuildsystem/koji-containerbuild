@@ -88,7 +88,7 @@ build layered container images.
 License:    LGPLv2
 Summary:    CLI that communicates with Koji to control building layered container images
 Group:      Applications/System
-Requires:   %{python3_pkgversion}-koji >= 1.13
+Requires:   python%{python3_pkgversion}-koji >= 1.13
 
 %description -n python3-%{name}-cli
 Builder plugin that extend Koji to communicate with OpenShift build system and

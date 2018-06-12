@@ -38,6 +38,9 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildRequires:  python
 BuildRequires:  python2-devel
+%if 0%{with python3}
+BuildRequires:  python3-devel
+%endif
 BuildRequires:  python-setuptools
 
 %description
@@ -85,7 +88,7 @@ build layered container images.
 License:    LGPLv2
 Summary:    CLI that communicates with Koji to control building layered container images
 Group:      Applications/System
-Requires:   %{python3_pkgversion}-koji >= 1.13
+Requires:   python%{python3_pkgversion}-koji >= 1.13
 
 %description -n python3-%{name}-cli
 Builder plugin that extend Koji to communicate with OpenShift build system and
@@ -110,9 +113,11 @@ rm -rf $RPM_BUILD_ROOT
 %{__install} -p -m 0644 %{module}/plugins/builder_containerbuild.py $RPM_BUILD_ROOT%{_prefix}/lib/koji-builder-plugins/builder_containerbuild.py
 
 %{__install} -d $RPM_BUILD_ROOT%{python2_sitelib}/koji_cli_plugins
-%{__install} -d $RPM_BUILD_ROOT%{python3_sitelib}/koji_cli_plugins
 %{__install} -p -m 0644 %{module}/plugins/cli_containerbuild.py $RPM_BUILD_ROOT%{python2_sitelib}/koji_cli_plugins/cli_containerbuild.py
+%if 0%{with python3}
+%{__install} -d $RPM_BUILD_ROOT%{python3_sitelib}/koji_cli_plugins
 %{__install} -p -m 0644 %{module}/plugins/cli_containerbuild.py $RPM_BUILD_ROOT%{python3_sitelib}/koji_cli_plugins/cli_containerbuild.py
+%endif
 
 
 %files

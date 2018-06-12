@@ -38,6 +38,9 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildRequires:  python
 BuildRequires:  python2-devel
+%if 0%{with python3}
+BuildRequires:  python3-devel
+%endif
 BuildRequires:  python-setuptools
 
 %description

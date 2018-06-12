@@ -113,9 +113,11 @@ rm -rf $RPM_BUILD_ROOT
 %{__install} -p -m 0644 %{module}/plugins/builder_containerbuild.py $RPM_BUILD_ROOT%{_prefix}/lib/koji-builder-plugins/builder_containerbuild.py
 
 %{__install} -d $RPM_BUILD_ROOT%{python2_sitelib}/koji_cli_plugins
-%{__install} -d $RPM_BUILD_ROOT%{python3_sitelib}/koji_cli_plugins
 %{__install} -p -m 0644 %{module}/plugins/cli_containerbuild.py $RPM_BUILD_ROOT%{python2_sitelib}/koji_cli_plugins/cli_containerbuild.py
+%if 0%{with python3}
+%{__install} -d $RPM_BUILD_ROOT%{python3_sitelib}/koji_cli_plugins
 %{__install} -p -m 0644 %{module}/plugins/cli_containerbuild.py $RPM_BUILD_ROOT%{python3_sitelib}/koji_cli_plugins/cli_containerbuild.py
+%endif
 
 
 %files

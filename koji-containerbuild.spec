@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.8
+Version:        0.7.9
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -147,6 +147,15 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed Jun 13 2018 Robert Cerven <rcerven@redhat.com> 0.7.9-1
+- conditional install for py3 (tkopecek@redhat.com)
+- typo in python3-koji require (tkopecek@redhat.com)
+- BuildRequire for python3-devel (tkopecek@redhat.com)
+- Fix CentOS 6 Travis CI tests (twaugh@redhat.com)
+- make CLI proper koji plugin (tkopecek@redhat.com)
+- test.sh: install PyYAML for osbs-client (twaugh@redhat.com)
+- docs: minor improvements (lmeyer@redhat.com)
+
 * Fri Mar 23 2018 Robert Cerven <rcerven@redhat.com> 0.7.8-1
 - cleanup flatpak (rcerven@redhat.com)
 - Use with-open-as instead of open-try-finally-close (twaugh@redhat.com)

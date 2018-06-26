@@ -115,8 +115,8 @@ def parse_arguments(options, args, flatpak):
                        "are required"))
         assert False
 
-    if build_opts.arch_override and not build_opts.scratch:
-        parser.error(_("--arch-override is only allowed for --scratch builds"))
+    if build_opts.arch_override and not (build_opts.scratch or build_opts.isolated):
+        parser.error(_("--arch-override is only allowed for --scratch or --isolated builds"))
 
     if build_opts.signing_intent and build_opts.compose_ids:
         parser.error(_("--signing-intent cannot be used with --compose-id"))

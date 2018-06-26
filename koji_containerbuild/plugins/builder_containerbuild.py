@@ -660,12 +660,12 @@ class BuildContainerTask(BaseTaskHandler):
         self.logger.debug('base archlist: %r' % archlist)
 
         override = self.opts.get('arch_override')
-        if self.opts.get('scratch') and override:
+        if (self.opts.get('isolated') or self.opts.get('scratch')) and override:
             # only honor override for scratch builds
             self.logger.debug('arch override: %s', override)
             archlist = override.split()
         elif override:
-            raise koji.BuildError("arch-override is only allowed for scratch builds")
+            raise koji.BuildError("arch-override is only allowed for isolated or scratch builds")
         archdict = {}
         for a in archlist:
             # Filter based on canonical arches for tag

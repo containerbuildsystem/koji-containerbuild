@@ -887,10 +887,18 @@ class TestBuilder(object):
         ({'scratch': True, 'arch_override': ''}, False),
         ({'scratch': False, 'arch_override': 'x86_64'}, True),
         ({'scratch': False, 'arch_override': ''}, False),
-        ({'isolated': True, 'arch_override': 'x86_64'}, True),
+        ({'isolated': True, 'arch_override': 'x86_64'}, False),
         ({'isolated': True, 'arch_override': ''}, False),
         ({'isolated': False, 'arch_override': 'x86_64'}, True),
         ({'isolated': False, 'arch_override': ''}, False),
+        ({'scratch': True, 'isolated': True, 'arch_override': 'x86_64'}, False),
+        ({'scratch': True, 'isolated': True, 'arch_override': ''}, False),
+        ({'scratch': False, 'isolated': True, 'arch_override': 'x86_64'}, False),
+        ({'scratch': False, 'isolated': True, 'arch_override': ''}, False),
+        ({'scratch': True, 'isolated': False, 'arch_override': 'x86_64'}, False),
+        ({'scratch': True, 'isolated': False, 'arch_override': ''}, False),
+        ({'scratch': False, 'isolated': False, 'arch_override': 'x86_64'}, True),
+        ({'scratch': False, 'isolated': False, 'arch_override': ''}, False),
     ))
     def test_arch_override(self, tmpdir, orchestrator, additional_args, raises):
         koji_task_id = 123

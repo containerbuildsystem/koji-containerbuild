@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.9
+Version:        0.7.9.1
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -147,6 +147,9 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri Jun 29 2018 Robert Cerven <rcerven@redhat.com> 0.7.9.1-1
+- allow arch-override for isolated builds (mlangsdo@redhat.com)
+
 * Wed Jun 13 2018 Robert Cerven <rcerven@redhat.com> 0.7.9-1
 - conditional install for py3 (tkopecek@redhat.com)
 - typo in python3-koji require (tkopecek@redhat.com)

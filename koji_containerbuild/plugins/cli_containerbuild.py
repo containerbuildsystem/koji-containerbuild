@@ -103,7 +103,7 @@ def parse_arguments(options, args, flatpak):
     parser.add_option("--compose-id",
                       help=_("ODCS composes used. May be used multiple times. Cannot be"
                              " used with --signing-intent or --repo-url"),
-                      dest='compose_ids', action='append', metavar="COMPOSE_ID")
+                      dest='compose_ids', action='append', metavar="COMPOSE_ID", type="int")
     if not flatpak:
         parser.add_option("--release",
                           help=_("Set release value"))

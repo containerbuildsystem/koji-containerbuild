@@ -676,7 +676,7 @@ class TestBuilder(object):
             expected_opts['compose_ids'] = []
             for cid in compose_ids:
                 test_args.append('--compose-id')
-                test_args.append(cid)
+                test_args.append(str(cid))
                 expected_opts['compose_ids'].append(cid)
 
         if signing_intent:
@@ -801,7 +801,7 @@ class TestBuilder(object):
         if compose_ids:
             for ci in compose_ids:
                 test_args.append('--compose-id')
-                test_args.append(ci)
+                test_args.append(str(ci))
             expected_opts['compose_ids'] = compose_ids
 
         if signing_intent:

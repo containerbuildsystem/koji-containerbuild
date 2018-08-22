@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.9.1
+Version:        0.7.10
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -147,6 +147,10 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed Aug 22 2018 Robert Cerven <rcerven@redhat.com> 0.7.10-1
+- Pin setuptools version for RHEL6 to 39.2 (twaugh@redhat.com)
+- parse compose-ids as integers (rcerven@redhat.com)
+
 * Fri Jun 29 2018 Robert Cerven <rcerven@redhat.com> 0.7.9.1-1
 - allow arch-override for isolated builds (mlangsdo@redhat.com)
 

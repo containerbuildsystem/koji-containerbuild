@@ -128,21 +128,12 @@ there.
 Post Install Configuration
 --------------------------
 
-As the kojiadmin user (normally the koji system user), add the container channel to koji
+As the kojiadmin, add builder(s) to the newly created channel and add a
+package
 
 ::
 
-    $ psql
-    psql (8.4.20)
-    Type "help" for help.
-
-    koji=# INSERT INTO channels (name) VALUES ('container');
-
-As the kojiadmin, add builder(s) to the channel and add a package
-
-::
-
-    $ koji add-host-to-channel kojibuilder1 container
+    $ koji add-host-to-channel --new kojibuilder1 container
     $ koji add-pkg --owner some_koji_user some_koji_target testing
 
 

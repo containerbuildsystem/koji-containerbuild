@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.10
+Version:        0.7.11
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -151,6 +151,12 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri Oct 05 2018 Robert Cerven <rcerven@redhat.com> 0.7.11-1
+- No need to use psql when creating channel (tkopecek@redhat.com)
+- Proper obsolete of koji-containerbuild-cli (tkopecek@redhat.com)
+- Automatic commit of package [koji-containerbuild] minor release [0.7.10-1].
+  (rcerven@redhat.com)
+
 * Wed Aug 22 2018 Robert Cerven <rcerven@redhat.com> 0.7.10-1
 - Pin setuptools version for RHEL6 to 39.2 (twaugh@redhat.com)
 - parse compose-ids as integers (rcerven@redhat.com)

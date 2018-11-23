@@ -358,7 +358,7 @@ class BuildContainerTask(BaseTaskHandler):
         self.logger.info("Will write follow log: %s", log_basename)
         try:
             log = self.osbs().get_build_logs(build_id, follow=True)
-        except Exception, error:
+        except Exception as error:
             msg = "Exception while waiting for build logs: %s" % error
             raise ContainerError(msg)
         with open(log_filename, 'wb') as outfile:
@@ -366,7 +366,7 @@ class BuildContainerTask(BaseTaskHandler):
                 for line in log:
                     outfile.write(("%s\n" % line).encode('utf-8'))
                     outfile.flush()
-            except Exception, error:
+            except Exception as error:
                 msg = "Exception (%s) while writing build logs: %s" % (type(error),
                                                                        error)
                 raise ContainerError(msg)
@@ -377,7 +377,7 @@ class BuildContainerTask(BaseTaskHandler):
         self.logger.info("Will write demuxed logs in: %s/", logs_dir)
         try:
             logs = self.osbs().get_orchestrator_build_logs(build_id, follow=True)
-        except Exception, error:
+        except Exception as error:
             msg = "Exception while waiting for orchestrator build logs: %s" % error
             raise ContainerError(msg)
         platform_logs = {}
@@ -390,7 +390,7 @@ class BuildContainerTask(BaseTaskHandler):
             try:
                 platform_logs[platform].write((entry.line + '\n').encode('utf-8'))
                 platform_logs[platform].flush()
-            except Exception, error:
+            except Exception as error:
                 msg = "Exception (%s) while writing build logs: %s" % (type(error),
                                                                        error)
                 raise ContainerError(msg)
@@ -417,7 +417,7 @@ class BuildContainerTask(BaseTaskHandler):
             if repo_dict:
                 for repos in repo_dict.values():
                     repositories.extend(repos)
-        except Exception, error:
+        except Exception as error:
             self.logger.error("Failed to get available repositories from: %r. "
                               "Reason(%s): %s",
                               repo_dict, type(error), error)
@@ -591,7 +591,7 @@ class BuildContainerTask(BaseTaskHandler):
 
             try:
                 self._write_incremental_logs(build_id, osbs_logs_dir)
-            except Exception, error:
+            except Exception as error:
                 self.logger.info("Error while saving incremental logs: %s", error)
                 os._exit(1)
             os._exit(0)
@@ -650,7 +650,7 @@ class BuildContainerTask(BaseTaskHandler):
         arches = buildconfig['arches']
         if not arches:
             # XXX - need to handle this better
-            raise koji.BuildError, "No arches for tag %(name)s [%(id)s]" % buildconfig
+            raise koji.BuildError("No arches for tag %(name)s [%(id)s]" % buildconfig)
         tag_archlist = [koji.canonArch(a) for a in arches.split()]
         self.logger.debug('arches: %s', arches)
         if extra:
@@ -674,7 +674,7 @@ class BuildContainerTask(BaseTaskHandler):
                 archdict[a] = 1
         if not archdict:
             raise koji.BuildError("No matching arches were found")
-        return archdict.keys()
+        return list(archdict.keys())
 
     def fetchDockerfile(self, src, build_tag):
         """
@@ -702,7 +702,7 @@ class BuildContainerTask(BaseTaskHandler):
 
         fn = os.path.join(sourcedir, 'Dockerfile')
         if not os.path.exists(fn):
-            raise koji.BuildError, "Dockerfile file missing: %s" % fn
+            raise koji.BuildError("Dockerfile file missing: %s" % fn)
         return fn
 
     def _get_admin_opts(self, opts):
@@ -724,8 +724,8 @@ class BuildContainerTask(BaseTaskHandler):
                                      label_id in missing_labels]
             msg_template = ("Required LABELs haven't been found in "
                             "Dockerfile: %s.")
-            raise koji.BuildError, (msg_template %
-                                    ', '.join(formatted_labels_list))
+            raise koji.BuildError(msg_template %
+                                  ', '.join(formatted_labels_list))
 
         # Make sure the longest tag for the docker image is no more than 128 chars
         # see https://github.com/docker/docker/issues/8445
@@ -820,7 +820,7 @@ class BuildContainerTask(BaseTaskHandler):
                 try:
                     repository = result.get('repositories')
                     all_repositories.extend(repository)
-                except Exception, error:
+                except Exception as error:
                     self.logger.error("Failed to merge list of repositories "
                                       "%r. Reason (%s): %s", repository,
                                       type(error), error)

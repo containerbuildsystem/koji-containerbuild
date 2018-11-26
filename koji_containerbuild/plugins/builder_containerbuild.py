@@ -156,7 +156,7 @@ class FileWatcher(object):
                     self.logger.info('Rereading %s, inode: %s -> %s, size: %s -> %s' %
                                      (fpath, inode, stat_info.st_ino, size, stat_info.st_size))
                     fd.close()
-                fd = file(fpath, 'r')
+                fd = open(fpath, 'r')
             self._logs[fname] = (fd, stat_info.st_ino, stat_info.st_size, fpath)
         except OSError:
             self.logger.error("The build has been cancelled")

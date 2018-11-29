@@ -101,10 +101,11 @@ Finally (graceful) restart httpd daemon.
 Koji builder
 ~~~~~~~~~~~~
 
-`osbs <https://github.com/DBuildService/osbs>`_ package is required. In Fedora it
-is part of official repositories. Additionally you'll need to modify
-`/etc/osbs.conf` with addresses to OpenShift buildystem instance and registry.
-Follow osbs documentation if you find any.
+The Koji builder plugin requires the `osbs-client
+<https://github.com/projectatomic/osbs-client>`_ package. In Fedora it is part
+of the official repositories. Additionally you'll need to modify
+`/etc/osbs.conf` with the addresses to your OpenShift buildystem instance and
+registry. Follow the `osbs documentation <https://osbs.readthedocs.io/>`_.
 
 Similarly to Koji hub you'll need to find out which path will be used for
 plugins. Default path used by Koji builder is `/usr/lib/koji-builder-plugins`.

@@ -5,16 +5,13 @@ services:
 env:
   matrix:
     - OS=centos
-      OS_VERSION=6
-      PYTHON_VERSION=2
-    - OS=centos
       OS_VERSION=7
       PYTHON_VERSION=2
     - OS=fedora
-      OS_VERSION=26
+      OS_VERSION=28
       PYTHON_VERSION=2
     - OS=fedora
-      OS_VERSION=27
+      OS_VERSION=29
       PYTHON_VERSION=2
 script:
  - pip install coveralls

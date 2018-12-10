@@ -20,6 +20,8 @@
 # Authors:
 #       Pavol Babincak <pbabinca@redhat.com>
 
+from __future__ import print_function
+
 from koji.plugin import export_cli
 from koji_cli.lib import _, activate_session, parse_arches, \
                          OptionParser, watch_tasks, _running_in_bg

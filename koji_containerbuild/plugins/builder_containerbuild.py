@@ -31,6 +31,7 @@ import time
 import traceback
 import dockerfile_parse
 import signal
+from distutils.version import LooseVersion
 
 import koji
 
@@ -48,11 +49,13 @@ try:
     from osbs.exceptions import OsbsOrchestratorNotEnabled
 except ImportError:
     from osbs.exceptions import OsbsValidationException as OsbsOrchestratorNotEnabled
-try:
-    from osbs.utils import split_module_spec
-    osbs_flatpak_support = True
-except ImportError:
+
+OSBS_VERSION = osbs.__version__
+OSBS_FLATPAK_SUPPORT_VERSION = '0.43'  # based on OSBS 2536f24 released on osbs-0.43
+if LooseVersion(OSBS_VERSION) < LooseVersion(OSBS_FLATPAK_SUPPORT_VERSION):
     osbs_flatpak_support = False
+else:
+    osbs_flatpak_support = True
 
 
 # List of LABEL identifiers used within Koji. Values doesn't need to correspond

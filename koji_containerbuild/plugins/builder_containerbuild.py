@@ -31,6 +31,7 @@ import time
 import traceback
 import dockerfile_parse
 import signal
+import shutil
 from distutils.version import LooseVersion
 
 import koji
@@ -95,6 +96,9 @@ LABEL_DEFAULT_VALUES = {
     'RELEASE': object(), # Symbol-like marker to indicate unique init value
     'ARCHITECTURE': 'x86_64',
 }
+
+
+METADATA_TAG = "_metadata_"
 
 
 class ContainerError(koji.GenericError):
@@ -386,6 +390,14 @@ class BuildContainerTask(BaseTaskHandler):
         platform_logs = {}
         for entry in logs:
             platform = entry.platform
+            if platform == METADATA_TAG:
+                meta_file = entry.line
+                source_file = os.path.join(koji.pathinfo.work(), meta_file)
+                uploadpath = os.path.join(koji.pathinfo.work(), self.getUploadPath(),
+                                          os.path.basename(meta_file))
+                shutil.move(source_file, uploadpath)
+                continue
+
             if platform not in platform_logs:
                 prefix = 'orchestrator' if platform is None else platform
                 log_filename = os.path.join(logs_dir, "%s.log" % prefix)

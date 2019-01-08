@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.11
+Version:        0.7.12
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -151,6 +151,17 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Jan 08 2019 Robert Cerven <rcerven@redhat.com> 0.7.12-1
+- move metadata.json to task output for scratch (rcerven@redhat.com)
+- Add development requirements file (athos@redhat.com)
+- Update OSBS Flatpak support check (athos@redhat.com)
+- Add CONTRIBUTING.md (twaugh@redhat.com)
+- README: updates for osbs-client package (kdreyer@redhat.com)
+- Drop py2.6 support (mbasti@redhat.com)
+- travis: use recent fedora versions (mbasti@redhat.com)
+- Py3: replace `file` with `open` (mbasti@redhat.com)
+- Py 2to3 updates (mbasti@redhat.com)
+
 * Fri Oct 05 2018 Robert Cerven <rcerven@redhat.com> 0.7.11-1
 - No need to use psql when creating channel (tkopecek@redhat.com)
 - Proper obsolete of koji-containerbuild-cli (tkopecek@redhat.com)

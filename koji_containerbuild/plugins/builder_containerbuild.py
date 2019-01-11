@@ -395,7 +395,7 @@ class BuildContainerTask(BaseTaskHandler):
                 source_file = os.path.join(koji.pathinfo.work(), meta_file)
                 uploadpath = os.path.join(koji.pathinfo.work(), self.getUploadPath(),
                                           os.path.basename(meta_file))
-                shutil.move(source_file, uploadpath)
+                shutil.copy(source_file, uploadpath)
                 continue
 
             if platform not in platform_logs:

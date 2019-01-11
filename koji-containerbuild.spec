@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.12
+Version:        0.7.12.1
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -151,6 +151,10 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri Jan 11 2019 Robert Cerven <rcerven@redhat.com> 0.7.12.1-1
+- copy instead of move metadata.json, because brew builder has source mounted
+  as read-only (rcerven@redhat.com)
+
 * Tue Jan 08 2019 Robert Cerven <rcerven@redhat.com> 0.7.12-1
 - move metadata.json to task output for scratch (rcerven@redhat.com)
 - Add development requirements file (athos@redhat.com)

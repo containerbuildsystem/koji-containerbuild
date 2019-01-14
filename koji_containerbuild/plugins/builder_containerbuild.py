@@ -148,7 +148,7 @@ class FileWatcher(object):
             return
 
         for fname in results:
-            if fname.endswith('.log') and fname not in self._logs:
+            if (fname.endswith('.log') or fname.endswith('.json')) and fname not in self._logs:
                 fpath = os.path.join(self._result_dir, fname)
                 self._logs[fname] = (None, None, 0, fpath)
 
@@ -393,8 +393,7 @@ class BuildContainerTask(BaseTaskHandler):
             if platform == METADATA_TAG:
                 meta_file = entry.line
                 source_file = os.path.join(koji.pathinfo.work(), meta_file)
-                uploadpath = os.path.join(koji.pathinfo.work(), self.getUploadPath(),
-                                          os.path.basename(meta_file))
+                uploadpath = os.path.join(logs_dir, os.path.basename(meta_file))
                 shutil.copy(source_file, uploadpath)
                 continue
 

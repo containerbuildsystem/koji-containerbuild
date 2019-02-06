@@ -767,6 +767,9 @@ class BuildContainerTask(BaseTaskHandler):
 
         self.event_id = self.session.getLastEvent()['id']
         target_info = self.session.getBuildTarget(target, event=self.event_id)
+        if not target_info:
+            raise koji.BuildError("Target `%s` not found" % target)
+
         build_tag = target_info['build_tag']
         archlist = self.getArchList(build_tag)
 

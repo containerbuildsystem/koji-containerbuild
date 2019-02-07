@@ -291,6 +291,29 @@ class TestBuilder(object):
                 'koji_builds': [koji_build_id]
             }
 
+    def test_get_build_target_failed(self, tmpdir):
+        koji_task_id = 123
+        last_event_id = 456
+        session = flexmock()
+        (session
+            .should_receive('getLastEvent')
+            .and_return({'id': last_event_id}))
+        (session
+            .should_receive('getBuildTarget')
+            .with_args('target', event=last_event_id)
+            .and_return(None))
+        src = self._mock_git_source()
+        task = builder_containerbuild.BuildContainerTask(id=koji_task_id,
+                                                         method='buildContainer',
+                                                         params='params',
+                                                         session=session,
+                                                         options={},
+                                                         workdir=str(tmpdir),
+                                                         demux=True)
+        with pytest.raises(koji.BuildError) as exc:
+            task.handler(src['src'], 'target', opts={})
+        assert "Target `target` not found" in str(exc)
+
     def test_private_branch(self, tmpdir):
         git_uri = 'git://pkgs.example.com/rpms/fedora-docker'
         git_ref = 'private-test1'

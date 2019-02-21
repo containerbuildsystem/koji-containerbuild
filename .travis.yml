@@ -13,8 +13,9 @@ env:
     - OS=fedora
       OS_VERSION=29
       PYTHON_VERSION=2
-script:
+install:
  - pip install coveralls
+script:
  - ./test.sh
 after_success: coveralls
 notifications:

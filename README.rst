@@ -1,6 +1,9 @@
 Koji containerbuild
 ===================
 
+.. image:: https://coveralls.io/repos/github/release-engineering/koji-containerbuild/badge.svg?branch=master
+   :target: https://coveralls.io/github/release-engineering/koji-containerbuild?branch=master
+
 This package extends Koji buildsystem with plugin which allows building
 containers via OpenShift buildsystem. Additionally it provides CLI tool to
 submit builds based on koji CLI.

@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.12.1
+Version:        0.7.13
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -151,6 +151,14 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed Mar 06 2019 Robert Cerven <rcerven@redhat.com> 0.7.13-1
+- Add coverall badge to Readme (mbasti@redhat.com)
+- CI: Install coverall in install step (mbasti@redhat.com)
+- containerbuild: make sure the target exists before trying to tag it
+  (mlangsdo@redhat.com)
+- use incremental_upload for metadata.json, because source file is on read-only
+  filesystem (rcerven@redhat.com)
+
 * Fri Jan 11 2019 Robert Cerven <rcerven@redhat.com> 0.7.12.1-1
 - copy instead of move metadata.json, because brew builder has source mounted
   as read-only (rcerven@redhat.com)

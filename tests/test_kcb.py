@@ -810,7 +810,7 @@ class TestBuilder(object):
         (None, 'intent1', None, True),
         (None, None, ['www.repo.com'], True),
         ([1, 2, 3], 'intent1', None, False),
-        ([1, 2, 3], None, ['www.repo.com'], False),
+        ([1, 2, 3], None, ['www.repo.com'], True),
         ([1, 2, 3], 'intent1', ['www.repo.com'], False),
     ))
     def test_compose_id_arg_restrictions(self, tmpdir, compose_ids, signing_intent, yum_repourls,

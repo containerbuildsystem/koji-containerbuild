@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.13
+Version:        0.7.13.1
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -151,6 +151,9 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri Mar 08 2019 Robert Cerven <rcerven@redhat.com> 0.7.13.1-1
+- allow yum_repo with compose_id (rcerven@redhat.com)
+
 * Wed Mar 06 2019 Robert Cerven <rcerven@redhat.com> 0.7.13-1
 - Add coverall badge to Readme (mbasti@redhat.com)
 - CI: Install coverall in install step (mbasti@redhat.com)

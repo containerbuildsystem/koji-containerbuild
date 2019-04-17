@@ -12,6 +12,7 @@ import pytest
 import osbs
 import os
 import os.path
+import signal
 import koji
 from koji_containerbuild.plugins import builder_containerbuild
 from osbs.exceptions import OsbsValidationException
@@ -321,6 +322,64 @@ class TestBuilder(object):
                 'repositories': ['unique-repo', 'primary-repo'],
                 'koji_builds': [koji_build_id]
             }
+
+    @pytest.mark.parametrize('reason, expected_exc_type', [
+        ('canceled', builder_containerbuild.ContainerCancelled),
+        ('failed', builder_containerbuild.ContainerError),
+    ])
+    def test_createContainer_failure(self, tmpdir, reason, expected_exc_type):
+        koji_task_id = 123
+        last_event_id = 456
+        koji_build_id = 999
+
+        session = self._mock_session(last_event_id, koji_task_id)
+        folders_info = self._mock_folders(str(tmpdir))
+        src = self._mock_git_source()
+        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+
+        task = builder_containerbuild.BuildContainerTask(id=koji_task_id,
+                                                         method='buildContainer',
+                                                         params='params',
+                                                         session=session,
+                                                         options=options,
+                                                         workdir='workdir')
+
+        (flexmock(task)
+            .should_receive('fetchDockerfile')
+            .with_args(src['src'], 'build-tag')
+            .and_return(folders_info['dockerfile_path']))
+
+        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
+                                     src=src,
+                                     koji_task_id=koji_task_id)
+
+        build_finished_response = flexmock(status=500, json={})
+        (build_finished_response
+            .should_receive('is_succeeded')
+            .and_return(False))
+        (build_finished_response
+            .should_receive('is_cancelled')
+            .and_return(reason == 'canceled'))
+        (build_finished_response
+            .should_receive('is_failed')
+            .and_return(reason == 'failed'))
+
+        (task._osbs
+            .should_receive('wait_for_build_to_finish')
+            .and_return(build_finished_response))
+
+        if reason == 'canceled':
+            task._osbs.wait_for_build_to_get_scheduled = \
+                lambda build_id: os.kill(os.getpid(), signal.SIGINT)
+            (task._osbs
+                .should_receive('cancel_build')
+                .once())
+            (session
+                .should_receive('cancelTask')
+                .once())
+
+        with pytest.raises(expected_exc_type):
+            task.handler(src['src'], 'target')
 
     def test_get_build_target_failed(self, tmpdir):
         koji_task_id = 123

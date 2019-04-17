@@ -81,6 +81,117 @@ class TestBuilder(object):
             repositories.extend(repo)
         assert set(cct._get_repositories(response)) ^ set(repositories) == set([])
 
+    def _check_orchestrator_logs(self, log_entries, logs_dir):
+        def check_meta_entry(filename):
+            source_file = os.path.join(koji.pathinfo.work(), filename)
+            target_file = os.path.join(logs_dir, filename)
+
+            with open(source_file) as s, open(target_file) as t:
+                assert s.read() == t.read()
+
+        log_contents = {}
+        for entry in log_entries:
+            platform = entry.platform or 'orchestrator'
+
+            if platform == builder_containerbuild.METADATA_TAG:
+                check_meta_entry(entry.line)
+            else:
+                log_contents[platform] = '{old}{new}\n'.format(
+                    old=log_contents.get(platform, ''),
+                    new=entry.line
+                )
+
+        for platform, logs_content in log_contents.items():
+            logfile_path = os.path.join(logs_dir, platform + '.log')
+            with open(logfile_path) as log_file:
+                assert log_file.read() == logs_content
+
+    def _check_non_orchestrator_logs(self, log_entries, logs_dir):
+        logs_content = ''.join(line + '\n' for line in log_entries)
+        logfile_path = os.path.join(logs_dir, 'openshift-incremental.log')
+        with open(logfile_path) as log_file:
+            assert log_file.read() == logs_content
+
+    def _check_logfiles(self, log_entries, logs_dir, orchestrator):
+        # check that all the log entries for a build are where they are supposed to be
+        if orchestrator:
+            self._check_orchestrator_logs(log_entries, logs_dir)
+        else:
+            self._check_non_orchestrator_logs(log_entries, logs_dir)
+
+    @pytest.mark.parametrize('orchestrator', [False, True])
+    @pytest.mark.parametrize('get_logs_exc', [None, Exception('error')])
+    @pytest.mark.parametrize('build_not_finished', [False, True])
+    def test_write_logs(self, tmpdir, orchestrator, get_logs_exc, build_not_finished):
+        cct = builder_containerbuild.BuildContainerTask(id=1,
+                                                        method='buildContainer',
+                                                        params='params',
+                                                        session='session',
+                                                        options='options',
+                                                        workdir='workdir',
+                                                        demux=orchestrator)
+        if orchestrator:
+            get_logs_fname = 'get_orchestrator_build_logs'
+            log_entries = [LogEntry(None, 'line 1'),
+                           LogEntry(None, 'line 2'),
+                           LogEntry('x86_64', 'line 1'),
+                           LogEntry('x86_64', 'line 2'),
+                           LogEntry(builder_containerbuild.METADATA_TAG, 'x.log')]
+
+            koji_tmpdir = tmpdir.mkdir('koji')
+            koji_tmpdir.join('x.log').write('line 1\n'
+                                            'line 2\n')
+
+            (flexmock(koji.pathinfo)
+                .should_receive('work')
+                .and_return(str(koji_tmpdir)))
+        else:
+            get_logs_fname = 'get_build_logs'
+            log_entries = ['line 1',
+                           'line 2']
+
+        build_response = flexmock(status=42)
+        (build_response
+            .should_receive('is_running')
+            .and_return(build_not_finished))
+        (build_response
+            .should_receive('is_pending')
+            .and_return(build_not_finished))
+
+        cct._osbs = flexmock()
+        (cct._osbs
+            .should_receive('get_build')
+            .and_return(build_response))
+
+        should_receive = cct._osbs.should_receive(get_logs_fname)
+        if get_logs_exc:
+            should_receive.and_raise(get_logs_exc)
+        else:
+            should_receive.and_return(log_entries)
+
+        if get_logs_exc:
+            exc_type = builder_containerbuild.ContainerError
+            exc_msg = 'Exception while waiting for {what}: {why}'.format(
+                what='orchestrator build logs' if orchestrator else 'build logs',
+                why=get_logs_exc
+            )
+        elif build_not_finished:
+            exc_type = builder_containerbuild.ContainerError
+            exc_msg = ('Build log finished but build still has not finished: {}.'
+                       .format(build_response.status))
+        else:
+            exc_type = exc_msg = None
+
+        if exc_type is not None:
+            with pytest.raises(exc_type) as exc_info:
+                cct._write_incremental_logs('id', str(tmpdir))
+            assert str(exc_info.value) == exc_msg
+        else:
+            cct._write_incremental_logs('id', str(tmpdir))
+
+        if get_logs_exc is None:
+            self._check_logfiles(log_entries, str(tmpdir), orchestrator)
+
     def _mock_session(self, last_event_id, koji_task_id, pkg_info=USE_DEFAULT_PKG_INFO):
         if pkg_info == USE_DEFAULT_PKG_INFO:
             pkg_info = {'blocked': False}

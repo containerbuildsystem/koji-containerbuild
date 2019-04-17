@@ -241,6 +241,29 @@ class TestBuilder(object):
         src = git_uri + '#' + git_ref
         return {'git_uri': git_uri, 'git_ref': git_ref, 'src': src}
 
+    def test_checkLabels_missing_labels(self, tmpdir):
+        cct = builder_containerbuild.BuildContainerTask(id=1,
+                                                        method='buildContainer',
+                                                        params='params',
+                                                        session='session',
+                                                        options='options',
+                                                        workdir='workdir')
+
+        dockerfile_content = 'FROM fedora\n'
+        missing_labels = ['com.redhat.component (or BZComponent)',
+                          'version (or Version)']
+        folder_info = self._mock_folders(str(tmpdir),
+                                         dockerfile_content=dockerfile_content)
+        (flexmock(cct)
+            .should_receive('fetchDockerfile')
+            .and_return(folder_info['dockerfile_path']))
+
+        with pytest.raises(koji.BuildError) as exc_info:
+            cct.checkLabels('src', 'build-tag')
+
+        err_msg = str(exc_info.value)
+        assert all(label in err_msg for label in missing_labels)
+
     @pytest.mark.parametrize(('pkg_info', 'failure'), (
         (None, 'not in list for tag'),
         ({'blocked': True}, 'is blocked for'),

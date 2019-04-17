@@ -49,14 +49,22 @@ class TestBuilder(object):
                                                         workdir=resdir)
         assert cct.resultdir() == '%s/osbslogs' % resdir
 
-    def test_osbs(self):
+    @pytest.mark.parametrize('scratch', [False, True])
+    def test_osbs(self, scratch):
         cct = builder_containerbuild.BuildContainerTask(id=1,
                                                         method='buildContainer',
                                                         params='params',
                                                         session='session',
                                                         options='options',
                                                         workdir='workdir')
-        assert type(cct.osbs()) is osbs.api.OSBS
+        cct.opts['scratch'] = scratch
+        osbs_obj = cct.osbs()
+
+        expected_conf_section = 'scratch' if scratch else 'default'
+
+        assert type(osbs_obj) is osbs.api.OSBS
+        assert osbs_obj.os_conf.conf_section == expected_conf_section
+        assert osbs_obj.build_conf.conf_section == expected_conf_section
 
     @pytest.mark.parametrize("repos", [{'repo1': 'test1'}, {'repo2': 'test2'}])
     def test_get_repositories(self, repos):

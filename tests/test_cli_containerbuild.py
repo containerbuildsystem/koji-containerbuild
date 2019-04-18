@@ -18,9 +18,122 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
 import pytest
 from flexmock import flexmock
+from collections import OrderedDict
 
 from koji_containerbuild.plugins import cli_containerbuild
 from koji_containerbuild.plugins.cli_containerbuild import parse_arguments
+
+
+def mock_session(target,
+                 source,
+                 target_known=True,
+                 dest_tag_name='destination',
+                 dest_tag_known=True,
+                 dest_tag_locked=False,
+                 task_id='42',
+                 task_success=True,
+                 task_result={},
+                 priority=None,
+                 channel=cli_containerbuild.DEFAULT_CHANNEL,
+                 running_in_background=False):
+    """
+    Mock a session for the purposes of cli_containerbuild.handle_build()
+
+    The default argument values are set up for a successful build,
+    as long as `target` and `source` match those provided via CLI args.
+    """
+    (flexmock(cli_containerbuild)
+        .should_receive('activate_session'))  # and do nothing
+    (flexmock(cli_containerbuild)
+        .should_receive('_running_in_bg')
+        .and_return(running_in_background))
+    (flexmock(cli_containerbuild)
+        .should_receive('watch_tasks')
+        .and_return(0 if task_success else 1))
+
+    build_target = {'dest_tag': dest_tag_name,
+                    'dest_tag_name': dest_tag_name}
+
+    dest_tag = {'name': dest_tag_name,
+                'locked': dest_tag_locked}
+
+    session_status = {'logged_in': True}
+
+    def logout():
+        session_status['logged_in'] = False
+
+    session = flexmock(status=session_status, logout=logout)
+    (session
+        .should_receive('getBuildTarget')
+        .with_args(target)
+        .and_return(build_target if target_known else None))
+    (session
+        .should_receive('getTag')
+        .with_args(build_target['dest_tag'])
+        .and_return(dest_tag if dest_tag_known else None))
+    (session
+        .should_receive('buildContainer')
+        .with_args(source, target, dict,
+                   priority=priority, channel=channel)
+        .and_return(task_id))
+    (session
+        .should_receive('getTaskResult')
+        .with_args(task_id)
+        .and_return(task_result))
+
+    return session
+
+
+def build_cli_args(target,
+                   source,
+                   git_branch='random-branch',
+                   wait=None,
+                   background=False):
+    """Build command line arguments for cli_containerbuild.handle_build()"""
+    args = [target, source, '--git-branch', git_branch]
+    if wait is not None:
+        args.append('--wait' if wait else '--nowait')
+    if background:
+        args.append('--background')
+    return args
+
+
+def _expected_output(result, offset, indent):
+    if isinstance(result, list):
+        for item in result:
+            for line in _expected_output(item, offset+indent, indent):
+                yield line
+    elif isinstance(result, dict):
+        for key, value in result.items():
+            yield '{}{}:\n'.format(offset, key)
+            for line in _expected_output(value, offset+indent, indent):
+                yield line
+    else:
+        yield '{}{}\n'.format(offset, result)
+
+
+def expected_task_output(task_id, result, weburl, quiet=False):
+    result['koji_builds'] = ['{}/buildinfo?buildID={}'.format(weburl, build_id)
+                             for build_id in result.get('koji_builds', [])]
+    output = ''
+    if not quiet:
+        output += 'Created task: {}\n'.format(task_id)
+        output += 'Task info: {}/taskinfo?taskID={}\n'.format(weburl, task_id)
+    output += "Task Result ({}):\n".format(task_id)
+    output += ''.join(_expected_output(result, offset='', indent=' ' * 2))
+    return output
+
+
+def make_dicts_ordered(obj):
+    """Make dicts in a json-like object ordered"""
+    if isinstance(obj, dict):
+        obj = OrderedDict(obj)
+        for k, v in obj.items():
+            obj[k] = make_dicts_ordered(v)
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            obj[i] = make_dicts_ordered(v)
+    return obj
 
 
 class TestCLI(object):
@@ -276,3 +389,156 @@ class TestCLI(object):
 
         assert parsed_args == expected_args
         assert opts == expected_opts
+
+    @pytest.mark.parametrize('cause, stderr_msg', [
+        ('unknown target', 'Unknown build target'),
+        ('unknown dest tag', 'Unknown destination tag'),
+        ('dest tag locked', 'is locked'),
+        (':// not in URL', 'scm URL does not look like an URL to a source repository'),
+        ('# not in URL', 'scm URL must be of the form <url_to_repository>#<revision>)')
+    ])
+    def test_build_sysexit(self, cause, stderr_msg, capsys):
+        target = 'target'
+        source = 'https://repo#revision'
+        if cause == ':// not in URL':
+            source = source.replace('://', '')
+        elif cause == '# not in URL':
+            source = source.replace('#', '')
+
+        options = flexmock(quiet=True)
+
+        session = mock_session(
+            target,
+            source,
+            target_known=(cause != 'unknown target'),
+            dest_tag_known=(cause != 'unknown dest tag'),
+            dest_tag_locked=(cause == 'dest tag locked')
+        )
+
+        args = build_cli_args(target, source)
+
+        with pytest.raises(SystemExit):
+            cli_containerbuild.handle_container_build(options, session, args)
+
+        _, stderr_output = capsys.readouterr()
+        assert stderr_msg in stderr_output
+
+    @pytest.mark.parametrize('flatpak', [True, False])
+    @pytest.mark.parametrize('quiet', [True, False])
+    @pytest.mark.parametrize('build_result', [
+        {},
+        {'empty_list': []},
+        {'empty_dict': {}},
+        {'list': ['item_1', 'item_2'],
+         'dict': {'key': 'value'},
+         'key': 'value'},
+        {'list_of_dicts': [
+            {},
+            {'key': 'value'},
+            {'sublist': ['item']},
+            {'subdict': {'inner_key': 'inner_value'}}
+        ]},
+        {'list_of_lists': [
+            [],
+            ['item_1', 'item_2'],
+            [['nested']],
+            ['various_types', {'key': 'value'}]
+        ]}
+    ])
+    def test_build_success(self, build_result, quiet, flatpak, capsys):
+        target = 'target'
+        source = 'https://repo#revision'
+        task_id = '42'
+        # to prevent test failures due to dict iteration randomness
+        build_result = make_dicts_ordered(build_result)
+
+        options = flexmock(quiet=quiet, weburl='x.org')
+
+        session = mock_session(
+            target,
+            source,
+            task_id=task_id,
+            task_result=build_result
+        )
+
+        args = build_cli_args(target, source)
+        handle_build = (cli_containerbuild.handle_flatpak_build if flatpak
+                        else cli_containerbuild.handle_container_build)
+
+        rv = handle_build(options, session, args)
+        stdout_output, _ = capsys.readouterr()
+
+        expected_output = expected_task_output(task_id, build_result,
+                                               options.weburl, quiet=quiet)
+
+        assert rv == 0
+        assert stdout_output == expected_output
+        assert not session.status['logged_in']
+
+    def test_build_failure(self, capsys):
+        target = 'target'
+        source = 'https://repo#revision'
+
+        options = flexmock(quiet=True)
+
+        session = mock_session(
+            target,
+            source,
+            task_success=False,
+            task_result={'this': 'should not be in output'}
+        )
+
+        args = build_cli_args(target, source)
+
+        rv = cli_containerbuild.handle_container_build(options, session, args)
+        stdout_output, _ = capsys.readouterr()
+
+        assert rv != 0
+        assert stdout_output == ''
+        assert not session.status['logged_in']
+
+    @pytest.mark.parametrize('why', [
+        '--nowait',
+        'running in background'
+    ])
+    def test_no_wait(self, why, capsys):
+        target = 'target'
+        source = 'https://repo#revision'
+
+        options = flexmock(quiet=True)
+
+        session = mock_session(
+            target,
+            source,
+            task_result={'this': 'should not be in output'},
+            running_in_background=(why == 'running in background')
+        )
+
+        wait = False if why == '--nowait' else None
+        args = build_cli_args(target, source, wait=wait)
+
+        rv = cli_containerbuild.handle_container_build(options, session, args)
+        stdout_output, _ = capsys.readouterr()
+
+        assert rv is None
+        assert stdout_output == ''
+        assert session.status['logged_in']
+
+    def test_background_priority(self):
+        target = 'target'
+        source = 'https://repo#revision'
+
+        options = flexmock(quiet=True, weburl='x.org')
+
+        session = mock_session(
+            target,
+            source,
+            priority=5
+        )
+
+        args = build_cli_args(target, source, background=True)
+
+        rv = cli_containerbuild.handle_container_build(options, session, args)
+
+        assert rv == 0
+        assert not session.status['logged_in']

@@ -73,5 +73,10 @@ if [[ $OS != "fedora" ]]; then
   $RUN $PYTHON get-pip.py
 fi
 
+# "mock" koji-hub (just to prevent ImportError, actual mocking done in tests)
+KOJIHUB_PATH='/usr/share/koji-hub'
+$RUN mkdir -p "$KOJIHUB_PATH"
+$RUN touch "$KOJIHUB_PATH/kojihub.py"
+
 # Run tests
 $RUN pytest -vv tests --cov koji_containerbuild

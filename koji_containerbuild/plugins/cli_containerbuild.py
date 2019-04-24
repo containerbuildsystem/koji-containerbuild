@@ -1,6 +1,6 @@
 """Module intended to be put into koji CLI to get container build commands"""
 
-# Copyright (C) 2015  Red Hat, Inc.
+# Copyright (C) 2015, 2019  Red Hat, Inc.
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -154,19 +154,16 @@ def handle_build(options, session, args, flatpak):
     activate_session(session, options)
 
     target = args[0]
-    if target.lower() == "none" and build_opts.repo_id:
-        target = None
-        build_opts.skip_tag = True
-    else:
-        build_target = session.getBuildTarget(target)
-        if not build_target:
-            parser.error(_("Unknown build target: %s" % target))
-        dest_tag = session.getTag(build_target['dest_tag'])
-        if not dest_tag:
-            parser.error(_("Unknown destination tag: %s" %
-                           build_target['dest_tag_name']))
-        if dest_tag['locked'] and not build_opts.scratch:
-            parser.error(_("Destination tag %s is locked" % dest_tag['name']))
+    build_target = session.getBuildTarget(target)
+    if not build_target:
+        parser.error(_("Unknown build target: %s" % target))
+    dest_tag = session.getTag(build_target['dest_tag'])
+    if not dest_tag:
+        parser.error(_("Unknown destination tag: %s" %
+                       build_target['dest_tag_name']))
+    if dest_tag['locked'] and not build_opts.scratch:
+        parser.error(_("Destination tag %s is locked" % dest_tag['name']))
+
     source = args[1]
 
     priority = None

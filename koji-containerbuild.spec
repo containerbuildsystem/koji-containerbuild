@@ -21,11 +21,11 @@ Summary:        Koji support for building layered container images
 Group:          Applications/System
 
 License:        LGPLv2
-URL:            https://github.com/release-engineering/%{name}
+URL:            https://github.com/containerbuildsystem/%{name}
 #Use the following commands to generate the tarball:
 #
 #    git clone --single-branch --branch koji-containerbuild-VERSION-RELEASE \
-#      https://github.com/release-engineering/koji-containerbuild.git && \
+#      https://github.com/containerbuildsystem/koji-containerbuild.git && \
 #    cd ./koji-containerbuild && \
 #    python setup.py sdist
 #

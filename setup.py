@@ -14,7 +14,7 @@ setup(
     author_email="pbabinca@redhat.com",
     description="Container build support for Koji buildsystem",
     license="LGPLv2+",
-    url="https://github.com/release-engineering/koji-containerbuild",
+    url="https://github.com/containerbuildsystem/koji-containerbuild",
     packages=[
         'koji_containerbuild',
         'koji_containerbuild.plugins',

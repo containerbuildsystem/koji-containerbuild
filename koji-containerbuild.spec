@@ -36,12 +36,13 @@ Source0:        %{name}-%{version}.tar.gz
 BuildArch:      noarch
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
-BuildRequires:  python
-BuildRequires:  python2-devel
 %if 0%{with python3}
 BuildRequires:  python3-devel
-%endif
+BuildRequires:  python3-setuptools
+%else
+BuildRequires:  python2-devel
 BuildRequires:  python-setuptools
+%endif
 
 %description
 Koji support for building layered container images
@@ -105,39 +106,52 @@ build layered container images.
 
 
 %build
+%if 0%{with python3}
+%{__python3} setup.py build
+%else
 %{__python2} setup.py build
+%endif
 
 
 %install
 rm -rf $RPM_BUILD_ROOT
+%if 0%{with python3}
+%{__python3} setup.py install -O1 --skip-build --root $RPM_BUILD_ROOT
+%else
 %{__python2} setup.py install -O1 --skip-build --root $RPM_BUILD_ROOT
+%endif
 %{__install} -d $RPM_BUILD_ROOT%{_prefix}/lib/koji-hub-plugins
 %{__install} -p -m 0644 %{module}/plugins/hub_containerbuild.py $RPM_BUILD_ROOT%{_prefix}/lib/koji-hub-plugins/hub_containerbuild.py
 %{__install} -d $RPM_BUILD_ROOT%{_prefix}/lib/koji-builder-plugins
 %{__install} -p -m 0644 %{module}/plugins/builder_containerbuild.py $RPM_BUILD_ROOT%{_prefix}/lib/koji-builder-plugins/builder_containerbuild.py
 
-%{__install} -d $RPM_BUILD_ROOT%{python2_sitelib}/koji_cli_plugins
-%{__install} -p -m 0644 %{module}/plugins/cli_containerbuild.py $RPM_BUILD_ROOT%{python2_sitelib}/koji_cli_plugins/cli_containerbuild.py
 %if 0%{with python3}
 %{__install} -d $RPM_BUILD_ROOT%{python3_sitelib}/koji_cli_plugins
 %{__install} -p -m 0644 %{module}/plugins/cli_containerbuild.py $RPM_BUILD_ROOT%{python3_sitelib}/koji_cli_plugins/cli_containerbuild.py
+#else
+%{__install} -d $RPM_BUILD_ROOT%{python2_sitelib}/koji_cli_plugins
+%{__install} -p -m 0644 %{module}/plugins/cli_containerbuild.py $RPM_BUILD_ROOT%{python2_sitelib}/koji_cli_plugins/cli_containerbuild.py
 %endif
 
 
 %files
+%if 0%{with python3}
+%{python3_sitelib}/*
+%else
 %{python2_sitelib}/*
+%endif
 %doc docs AUTHORS README.rst
 %if 0%{?rhel} && 0%{?rhel} <= 6
 %{!?_licensedir:%global license %doc}
 %endif
 %license LICENSE
 
-%files -n python2-%{name}-cli
-%{python2_sitelib}/koji_cli_plugins
-
 %if 0%{with python3}
 %files -n python%{python3_pkgversion}-%{name}-cli
 %{python3_sitelib}/koji_cli_plugins
+%else
+%files -n python2-%{name}-cli
+%{python2_sitelib}/koji_cli_plugins
 %endif
 
 %files hub

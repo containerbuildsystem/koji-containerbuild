@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.13.1
+Version:        0.7.14
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -165,6 +165,23 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed Jun 12 2019 Robert Cerven <rcerven@redhat.com> 0.7.14-1
+- fix building when only py3 is available in rhel8 (rcerven@redhat.com)
+- enable building py3 package for rhel8 (rcerven@redhat.com)
+- change organization references from release-engineering to
+  containerbuildsystem (rcerven@redhat.com)
+- Add unit tests for cli_containerbuild (acmiel@redhat.com)
+- Rename test_kcb to test_builder_containerbuild (acmiel@redhat.com)
+- Move existing CLI tests to their own file (acmiel@redhat.com)
+- Fix wrong license in test_kcb.py (acmiel@redhat.com)
+- Remove dead code (twaugh@redhat.com)
+- Add unit tests for hub_containerbuild plugin (acmiel@redhat.com)
+- Test methods for writings logs (acmiel@redhat.com)
+- Test BuildContainerTask.createContainer() failures (acmiel@redhat.com)
+- Test missing labels in BuildContainerTask.checkLabels() (acmiel@redhat.com)
+- Test scratch configuration in BuildContainerTask.osbs() (acmiel@redhat.com)
+- Add stickler config file (acmiel@redhat.com)
+
 * Fri Mar 08 2019 Robert Cerven <rcerven@redhat.com> 0.7.13.1-1
 - allow yum_repo with compose_id (rcerven@redhat.com)
 

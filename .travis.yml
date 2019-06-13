@@ -13,6 +13,9 @@ env:
     - OS=fedora
       OS_VERSION=29
       PYTHON_VERSION=2
+    - OS=fedora
+      OS_VERSION=30
+      PYTHON_VERSION=3
 install:
  - pip install coveralls
 script:

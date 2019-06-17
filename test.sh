@@ -17,14 +17,15 @@ if [[ $OS == "fedora" ]]; then
   PIP_PKG="python$PYTHON_VERSION-pip"
   PIP="pip$PYTHON_VERSION"
   PKG="dnf"
-  PKG_EXTRA="dnf-plugins-core git-core python$PYTHON_VERSION-koji"
+  PKG_EXTRA="dnf-plugins-core git-core
+             python$PYTHON_VERSION-koji python$PYTHON_VERSION-koji-hub"
   BUILDDEP="dnf builddep"
   PYTHON="python$PYTHON_VERSION"
 else
   PIP_PKG="python-pip"
   PIP="pip"
   PKG="yum"
-  PKG_EXTRA="yum-utils git-core koji python-dockerfile-parse"
+  PKG_EXTRA="yum-utils git-core koji koji-hub python-dockerfile-parse"
   BUILDDEP="yum-builddep"
   PYTHON="python"
 fi
@@ -72,11 +73,6 @@ if [[ $OS != "fedora" ]]; then
   $RUN curl -O https://bootstrap.pypa.io/2.6/get-pip.py
   $RUN $PYTHON get-pip.py
 fi
-
-# "mock" koji-hub (just to prevent ImportError, actual mocking done in tests)
-KOJIHUB_PATH='/usr/share/koji-hub'
-$RUN mkdir -p "$KOJIHUB_PATH"
-$RUN touch "$KOJIHUB_PATH/kojihub.py"
 
 # Run tests
 $RUN pytest -vv tests --cov koji_containerbuild

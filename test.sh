@@ -5,6 +5,7 @@ set -eux
 OS=${OS:="centos"}
 OS_VERSION=${OS_VERSION:="7"}
 PYTHON_VERSION=${PYTHON_VERSION:="2"}
+ACTION=${ACTION:="test"}
 IMAGE="$OS:$OS_VERSION"
 # Pull fedora images from registry.fedoraproject.org
 if [[ $OS == "fedora" ]]; then
@@ -74,5 +75,22 @@ if [[ $OS != "fedora" ]]; then
   $RUN $PYTHON get-pip.py
 fi
 
+case ${ACTION} in
+"test")
+  TEST_CMD="pytest -vv tests --cov koji_containerbuild"
+  ;;
+"bandit")
+  $RUN $PIP install bandit
+  TEST_CMD="bandit-baseline -r koji_containerbuild -ll -ii"
+  ;;
+*)
+  echo "Unknown action: ${ACTION}"
+  exit 2
+  ;;
+esac
+
 # Run tests
-$RUN pytest -vv tests --cov koji_containerbuild
+$RUN ${TEST_CMD} "$@"
+
+echo "To run tests again:"
+echo "$RUN ${TEST_CMD}"

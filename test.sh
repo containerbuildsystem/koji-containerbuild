@@ -19,14 +19,15 @@ if [[ $OS == "fedora" ]]; then
   PIP="pip$PYTHON_VERSION"
   PKG="dnf"
   PKG_EXTRA="dnf-plugins-core git-core
-             python$PYTHON_VERSION-koji python$PYTHON_VERSION-koji-hub"
+             python$PYTHON_VERSION-koji python$PYTHON_VERSION-koji-hub
+             python$PYTHON_VERSION-jsonschema"
   BUILDDEP="dnf builddep"
   PYTHON="python$PYTHON_VERSION"
 else
   PIP_PKG="python-pip"
   PIP="pip"
   PKG="yum"
-  PKG_EXTRA="yum-utils git-core koji koji-hub"
+  PKG_EXTRA="yum-utils git-core koji koji-hub python2-jsonschema"
   BUILDDEP="yum-builddep"
   PYTHON="python"
 fi

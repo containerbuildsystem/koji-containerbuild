@@ -48,8 +48,9 @@ def buildContainer(src, target, opts=None, priority=None, channel='container'):
 
     Returns the task ID
     """
-    if not opts:
+    if opts is None:
         opts = {}
+
     taskOpts = {}
     if priority:
         if priority < 0:

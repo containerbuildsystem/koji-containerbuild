@@ -26,7 +26,7 @@ else
   PIP_PKG="python-pip"
   PIP="pip"
   PKG="yum"
-  PKG_EXTRA="yum-utils git-core koji koji-hub python-dockerfile-parse"
+  PKG_EXTRA="yum-utils git-core koji koji-hub"
   BUILDDEP="yum-builddep"
   PYTHON="python"
 fi
@@ -61,6 +61,12 @@ $RUN rm -rf /tmp/osbs-client
 $RUN git clone https://github.com/projectatomic/osbs-client /tmp/osbs-client
 $RUN $BUILDDEP -y /tmp/osbs-client/osbs-client.spec
 $RUN $PIP install --upgrade --no-deps --force-reinstall git+https://github.com/projectatomic/osbs-client
+
+# Install the latest dockerfile-parse from git
+$RUN $PIP install --upgrade --force-reinstall \
+    git+https://github.com/containerbuildsystem/dockerfile-parse
+
+# Install koji-containerbuild
 $RUN $PYTHON setup.py install
 
 # Install packages for tests

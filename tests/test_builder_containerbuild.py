@@ -20,6 +20,7 @@ from flexmock import flexmock
 from textwrap import dedent
 from collections import namedtuple
 import pytest
+import jsonschema
 import osbs
 import os
 import os.path
@@ -931,3 +932,136 @@ class TestBuilder(object):
                 'repositories': ['unique-repo', 'primary-repo'],
                 'koji_builds': [koji_build_id]
             }
+
+    @pytest.mark.parametrize('arg_name, arg_value, expected_types', [
+        ('src', None, [u'string']),
+        ('src', 123, [u'string']),
+
+        ('target', None, [u'string']),
+        ('target', 123, [u'string']),
+
+        ('opts', '{"a": "b"}', [u'object', u'null']),
+        ('opts', 123, [u'object', u'null']),
+        ('opts', [], [u'object', u'null']),
+    ])
+    def test_schema_validation_invalid_arg_types(self, arg_name, arg_value, expected_types):
+        task = builder_containerbuild.BuildContainerTask(id=1,
+                                                         method='buildContainer',
+                                                         params={},
+                                                         session=None,
+                                                         options=None,
+                                                         workdir='not used')
+
+        task_args = {
+            'src': arg_value if arg_name == 'src' else 'abc',
+            'target': arg_value if arg_name == 'target' else 'xyz',
+            'opts': arg_value if arg_name == 'opts' else None,
+        }
+
+        with pytest.raises(jsonschema.ValidationError) as exc_info:
+            task.handler(**task_args)
+
+        expected_types_str = ', '.join('{!r}'.format(t) for t in expected_types)
+        err_msg = 'is not of type {}'.format(expected_types_str)
+        assert err_msg in str(exc_info.value)
+
+    @pytest.mark.parametrize('property_name, property_value, expected_types', [
+        ('scratch', 'true', [u'boolean']),
+        ('scratch', 1, [u'boolean']),
+        ('scratch', None, [u'boolean']),
+
+        ('isolated', 'true', [u'boolean']),
+        ('isolated', 1, [u'boolean']),
+        ('isolated', None, [u'boolean']),
+
+        ('yum_repourls', 'just.one.url', [u'array', u'null']),
+        ('yum_repourls', ['some.url', 1], [u'string']),
+
+        ('git_branch', 123, [u'string', u'null']),
+        ('push_url', 123, [u'string', u'null']),
+        ('koji_parent_build', 123, [u'string', u'null']),
+        ('release', 123, [u'string', u'null']),
+
+        ('flatpak', 'true', [u'boolean']),
+        ('flatpak', 1, [u'boolean']),
+        ('flatpak', None, [u'boolean']),
+
+        ('compose_ids', 1, [u'array', u'null']),
+        ('compose_ids', [1, '2'], [u'integer']),
+        ('compose_ids', [1.5], [u'integer']),
+
+        ('signing_intent', 123, [u'string', u'null']),
+    ])
+    def test_schema_validation_invalid_type_for_opts_property(self,
+                                                              property_name,
+                                                              property_value,
+                                                              expected_types):
+
+        task = builder_containerbuild.BuildContainerTask(id=1,
+                                                         method='buildContainer',
+                                                         params={},
+                                                         session=None,
+                                                         options=None,
+                                                         workdir='not used')
+
+        build_opts = {property_name: property_value}
+
+        with pytest.raises(jsonschema.ValidationError) as exc_info:
+            task.handler('source', 'target', build_opts)
+
+        expected_types_str = ', '.join('{!r}'.format(t) for t in expected_types)
+        err_msg = 'is not of type {}'.format(expected_types_str)
+        assert err_msg in str(exc_info.value)
+
+    @pytest.mark.parametrize('build_opts', [
+        None,
+        {},
+        {'unknown_property': 'validates (for now)'},
+
+        {'scratch': False,
+         'isolated': False,
+         'yum_repourls': None,
+         'git_branch': None,
+         'push_url': None,
+         'koji_parent_build': None,
+         'release': None,
+         'flatpak': False,
+         'compose_ids': None,
+         'signing_intent': None},
+
+        {'scratch': False,
+         'isolated': False,
+         'yum_repourls': ['url.1', 'url.2'],
+         'git_branch': 'master',
+         'push_url': 'here.please',
+         'koji_parent_build': 'some-or-other',
+         'release': 'v8',
+         'flatpak': False,
+         'compose_ids': [1, 2, 3],
+         'signing_intent': 'No, I do not intend to sign anything.'},
+    ])
+    def test_schema_validation_valid_options(self, build_opts, tmpdir):
+        koji_task_id = 123
+        last_event_id = 456
+
+        session = self._mock_session(last_event_id, koji_task_id)
+        folders_info = self._mock_folders(str(tmpdir))
+        src = self._mock_git_source()
+
+        task = builder_containerbuild.BuildContainerTask(id=koji_task_id,
+                                                         method='buildContainer',
+                                                         params={},
+                                                         session=session,
+                                                         options={},
+                                                         workdir=str(tmpdir))
+
+        (flexmock(task)
+            .should_receive('fetchDockerfile')
+            .with_args(src['src'], 'build-tag')
+            .and_return(folders_info['dockerfile_path']))
+
+        (flexmock(task)
+            .should_receive('runBuilds')
+            .and_return([{'repository': 'something.somewhere'}]))
+
+        task.handler(src['src'], 'target', build_opts)

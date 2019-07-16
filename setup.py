@@ -28,5 +28,8 @@ setup(
     ],
     cmdclass={
         'sdist': TitoDist,
+    },
+    package_data={
+        'koji_containerbuild': ['schemas/*.json']
     }
 )

@@ -32,6 +32,9 @@ import traceback
 import dockerfile_parse
 import signal
 import shutil
+import json
+import jsonschema
+from pkg_resources import resource_stream
 from distutils.version import LooseVersion
 
 import koji
@@ -57,6 +60,8 @@ if LooseVersion(OSBS_VERSION) < LooseVersion(OSBS_FLATPAK_SUPPORT_VERSION):
     osbs_flatpak_support = False
 else:
     osbs_flatpak_support = True
+
+PARAMS_SCHEMA_RELPATH = '../schemas/build_params.json'
 
 
 # List of LABEL identifiers used within Koji. Values doesn't need to correspond
@@ -760,8 +765,13 @@ class BuildContainerTask(BaseTaskHandler):
         return (labels_wrapper.get_extra_data(), labels_wrapper.get_expected_nvr())
 
     def handler(self, src, target, opts=None):
-        if not opts:
+        with resource_stream(__name__, PARAMS_SCHEMA_RELPATH) as schema_file:
+            params_schema = json.load(schema_file)
+            jsonschema.validate([src, target, opts], params_schema)
+
+        if opts is None:
             opts = {}
+
         self.opts = opts
         data = {}
 

@@ -7,6 +7,16 @@ class TitoDist(sdist):
     def run(self):
         subprocess.call(["tito", "build", "--tgz", "-o", "."])
 
+
+def get_requirements(requirements_file='requirements.txt'):
+    with open(requirements_file) as f:
+        return [
+            line.split('#')[0].rstrip()
+            for line in f.readlines()
+            if not line.startswith('#')
+            ]
+
+
 setup(
     name="koji-containerbuild",
     version="0.7.5",
@@ -19,7 +29,7 @@ setup(
         'koji_containerbuild',
         'koji_containerbuild.plugins',
     ],
-    install_requires=[],
+    install_requires=get_requirements(),
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Topic :: Internet",

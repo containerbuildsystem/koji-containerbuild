@@ -124,9 +124,10 @@ Koji CLI
 
 Package provides CLI binary with interface similar to upstream koji CLI. It
 adds only single new command - `container-build` which allows submitting container
-builds to Koji hub. To configure CLI you'll need to copy `[koji]` section in
-`/etc/koji.conf` to `[koji-containerbuild]` and optionally adapt configuration
-there.
+builds to Koji hub.
+
+No additional configuration is required.
+Everything should be set by `koji` package.
 
 
 Post Install Configuration

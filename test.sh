@@ -19,15 +19,14 @@ if [[ $OS == "fedora" ]]; then
   PIP="pip$PYTHON_VERSION"
   PKG="dnf"
   PKG_EXTRA="dnf-plugins-core git-core
-             python$PYTHON_VERSION-koji python$PYTHON_VERSION-koji-hub
-             python$PYTHON_VERSION-jsonschema"
+             python$PYTHON_VERSION-koji python$PYTHON_VERSION-koji-hub"
   BUILDDEP="dnf builddep"
   PYTHON="python$PYTHON_VERSION"
 else
   PIP_PKG="python-pip"
   PIP="pip"
   PKG="yum"
-  PKG_EXTRA="yum-utils git-core koji koji-hub python2-jsonschema"
+  PKG_EXTRA="yum-utils git-core koji koji-hub"
   BUILDDEP="yum-builddep"
   PYTHON="python"
 fi
@@ -67,12 +66,6 @@ $RUN $PIP install --upgrade --no-deps --force-reinstall git+https://github.com/p
 $RUN $PIP install --upgrade --force-reinstall \
     git+https://github.com/containerbuildsystem/dockerfile-parse
 
-# Install koji-containerbuild
-$RUN $PYTHON setup.py install
-
-# Install packages for tests
-$RUN $PIP install -r tests/requirements.txt
-
 # CentOS needs to have setuptools updates to make pytest-cov work
 if [[ $OS != "fedora" ]]; then
   $RUN $PIP install -U setuptools
@@ -81,6 +74,12 @@ if [[ $OS != "fedora" ]]; then
   $RUN curl -O https://bootstrap.pypa.io/2.6/get-pip.py
   $RUN $PYTHON get-pip.py
 fi
+
+# Install koji-containerbuild
+$RUN $PYTHON setup.py install
+
+# Install packages for tests
+$RUN $PIP install -r tests/requirements.txt
 
 case ${ACTION} in
 "test")

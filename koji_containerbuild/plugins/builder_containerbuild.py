@@ -32,9 +32,7 @@ import traceback
 import dockerfile_parse
 import signal
 import shutil
-import json
 import jsonschema
-from pkg_resources import resource_stream
 from distutils.version import LooseVersion
 
 import koji
@@ -60,8 +58,6 @@ if LooseVersion(OSBS_VERSION) < LooseVersion(OSBS_FLATPAK_SUPPORT_VERSION):
     osbs_flatpak_support = False
 else:
     osbs_flatpak_support = True
-
-PARAMS_SCHEMA_RELPATH = '../schemas/build_params.json'
 
 
 # List of LABEL identifiers used within Koji. Values doesn't need to correspond
@@ -293,6 +289,75 @@ class BuildContainerTask(BaseTaskHandler):
     Methods = ['buildContainer']
     # Same value as for regular 'build' method.
     _taskWeight = 2.0
+
+    # JSON Schema definition for koji containerBuild task parameters
+    # Used to validate arguments passed to the handler() method of this class
+    PARAMS_SCHEMA = {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "description": "Parameters for a koji containerBuild task.",
+
+        "type": "array",
+        "items": [
+            {
+                "type": "string",
+                "description": "Source URI."
+            },
+            {
+                "type": "string",
+                "description": "Build target."
+            },
+            {
+                "type": ["object", "null"],
+                "properties": {
+                    "scratch": {
+                        "type": "boolean",
+                        "description": "Perform a scratch build?"
+                    },
+                    "isolated": {
+                        "type": "boolean",
+                        "description": "Perform an isolated build?"
+                    },
+                    "yum_repourls": {
+                        "type": ["array", "null"],
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "URLs of yum repo files."
+                    },
+                    "git_branch": {
+                        "type": ["string", "null"],
+                        "description": "Git branch to build from."
+                    },
+                    "push_url": {
+                        "type": ["string", "null"]
+                    },
+                    "koji_parent_build": {
+                        "type": ["string", "null"],
+                        "description": "Overwrite parent image with image from koji build."
+                    },
+                    "release": {
+                        "type": ["string", "null"],
+                        "description": "Set release value."
+                    },
+                    "flatpak": {
+                        "type": "boolean",
+                        "description": "Build a flatpak instead of a container?"
+                    },
+                    "compose_ids": {
+                        "type": ["array", "null"],
+                        "items": {
+                            "type": "integer"
+                        },
+                        "description": "ODCS composes used."
+                    },
+                    "signing_intent": {
+                        "type": ["string", "null"],
+                        "description": "Signing intent of the ODCS composes."
+                    }
+                }
+            }
+        ]
+    }
 
     def __init__(self, id, method, params, session, options, workdir=None, demux=True):
         BaseTaskHandler.__init__(self, id, method, params, session, options,
@@ -765,9 +830,7 @@ class BuildContainerTask(BaseTaskHandler):
         return (labels_wrapper.get_extra_data(), labels_wrapper.get_expected_nvr())
 
     def handler(self, src, target, opts=None):
-        with resource_stream(__name__, PARAMS_SCHEMA_RELPATH) as schema_file:
-            params_schema = json.load(schema_file)
-            jsonschema.validate([src, target, opts], params_schema)
+        jsonschema.validate([src, target, opts], self.PARAMS_SCHEMA)
 
         if opts is None:
             opts = {}

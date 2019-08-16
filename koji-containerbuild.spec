@@ -69,10 +69,8 @@ Requires:   osbs-client
 Requires:   python-urlgrabber
 Requires:   python-dockerfile-parse
 %if 0%{with python3}
-Requires:   python3-setuptools
 Requires:   python3-jsonschema
 %else
-Requires:   python2-setuptools
 Requires:   python2-jsonschema
 %endif
 

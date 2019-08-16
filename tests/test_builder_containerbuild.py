@@ -934,15 +934,15 @@ class TestBuilder(object):
             }
 
     @pytest.mark.parametrize('arg_name, arg_value, expected_types', [
-        ('src', None, [u'string']),
-        ('src', 123, [u'string']),
+        ('src', None, ['string']),
+        ('src', 123, ['string']),
 
-        ('target', None, [u'string']),
-        ('target', 123, [u'string']),
+        ('target', None, ['string']),
+        ('target', 123, ['string']),
 
-        ('opts', '{"a": "b"}', [u'object', u'null']),
-        ('opts', 123, [u'object', u'null']),
-        ('opts', [], [u'object', u'null']),
+        ('opts', '{"a": "b"}', ['object', 'null']),
+        ('opts', 123, ['object', 'null']),
+        ('opts', [], ['object', 'null']),
     ])
     def test_schema_validation_invalid_arg_types(self, arg_name, arg_value, expected_types):
         task = builder_containerbuild.BuildContainerTask(id=1,
@@ -966,31 +966,31 @@ class TestBuilder(object):
         assert err_msg in str(exc_info.value)
 
     @pytest.mark.parametrize('property_name, property_value, expected_types', [
-        ('scratch', 'true', [u'boolean']),
-        ('scratch', 1, [u'boolean']),
-        ('scratch', None, [u'boolean']),
+        ('scratch', 'true', ['boolean']),
+        ('scratch', 1, ['boolean']),
+        ('scratch', None, ['boolean']),
 
-        ('isolated', 'true', [u'boolean']),
-        ('isolated', 1, [u'boolean']),
-        ('isolated', None, [u'boolean']),
+        ('isolated', 'true', ['boolean']),
+        ('isolated', 1, ['boolean']),
+        ('isolated', None, ['boolean']),
 
-        ('yum_repourls', 'just.one.url', [u'array', u'null']),
-        ('yum_repourls', ['some.url', 1], [u'string']),
+        ('yum_repourls', 'just.one.url', ['array', 'null']),
+        ('yum_repourls', ['some.url', 1], ['string']),
 
-        ('git_branch', 123, [u'string', u'null']),
-        ('push_url', 123, [u'string', u'null']),
-        ('koji_parent_build', 123, [u'string', u'null']),
-        ('release', 123, [u'string', u'null']),
+        ('git_branch', 123, ['string', 'null']),
+        ('push_url', 123, ['string', 'null']),
+        ('koji_parent_build', 123, ['string', 'null']),
+        ('release', 123, ['string', 'null']),
 
-        ('flatpak', 'true', [u'boolean']),
-        ('flatpak', 1, [u'boolean']),
-        ('flatpak', None, [u'boolean']),
+        ('flatpak', 'true', ['boolean']),
+        ('flatpak', 1, ['boolean']),
+        ('flatpak', None, ['boolean']),
 
-        ('compose_ids', 1, [u'array', u'null']),
-        ('compose_ids', [1, '2'], [u'integer']),
-        ('compose_ids', [1.5], [u'integer']),
+        ('compose_ids', 1, ['array', 'null']),
+        ('compose_ids', [1, '2'], ['integer']),
+        ('compose_ids', [1.5], ['integer']),
 
-        ('signing_intent', 123, [u'string', u'null']),
+        ('signing_intent', 123, ['string', 'null']),
     ])
     def test_schema_validation_invalid_type_for_opts_property(self,
                                                               property_name,

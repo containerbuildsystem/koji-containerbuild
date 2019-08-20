@@ -435,7 +435,7 @@ class TestBuilder(object):
             with pytest.raises(koji.BuildError) as exc:
                 task.handler(src['src'], 'target', opts={})
 
-            assert failure in str(exc)
+            assert failure in str(exc.value)
 
         else:
             task_response = task.handler(src['src'], 'target', opts={})
@@ -524,7 +524,7 @@ class TestBuilder(object):
                                                          demux=True)
         with pytest.raises(koji.BuildError) as exc:
             task.handler(src['src'], 'target', opts={})
-        assert "Target `target` not found" in str(exc)
+        assert "Target `target` not found" in str(exc.value)
 
     def test_private_branch(self, tmpdir):
         git_uri = 'git://pkgs.example.com/rpms/fedora-docker'

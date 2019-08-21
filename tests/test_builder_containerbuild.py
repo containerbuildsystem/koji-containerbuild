@@ -335,6 +335,7 @@ class TestBuilder(object):
             dockerfile_content = dedent("""\
                 FROM fedora
 
+                LABEL name=fedora
                 LABEL com.redhat.component=fedora-docker
                 LABEL version=25
                 """)
@@ -364,22 +365,102 @@ class TestBuilder(object):
         src = git_uri + '#' + git_ref
         return {'git_uri': git_uri, 'git_ref': git_ref, 'src': src}
 
-    def test_checkLabels_missing_labels(self, tmpdir):
+    @pytest.mark.parametrize(('df_content', 'missing_labels', 'return_val'), (
+        ("""\
+            FROM fedora
+         """,
+         ['com.redhat.component (or BZComponent)',
+          'version (or Version)',
+          'name (or Name)'], None),
+
+        ("""\
+            FROM fedora
+            LABEL name=fedora
+            LABEL com.redhat.component=fedora-docker
+         """,
+         ['version (or Version)'], None),
+
+        ("""\
+            FROM fedora
+            LABEL name=fedora
+            LABEL version=25
+         """,
+         ['com.redhat.component (or BZComponent)'], None),
+
+        ("""\
+            FROM fedora
+            LABEL com.redhat.component=fedora-docker
+            LABEL version=25
+         """,
+         ['name (or Name)'], None),
+
+        ("""\
+            FROM fedora
+            LABEL name="$NAME_ENV"
+            LABEL com.redhat.component=fedora-docker
+            LABEL version=25
+         """,
+         ['name (or Name)'], None),
+
+        ("""\
+            FROM fedora
+            LABEL name=fedora
+            LABEL com.redhat.component="$COMPONENT_ENV"
+            LABEL version=25
+         """,
+         ['com.redhat.component (or BZComponent)'], None),
+
+        ("""\
+            FROM fedora
+            LABEL name=fedora
+            LABEL com.redhat.component=fedora-docker
+            LABEL version="$VERSION_ENV"
+         """,
+         None, ('fedora-docker', None)),
+
+        ("""\
+            FROM fedora
+            LABEL name=fedora
+            LABEL com.redhat.component=fedora-docker
+            LABEL version=25
+         """,
+         None, ('fedora-docker', None)),
+
+        ("""\
+            FROM fedora
+            LABEL name=fedora
+            LABEL com.redhat.component=fedora-docker
+            LABEL version=25
+            LABEL release="$RELEASE_ENV"
+         """,
+         None, ('fedora-docker', None)),
+
+        ("""\
+            FROM fedora
+            LABEL name=fedora
+            LABEL com.redhat.component=fedora-docker
+            LABEL version=25
+            LABEL release=3
+         """,
+         None, ('fedora-docker', 'fedora-docker-25-3')),
+    ))
+    def test_checkLabels(self, tmpdir, df_content, missing_labels, return_val):
         cct = builder_containerbuild.BuildContainerTask(id=1,
                                                         method='buildContainer',
                                                         params='params',
                                                         session='session',
                                                         options='options',
                                                         workdir='workdir')
-
-        dockerfile_content = 'FROM fedora\n'
-        missing_labels = ['com.redhat.component (or BZComponent)',
-                          'version (or Version)']
         folder_info = self._mock_folders(str(tmpdir),
-                                         dockerfile_content=dockerfile_content)
+                                         dockerfile_content=df_content)
         (flexmock(cct)
             .should_receive('fetchDockerfile')
             .and_return(folder_info['dockerfile_path']))
+
+        if not missing_labels:
+            check_return = cct.checkLabels('src', 'build-tag')
+            assert check_return == return_val
+            return
 
         with pytest.raises(koji.BuildError) as exc_info:
             cct.checkLabels('src', 'build-tag')
@@ -768,6 +849,7 @@ class TestBuilder(object):
         dockerfile_content = dedent("""\
             FROM fedora
 
+            LABEL name=fedora
             LABEL com.redhat.component=fedora-docker
             LABEL version=25
             """)

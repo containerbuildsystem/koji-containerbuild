@@ -26,7 +26,6 @@ import os
 import os.path
 import sys
 import logging
-import imp
 import time
 import traceback
 import dockerfile_parse
@@ -67,9 +66,19 @@ LABELS = koji.Enum((
     'COMPONENT',
     'VERSION',
     'RELEASE',
-    'ARCHITECTURE',
+    'NAME',
 ))
 
+# list of labels which has to be explicitly defined with values
+LABELS_EXPLICIT_REQUIRED = koji.Enum((
+    'NAME',
+    'COMPONENT',
+))
+
+# list of labels which has to be defined but value may be set via env
+LABELS_ENV_REQUIRED = koji.Enum((
+    'VERSION',
+))
 
 # Mapping between LABEL identifiers within koji and actual LABEL identifiers
 # which can be found in Dockerfile. First value is preferred one, others are for
@@ -78,24 +87,7 @@ LABEL_NAME_MAP = {
     'COMPONENT': ('com.redhat.component', 'BZComponent'),
     'VERSION': ('version', 'Version'),
     'RELEASE': ('release', 'Release'),
-    'ARCHITECTURE': ('architecture', 'Architecture'),
-}
-
-
-# Map from LABELS to extra data
-LABEL_DATA_MAP = {
-    'COMPONENT': 'name',
-    'VERSION': 'version',
-    'RELEASE': 'release',
-    'ARCHITECTURE': 'architecture',
-}
-
-
-# Default values for LABELs. If there exist default value here LABEL is
-# optional in Dockerfile.
-LABEL_DEFAULT_VALUES = {
-    'RELEASE': object(), # Symbol-like marker to indicate unique init value
-    'ARCHITECTURE': 'x86_64',
+    'NAME': ('name', 'Name'),
 }
 
 
@@ -214,8 +206,7 @@ class LabelsWrapper(object):
     def get_data_labels(self):
         """Subset of labels found in Dockerfile which we are interested in
 
-        returns dict with keys from LABELS and default values from
-        LABEL_DEFAULT_VALUES or actual values from Dockefile as mapped via
+        returns dict with keys from LABELS and values from Dockerfile as mapped via
         LABEL_NAME_MAP.
         """
 
@@ -223,9 +214,7 @@ class LabelsWrapper(object):
         for label_id in LABELS:
             assert label_id in LABEL_NAME_MAP, ("Required LABEL doesn't map "
                                                 "to LABEL name in Dockerfile")
-            self._label_data.setdefault(label_id,
-                                        LABEL_DEFAULT_VALUES.get(label_id,
-                                                                 None))
+
             for label_name in LABEL_NAME_MAP[label_id]:
                 if label_name in self._label_overwrites:
                     self._label_data[label_id] = self._label_overwrites[label_name]
@@ -235,16 +224,6 @@ class LabelsWrapper(object):
                     self._label_data[label_id] = parsed_labels[label_name]
                     break
         return self._label_data
-
-    def get_extra_data(self):
-        """Returns dict with keys for Koji's extra_information"""
-        data = self.get_data_labels()
-        extra_data = {}
-        for label_id, value in data.items():
-            assert label_id in LABEL_DATA_MAP
-            extra_key = LABEL_DATA_MAP[label_id]
-            extra_data[extra_key] = value
-        return extra_data
 
     def get_additional_tags(self):
         """Returns a list of additional tags to be applied to an image"""
@@ -263,9 +242,15 @@ class LabelsWrapper(object):
     def get_missing_label_ids(self):
         data = self.get_data_labels()
         missing_labels = []
-        for label_id in LABELS:
-            assert label_id in data
-            if not data[label_id]:
+        # check required labels, have to be defined explicitly and not via env
+        for label_id in LABELS_EXPLICIT_REQUIRED:
+            if not data.get(label_id):
+                missing_labels.append(label_id)
+
+        # check for all labels, unless required or default values provided,
+        # they should be at least defined (even via env)
+        for label_id in LABELS_ENV_REQUIRED:
+            if label_id not in data:
                 missing_labels.append(label_id)
         return missing_labels
 
@@ -789,13 +774,6 @@ class BuildContainerTask(BaseTaskHandler):
             raise koji.BuildError("Dockerfile file missing: %s" % fn)
         return fn
 
-    def _get_admin_opts(self, opts):
-        epoch = opts.get('epoch', 0)
-        if epoch:
-            self.session.assertPerm('admin')
-
-        return {'epoch': epoch}
-
     def checkLabels(self, src, build_tag, label_overwrites=None):
         label_overwrites = label_overwrites or {}
         dockerfile_path = self.fetchDockerfile(src, build_tag)
@@ -814,12 +792,16 @@ class BuildContainerTask(BaseTaskHandler):
         # Make sure the longest tag for the docker image is no more than 128 chars
         # see https://github.com/docker/docker/issues/8445
 
-        data = labels_wrapper.get_extra_data()
+        data = labels_wrapper.get_data_labels()
         tags = labels_wrapper.get_additional_tags()
-        if LABEL_DATA_MAP['RELEASE'] in data:
-            version_release_tag = "%s-%s" % (
-                data[LABEL_DATA_MAP['VERSION']], data[LABEL_DATA_MAP['RELEASE']])
-            tags.append(version_release_tag)
+        check_nvr = False
+
+        if 'RELEASE' in data and 'VERSION' in data:
+            if data['RELEASE'] and data['VERSION']:
+                version_release_tag = "%s-%s" % (data['VERSION'], data['RELEASE'])
+                tags.append(version_release_tag)
+                check_nvr = True
+
         if tags:
             longest_tag = max(tags, key=len)
             if len(longest_tag) > 128:
@@ -827,7 +809,9 @@ class BuildContainerTask(BaseTaskHandler):
                     "Docker cannot create image with a tag longer than 128, "
                     "current version-release tag length is %s" % len(longest_tag))
 
-        return (labels_wrapper.get_extra_data(), labels_wrapper.get_expected_nvr())
+        if check_nvr:
+            return (data['COMPONENT'], labels_wrapper.get_expected_nvr())
+        return (data['COMPONENT'], None)
 
     def handler(self, src, target, opts=None):
         jsonschema.validate([src, target, opts], self.PARAMS_SCHEMA)
@@ -836,7 +820,7 @@ class BuildContainerTask(BaseTaskHandler):
             opts = {}
 
         self.opts = opts
-        data = {}
+        component = None
 
         self.event_id = self.session.getLastEvent()['id']
         target_info = self.session.getBuildTarget(target, event=self.event_id)
@@ -855,35 +839,23 @@ class BuildContainerTask(BaseTaskHandler):
             label_overwrites = {}
             release_overwrite = opts.get('release')
             if release_overwrite:
-                label_overwrites = {LABEL_DATA_MAP['RELEASE']: release_overwrite}
-            data, expected_nvr = self.checkLabels(src, label_overwrites=label_overwrites,
-                                                  build_tag=build_tag)
-        admin_opts = self._get_admin_opts(opts)
-        data.update(admin_opts)
+                label_overwrites = {LABEL_NAME_MAP['RELEASE'][0]: release_overwrite}
+            component, expected_nvr = self.checkLabels(src, label_overwrites=label_overwrites,
+                                                       build_tag=build_tag)
 
         # scratch builds do not get imported, and consequently not tagged
         if not self.opts.get('scratch') and not flatpak:
-            self.check_whitelist(data[LABEL_DATA_MAP['COMPONENT']], target_info)
+            self.check_whitelist(component, target_info)
 
         try:
-            # Flatpak builds append .<N> to the release generated from module version
             if flatpak:
-                auto_release = True
-            else:
-                auto_release = (data[LABEL_DATA_MAP['RELEASE']] ==
-                                LABEL_DEFAULT_VALUES['RELEASE'])
-                if auto_release:
-                    # Do not expose default release value
-                    del data[LABEL_DATA_MAP['RELEASE']]
-
-            self.extra_information = {"src": src, "data": data,
-                                      "target": target}
+                expected_nvr = None
 
             if not SCM.is_scm_url(src):
                 raise koji.BuildError('Invalid source specification: %s' % src)
 
             # Scratch and auto release builds shouldn't be checked for nvr
-            if not self.opts.get('scratch') and not auto_release:
+            if not self.opts.get('scratch') and expected_nvr:
                 try:
                     build_id = self.session.getBuild(expected_nvr)['id']
                 except:

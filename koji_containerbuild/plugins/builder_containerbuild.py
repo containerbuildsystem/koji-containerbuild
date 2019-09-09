@@ -393,17 +393,20 @@ class BuildContainerTask(BaseTaskHandler):
             os.makedirs(path)
         return path
 
-    def _incremental_upload_logs(self, child_pid):
+    def _incremental_upload_logs(self, child_pid=None):
         resultdir = self.resultdir()
         uploadpath = self.getUploadPath()
         watcher = FileWatcher(resultdir, logger=self.logger)
         finished = False
         try:
             while not finished:
-                time.sleep(1)
-                status = os.waitpid(child_pid, os.WNOHANG)
-                if status[0] != 0:
+                if child_pid is None:
                     finished = True
+                else:
+                    time.sleep(1)
+                    status = os.waitpid(child_pid, os.WNOHANG)
+                    if status[0] != 0:
+                        finished = True
 
                 for result in watcher.files_to_upload():
                     if result is False:
@@ -528,7 +531,7 @@ class BuildContainerTask(BaseTaskHandler):
                   yum_repourls=None, branch=None, push_url=None,
                   koji_parent_build=None, release=None,
                   flatpak=False, signing_intent=None,
-                  compose_ids=None):
+                  compose_ids=None, skip_build=False):
 
         self.logger.debug("Spawning jobs for arches: %r" % (arches))
 
@@ -547,10 +550,14 @@ class BuildContainerTask(BaseTaskHandler):
             release=release,
             flatpak=flatpak,
             signing_intent=signing_intent,
-            compose_ids=compose_ids
+            compose_ids=compose_ids,
+            skip_build=skip_build
         )
 
-        results = [self.createContainer(**kwargs)]
+        results = []
+        semi_results = self.createContainer(**kwargs)
+        if semi_results is not None:
+            results = [semi_results]
 
         self.logger.debug("Results: %r", results)
         return results
@@ -559,7 +566,7 @@ class BuildContainerTask(BaseTaskHandler):
                         scratch=None, isolated=None, yum_repourls=[],
                         branch=None, push_url=None, koji_parent_build=None,
                         release=None, flatpak=False, signing_intent=None,
-                        compose_ids=None):
+                        compose_ids=None, skip_build=False):
         if not yum_repourls:
             yum_repourls = []
 
@@ -600,6 +607,8 @@ class BuildContainerTask(BaseTaskHandler):
             create_build_args['git_push_url'] = push_url
         if flatpak:
             create_build_args['flatpak'] = True
+        if skip_build:
+            create_build_args['skip_build'] = True
 
         try:
             orchestrator_create_build_args = create_build_args.copy()
@@ -622,10 +631,23 @@ class BuildContainerTask(BaseTaskHandler):
         except (AttributeError, OsbsOrchestratorNotEnabled):
             # Older osbs-client, or else orchestration not enabled
             create_build_args['architecture'] = arch = arches[0]
+            create_build_args.pop('skip_build', None)
             create_method = self.osbs().create_build
             self.logger.debug("Starting %s with params: '%s'",
                               create_method, create_build_args)
             build_response = create_method(**create_build_args)
+
+        if build_response is None:
+            self.logger.debug("Build was skipped")
+
+            osbs_logs_dir = self.resultdir()
+            koji.ensuredir(osbs_logs_dir)
+            try:
+                self._incremental_upload_logs()
+            except koji.ActionNotAllowed:
+                pass
+
+            return
 
         build_id = build_response.get_build_name()
         self.logger.debug("OSBS build id: %r", build_id)
@@ -875,9 +897,18 @@ class BuildContainerTask(BaseTaskHandler):
                                      flatpak=flatpak,
                                      compose_ids=opts.get('compose_ids', None),
                                      signing_intent=opts.get('signing_intent', None),
+                                     skip_build=opts.get('skip_build', False),
                                      )
             all_repositories = []
             all_koji_builds = []
+
+            if not results:
+                return {
+                    'repositories': all_repositories,
+                    'koji_builds': all_koji_builds,
+                    'build': 'skipped',
+                }
+
             for result in results:
                 try:
                     repository = result.get('repositories')

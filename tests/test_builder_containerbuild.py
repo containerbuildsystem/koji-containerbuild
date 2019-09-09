@@ -259,10 +259,18 @@ class TestBuilder(object):
         if not create_build_args.get('signing_intent'):
             create_build_args.pop('signing_intent', None)
 
-        build_response = flexmock()
-        (build_response
-            .should_receive('get_build_name')
-            .and_return('os-build-id'))
+        skip_build = True
+        if not create_build_args.get('skip_build'):
+            create_build_args.pop('skip_build', None)
+            skip_build = False
+
+        if skip_build and orchestrator:
+            build_response = None
+        else:
+            build_response = flexmock()
+            (build_response
+                .should_receive('get_build_name')
+                .and_return('os-build-id'))
 
         build_finished_response = flexmock(status='200', json={})
         (build_finished_response
@@ -297,6 +305,7 @@ class TestBuilder(object):
                 .and_raise(OsbsOrchestratorNotEnabled))
 
             legacy_args = create_build_args.copy()
+            legacy_args.pop('skip_build', None)
             legacy_args.pop('platforms', None)
             legacy_args.pop('koji_parent_build', None)
             legacy_args.pop('isolated', None)
@@ -667,6 +676,7 @@ class TestBuilder(object):
             .and_return(True))
         task.fetchDockerfile(source, 'build_tag')
 
+    @pytest.mark.parametrize('log_upload_raises', (True, False))
     @pytest.mark.parametrize('orchestrator', (True, False))
     @pytest.mark.parametrize('additional_args', (
         {'koji_parent_build': 'fedora-26-99'},
@@ -675,8 +685,10 @@ class TestBuilder(object):
         {'isolated': True},
         {'isolated': False},
         {'release': '13'},
+        {'skip_build': True},
+        {'skip_build': False},
     ))
-    def test_additional_args(self, tmpdir, orchestrator, additional_args):
+    def test_additional_args(self, tmpdir, log_upload_raises, orchestrator, additional_args):
         koji_task_id = 123
         last_event_id = 456
         koji_build_id = 999
@@ -707,6 +719,14 @@ class TestBuilder(object):
             (flexmock(task)
                 .should_receive('_write_combined_log'))
 
+        if log_upload_raises:
+            (flexmock(task)
+                .should_receive('_incremental_upload_logs')
+                .and_raise(koji.ActionNotAllowed))
+        else:
+             (flexmock(task)
+                .should_call('_incremental_upload_logs'))
+
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,
                                      koji_task_id=koji_task_id,
@@ -715,10 +735,17 @@ class TestBuilder(object):
 
         task_response = task.handler(src['src'], 'target', opts=additional_args)
 
-        assert task_response == {
-            'repositories': ['unique-repo', 'primary-repo'],
-            'koji_builds': [koji_build_id]
-        }
+        if orchestrator and additional_args.get('skip_build', None):
+             assert task_response == {
+                'repositories': [],
+                'koji_builds': [],
+                'build': 'skipped'
+            }
+        else:
+            assert task_response == {
+                'repositories': ['unique-repo', 'primary-repo'],
+                'koji_builds': [koji_build_id]
+            }
 
     def test_flatpak_build(self, tmpdir):
         task_id = 123

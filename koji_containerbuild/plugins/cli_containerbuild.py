@@ -105,6 +105,10 @@ def parse_arguments(options, args, flatpak):
                       help=_("ODCS composes used. May be used multiple times. Cannot be"
                              " used with --signing-intent"),
                       dest='compose_ids', action='append', metavar="COMPOSE_ID", type="int")
+    parser.add_option("--skip-build", action="store_true",
+                      help=_("Skip build and update buildconfig. "
+                             "Use this option to update autorebuild settings"))
+
     if not flatpak:
         parser.add_option("--release",
                           help=_("Set release value"))
@@ -126,7 +130,7 @@ def parse_arguments(options, args, flatpak):
     if not build_opts.git_branch:
         parser.error(_("git-branch must be specified"))
 
-    keys = ('scratch', 'epoch', 'yum_repourls', 'git_branch', 'signing_intent', 'compose_ids')
+    keys = ('scratch', 'epoch', 'yum_repourls', 'git_branch', 'signing_intent', 'compose_ids', 'skip_build')
 
     if flatpak:
         opts['flatpak'] = True

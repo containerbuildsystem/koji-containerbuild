@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.14
+Version:        0.7.15
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -170,6 +170,25 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Sep 24 2019 Robert Cerven <rcerven@redhat.com> 0.7.15-1
+- Skip build option, to update just buildconfig for autorebuilds
+  (rcerven@redhat.com)
+- check for required labels name & components only, allow other labels to be
+  defined from env, check build existence only when explicitly defined nvr
+  (rcerven@redhat.com)
+- Stop requiring old pytest (acmiel@redhat.com)
+- Fix tests for pytest version 5 (acmiel@redhat.com)
+- Put jsonschema definition directly in python file (acmiel@redhat.com)
+- README: Update CLI configuration section (mbasti@redhat.com)
+- Declare python package runtime dependencies (athos@redhat.com)
+- Add jsonschema validation for task options (acmiel@redhat.com)
+- Clean up hub_containerbuild testing (acmiel@redhat.com)
+- Install missing dependency in testing script (acmiel@redhat.com)
+- Run Bandit static analyzer on CI jobs (athos@redhat.com)
+- Remove Fedora 28 testing (acmiel@redhat.com)
+- Enable python3 unit-testing (acmiel@redhat.com)
+- Install koji-hub package during tests (acmiel@redhat.com)
+
 * Wed Jun 12 2019 Robert Cerven <rcerven@redhat.com> 0.7.14-1
 - fix building when only py3 is available in rhel8 (rcerven@redhat.com)
 - enable building py3 package for rhel8 (rcerven@redhat.com)

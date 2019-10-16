@@ -687,6 +687,7 @@ class TestBuilder(object):
         {'release': '13'},
         {'skip_build': True},
         {'skip_build': False},
+        {'triggered_after_koji_task': 12345}
     ))
     def test_additional_args(self, tmpdir, log_upload_raises, orchestrator, additional_args):
         koji_task_id = 123

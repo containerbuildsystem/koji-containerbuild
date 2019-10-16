@@ -338,6 +338,15 @@ class BuildContainerTask(BaseTaskHandler):
                     "signing_intent": {
                         "type": ["string", "null"],
                         "description": "Signing intent of the ODCS composes."
+                    },
+                    "skip_build": {
+                        "type": "boolean",
+                        "description": "Skip build, just update buildconfig for autorebuild "
+                                       "and don't start build"
+                    },
+                    "triggered_after_koji_task": {
+                        "type": "integer",
+                        "description": "Koji task for which autorebuild runs"
                     }
                 }
             }
@@ -531,7 +540,7 @@ class BuildContainerTask(BaseTaskHandler):
                   yum_repourls=None, branch=None, push_url=None,
                   koji_parent_build=None, release=None,
                   flatpak=False, signing_intent=None,
-                  compose_ids=None, skip_build=False):
+                  compose_ids=None, skip_build=False, triggered_after_koji_task=None):
 
         self.logger.debug("Spawning jobs for arches: %r" % (arches))
 
@@ -551,7 +560,8 @@ class BuildContainerTask(BaseTaskHandler):
             flatpak=flatpak,
             signing_intent=signing_intent,
             compose_ids=compose_ids,
-            skip_build=skip_build
+            skip_build=skip_build,
+            triggered_after_koji_task=triggered_after_koji_task
         )
 
         results = []
@@ -566,7 +576,7 @@ class BuildContainerTask(BaseTaskHandler):
                         scratch=None, isolated=None, yum_repourls=[],
                         branch=None, push_url=None, koji_parent_build=None,
                         release=None, flatpak=False, signing_intent=None,
-                        compose_ids=None, skip_build=False):
+                        compose_ids=None, skip_build=False, triggered_after_koji_task=None):
         if not yum_repourls:
             yum_repourls = []
 
@@ -609,6 +619,8 @@ class BuildContainerTask(BaseTaskHandler):
             create_build_args['flatpak'] = True
         if skip_build:
             create_build_args['skip_build'] = True
+        if triggered_after_koji_task:
+            create_build_args['triggered_after_koji_task'] = triggered_after_koji_task
 
         try:
             orchestrator_create_build_args = create_build_args.copy()
@@ -898,6 +910,7 @@ class BuildContainerTask(BaseTaskHandler):
                                      compose_ids=opts.get('compose_ids', None),
                                      signing_intent=opts.get('signing_intent', None),
                                      skip_build=opts.get('skip_build', False),
+                                     triggered_after_koji_task=opts.get('triggered_after_koji_task', None),
                                      )
             all_repositories = []
             all_koji_builds = []

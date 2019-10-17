@@ -61,6 +61,14 @@ $RUN rm -rf /tmp/osbs-client
 $RUN git clone https://github.com/projectatomic/osbs-client /tmp/osbs-client
 [[ ${PYTHON_VERSION} == '3' ]] && WITH_PY3=1 || WITH_PY3=0
 $RUN $BUILDDEP --define "with_python3 ${WITH_PY3}" -y /tmp/osbs-client/osbs-client.spec
+
+if [[ ${OS} == "centos" && ${PYTHON_VERSION} == 2 ]]; then
+    # there is no package that could provide more-itertools module on centos7
+    # latest version with py2 support in PyPI is 5.0.0, never version causes
+    # failures with py2
+    $RUN $PIP install 'more-itertools==5.*'
+fi
+
 $RUN $PIP install --upgrade --no-deps --force-reinstall git+https://github.com/projectatomic/osbs-client
 
 # Install the latest dockerfile-parse from git

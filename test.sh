@@ -59,7 +59,8 @@ $RUN $PKG install -y $OSBS_CLIENT_DEPS
 # This would also ensure all the deps are specified in the spec
 $RUN rm -rf /tmp/osbs-client
 $RUN git clone https://github.com/projectatomic/osbs-client /tmp/osbs-client
-$RUN $BUILDDEP -y /tmp/osbs-client/osbs-client.spec
+[[ ${PYTHON_VERSION} == '3' ]] && WITH_PY3=1 || WITH_PY3=0
+$RUN $BUILDDEP --define "with_python3 ${WITH_PY3}" -y /tmp/osbs-client/osbs-client.spec
 $RUN $PIP install --upgrade --no-deps --force-reinstall git+https://github.com/projectatomic/osbs-client
 
 # Install the latest dockerfile-parse from git

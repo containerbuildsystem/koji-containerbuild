@@ -39,14 +39,18 @@ logger = logging.getLogger('koji.plugins')
 def buildContainer(src, target, opts=None, priority=None, channel='container'):
     """Create a container build task
 
-    target: the build target
-    priority: the amount to increase (or decrease) the task priority, relative
-              to the default priority; higher values mean lower priority; only
-              admins have the right to specify a negative priority here
-    channel: the channel to allocate the task to (defaults to the "container"
-             channel)
-
-    Returns the task ID
+    :param str src: The source URI for this container.
+    :param str target: The build target for this container.
+    :param dict opts: Settings for this build, for example "scratch: true".
+                      The full list of available options is in
+                      builder_containerbuild.py.
+    :param int priority: the amount to increase (or decrease) the task
+                         priority, relative to the default priority; higher
+                         values mean lower priority; only admins have the
+                         right to specify a negative priority here
+    :param str channel: the channel to allocate the task to (defaults to the
+                        "container" channel)
+    :returns: the task ID (integer)
     """
     if opts is None:
         opts = {}

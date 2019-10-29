@@ -91,7 +91,7 @@ Koji hub
 If you already use any Koji hub plugin you need to use same path for this
 plugin too. Default path used by Koji hub is `/usr/lib/koji-hub-plugins`.
 
-Modify `/etc/koji-hub.conf`:
+Modify `/etc/koji-hub/hub.conf`:
 
 * set `PluginPath` to a directory which contains `hub_containerbuild.py` from this
   package.

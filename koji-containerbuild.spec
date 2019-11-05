@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.15
+Version:        0.7.16
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -170,6 +170,16 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Nov 05 2019 Robert Cerven <rcerven@redhat.com> 0.7.16-1
+- hub: improve docs for "buildContainer" RPC (kdreyer@redhat.com)
+- README: correct path to Koji Hub configuration file (kdreyer@redhat.com)
+- Add PR template (mbasti@redhat.com)
+- Pass triggered_after_koji_task parameter through to osbs-client
+  (rcerven@redhat.com)
+- CI: centos 7: explicitly install more-itertools (mbasti@redhat.com)
+- CI: install only py2 osbs-client dependencies in py2 tests
+  (mbasti@redhat.com)
+
 * Tue Sep 24 2019 Robert Cerven <rcerven@redhat.com> 0.7.15-1
 - Skip build option, to update just buildconfig for autorebuilds
   (rcerven@redhat.com)

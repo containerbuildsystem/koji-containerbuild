@@ -619,7 +619,7 @@ class BuildContainerTask(BaseTaskHandler):
             create_build_args['flatpak'] = True
         if skip_build:
             create_build_args['skip_build'] = True
-        if triggered_after_koji_task:
+        if triggered_after_koji_task is not None:
             create_build_args['triggered_after_koji_task'] = triggered_after_koji_task
 
         try:

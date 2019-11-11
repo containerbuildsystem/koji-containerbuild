@@ -43,7 +43,7 @@ def mocked_koji_context(admin_perms=False):
 
 def mocked_kojihub_for_task(src, target, opts,
                             priority=None, channel='container',
-                            should_receive_task=True):
+                            should_receive_task=True, build_type='buildContainer'):
     """
     Mock koji-hub for testing hub_containerbuild (replace
     hub_containerbuild.kojihub with the result of this function).
@@ -56,6 +56,7 @@ def mocked_kojihub_for_task(src, target, opts,
     :param channel: keyword argument for `make_task`,
                     is expected only if not None, not empty
     :param should_receive_task: Should kojihub receive the call to `make_task`?
+    :param build_type: containerbuild or sourcecontainerbuild
 
     :return: A mock object to replace hub_containerbuild.kojihub with.
     """
@@ -66,19 +67,28 @@ def mocked_kojihub_for_task(src, target, opts,
         task_opts['priority'] = koji.PRIO_DEFAULT + priority
 
     kojihub = flexmock()
-    (kojihub
-        .should_receive('make_task')
-        .with_args('buildContainer',
-                   [src, target, opts],
-                   **task_opts)
-        .times(1 if should_receive_task else 0))
+    if build_type == 'buildContainer':
+        (kojihub
+            .should_receive('make_task')
+            .with_args('buildContainer',
+                       [src, target, opts],
+                       **task_opts)
+            .times(1 if should_receive_task else 0))
+    elif build_type == 'buildSourceContainer':
+        (kojihub
+            .should_receive('make_task')
+            .with_args('buildSourceContainer',
+                       [target, opts],
+                       **task_opts)
+            .times(1 if should_receive_task else 0))
 
     return kojihub
 
 
+@pytest.mark.parametrize('build_type', ['buildContainer', 'buildSourceContainer'])
 @pytest.mark.parametrize('admin_perms', [True, False])
 @pytest.mark.parametrize('priority', [1, 0, None, -1])
-def test_priority_permissions(priority, admin_perms, monkeypatch):
+def test_priority_permissions(monkeypatch, build_type, priority, admin_perms):
     src, target = 'source', 'target'
 
     context = mocked_koji_context(admin_perms)
@@ -88,14 +98,22 @@ def test_priority_permissions(priority, admin_perms, monkeypatch):
 
     kojihub = mocked_kojihub_for_task(src, target, {},
                                       priority=priority,
-                                      should_receive_task=should_succeed)
+                                      should_receive_task=should_succeed,
+                                      build_type=build_type)
     monkeypatch.setattr(hub_containerbuild, 'kojihub', kojihub)
 
     if should_succeed:
-        hub_containerbuild.buildContainer(src, target, priority=priority)
+        if build_type == 'buildContainer':
+            hub_containerbuild.buildContainer(src, target, priority=priority)
+        elif build_type == 'buildSourceContainer':
+            hub_containerbuild.buildSourceContainer(target, priority=priority)
+
     else:
         with pytest.raises(koji.ActionNotAllowed) as exc_info:
-            hub_containerbuild.buildContainer(src, target, priority=priority)
+            if build_type == 'buildContainer':
+                hub_containerbuild.buildContainer(src, target, priority=priority)
+            elif build_type == 'buildSourceContainer':
+                hub_containerbuild.buildSourceContainer(target, priority=priority)
 
         e = exc_info.value
         assert str(e) == 'only admins may create high-priority tasks'

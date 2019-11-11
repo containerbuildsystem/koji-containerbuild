@@ -74,7 +74,7 @@ def parse_arguments(options, args, flatpak):
         parser.add_option("--isolated", action="store_true",
                           help=_("Perform an isolated build"))
     parser.add_option("--arch-override",
-                      help=_("Requires --scratch. Limit a scratch build to "
+                      help=_("Requires --scratch or --isolated. Limit a build to "
                              "the specified arches. Comma or space separated."))
     parser.add_option("--wait", action="store_true",
                       help=_("Wait on the build, even if running in the "
@@ -86,9 +86,6 @@ def parse_arguments(options, args, flatpak):
                       default=options.quiet)
     parser.add_option("--background", action="store_true",
                       help=_("Run the build at a lower priority"))
-    parser.add_option("--epoch",
-                      help=_("Specify container epoch. Requires koji admin "
-                             "permission."))
     parser.add_option("--repo-url", dest='yum_repourls', metavar="REPO_URL",
                       action='append',
                       help=_("URL of yum repo file. May be used multiple times."))
@@ -108,7 +105,6 @@ def parse_arguments(options, args, flatpak):
     parser.add_option("--skip-build", action="store_true",
                       help=_("Skip build and update buildconfig. "
                              "Use this option to update autorebuild settings"))
-
     if not flatpak:
         parser.add_option("--release",
                           help=_("Set release value"))
@@ -120,6 +116,12 @@ def parse_arguments(options, args, flatpak):
                        "are required"))
         assert False
 
+    source = args[1]
+    if '://' not in source:
+        parser.error(_("scm URL does not look like an URL to a source repository"))
+    if '#' not in source:
+        parser.error(_("scm URL must be of the form <url_to_repository>#<revision>)"))
+
     if build_opts.arch_override and not (build_opts.scratch or build_opts.isolated):
         parser.error(_("--arch-override is only allowed for --scratch or --isolated builds"))
 
@@ -130,7 +132,7 @@ def parse_arguments(options, args, flatpak):
     if not build_opts.git_branch:
         parser.error(_("git-branch must be specified"))
 
-    keys = ('scratch', 'epoch', 'yum_repourls', 'git_branch', 'signing_intent', 'compose_ids', 'skip_build')
+    keys = ('scratch', 'yum_repourls', 'git_branch', 'signing_intent', 'compose_ids', 'skip_build')
 
     if flatpak:
         opts['flatpak'] = True
@@ -152,8 +154,63 @@ def parse_arguments(options, args, flatpak):
     return build_opts, args, opts, parser
 
 
-def handle_build(options, session, args, flatpak):
-    build_opts, args, opts, parser = parse_arguments(options, args, flatpak)
+def parse_source_arguments(options, args):
+    "Build a source container"
+    usage = _("usage: %prog source-container-build [options] target")
+    usage += _("\n(Specify the --help global option for a list of other help "
+               "options)")
+    parser = OptionParser(usage=usage)
+    parser.add_option("--scratch", action="store_true",
+                      help=_("Perform a scratch build"))
+    parser.add_option("--wait", action="store_true",
+                      help=_("Wait on the build, even if running in the "
+                             "background"))
+    parser.add_option("--nowait", action="store_false", dest="wait",
+                      help=_("Don't wait on build"))
+    parser.add_option("--quiet", action="store_true",
+                      help=_("Do not print the task information"),
+                      default=options.quiet)
+    parser.add_option("--background", action="store_true",
+                      help=_("Run the build at a lower priority"))
+    parser.add_option("--channel-override",
+                      help=_("Use a non-standard channel [default: %default]"),
+                      default=DEFAULT_CHANNEL)
+    parser.add_option("--signing-intent",
+                      help=_("Signing intent of the ODCS composes [default: %default]."),
+                      default=None, dest='signing_intent')
+    parser.add_option("--koji-build-id",
+                      help=_("Koji build id for sources, "
+                             "is required or koji-build-nvr is provided"))
+    parser.add_option("--koji-build-nvr",
+                      help=_("Koji build nvr for sources, "
+                             "is required or koji-build-id is provided"))
+
+    build_opts, args = parser.parse_args(args)
+
+    if len(args) != 1:
+        parser.error(_("Exactly one argument (a build target) is required"))
+        assert False
+
+    if not (build_opts.koji_build_id or build_opts.koji_build_nvr):
+        parser.error(_("at least one of --koji-build-id and --koji-build-nvr has to be specified"))
+
+    opts = {}
+    keys = ('scratch', 'signing_intent', 'koji_build_id', 'koji_build_nvr')
+
+    for key in keys:
+        val = getattr(build_opts, key)
+        if val is not None:
+            opts[key] = val
+    # create the parser in this function and return it to
+    # simplify the unit test cases
+    return build_opts, args, opts, parser
+
+
+def handle_build(options, session, args, flatpak=False, sourcebuild=False):
+    if sourcebuild:
+        build_opts, args, opts, parser = parse_source_arguments(options, args)
+    else:
+        build_opts, args, opts, parser = parse_arguments(options, args, flatpak)
 
     activate_session(session, options)
 
@@ -168,18 +225,19 @@ def handle_build(options, session, args, flatpak):
     if dest_tag['locked'] and not build_opts.scratch:
         parser.error(_("Destination tag %s is locked" % dest_tag['name']))
 
-    source = args[1]
-
     priority = None
     if build_opts.background:
         # relative to koji.PRIO_DEFAULT
         priority = 5
-    if '://' not in source:
-        parser.error(_("scm URL does not look like an URL to a source repository"))
-    if '#' not in source:
-        parser.error(_("scm URL must be of the form <url_to_repository>#<revision>)"))
-    task_id = session.buildContainer(source, target, opts, priority=priority,
-                                     channel=build_opts.channel_override)
+
+    if sourcebuild:
+        task_id = session.buildSourceContainer(target, opts, priority=priority,
+                                               channel=build_opts.channel_override)
+    else:
+        source = args[1]
+        task_id = session.buildContainer(source, target, opts, priority=priority,
+                                         channel=build_opts.channel_override)
+
     if not build_opts.quiet:
         print("Created task: %s" % task_id)
         print("Task info: %s/taskinfo?taskID=%s" % (options.weburl, task_id))
@@ -196,12 +254,20 @@ def handle_build(options, session, args, flatpak):
     else:
         return
 
+
 @export_cli
 def handle_container_build(options, session, args):
     "[build] Build a container"
-    return handle_build(options, session, args, flatpak=False)
+    return handle_build(options, session, args)
+
 
 @export_cli
 def handle_flatpak_build(options, session, args):
     "[build] Build a flatpak"
     return handle_build(options, session, args, flatpak=True)
+
+
+@export_cli
+def handle_source_container_build(options, session, args):
+    "[build] Build a sourcecontainer"
+    return handle_build(options, session, args, sourcebuild=True)

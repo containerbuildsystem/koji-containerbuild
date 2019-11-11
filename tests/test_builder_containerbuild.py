@@ -51,24 +51,32 @@ logs = [LogEntry(None, 'orchestrator'),
 
 
 class TestBuilder(object):
+    @pytest.mark.parametrize(('task_method', 'method'), [
+        (builder_containerbuild.BuildContainerTask, 'buildContainer'),
+        (builder_containerbuild.BuildSourceContainerTask, 'buildSourceContainer'),
+    ])
     @pytest.mark.parametrize("resdir", ['test', 'test2'])
-    def test_resultdir(self, resdir):
-        cct = builder_containerbuild.BuildContainerTask(id=1,
-                                                        method='buildContainer',
-                                                        params='params',
-                                                        session='session',
-                                                        options='options',
-                                                        workdir=resdir)
+    def test_resultdir(self, task_method, method, resdir):
+        cct = task_method(id=1,
+                          method=method,
+                          params='params',
+                          session='session',
+                          options='options',
+                          workdir=resdir)
         assert cct.resultdir() == '%s/osbslogs' % resdir
 
+    @pytest.mark.parametrize(('task_method', 'method'), [
+        (builder_containerbuild.BuildContainerTask, 'buildContainer'),
+        (builder_containerbuild.BuildSourceContainerTask, 'buildSourceContainer'),
+    ])
     @pytest.mark.parametrize('scratch', [False, True])
-    def test_osbs(self, scratch):
-        cct = builder_containerbuild.BuildContainerTask(id=1,
-                                                        method='buildContainer',
-                                                        params='params',
-                                                        session='session',
-                                                        options='options',
-                                                        workdir='workdir')
+    def test_osbs(self, task_method, method, scratch):
+        cct = task_method(id=1,
+                          method=method,
+                          params='params',
+                          session='session',
+                          options='options',
+                          workdir='workdir')
         cct.opts['scratch'] = scratch
         osbs_obj = cct.osbs()
 
@@ -203,6 +211,61 @@ class TestBuilder(object):
         if get_logs_exc is None:
             self._check_logfiles(log_entries, str(tmpdir), orchestrator)
 
+    @pytest.mark.parametrize('get_logs_exc', [None, Exception('error')])
+    @pytest.mark.parametrize('build_not_finished', [False, True])
+    def test_write_logs_source(self, tmpdir, get_logs_exc, build_not_finished):
+        cct = builder_containerbuild.BuildSourceContainerTask(id=1,
+                                                              method='buildSourceContainer',
+                                                              params='params',
+                                                              session='session',
+                                                              options='options',
+                                                              workdir='workdir')
+        get_logs_fname = 'get_build_logs'
+        log_entries = ['line 1',
+                       'line 2']
+
+        build_response = flexmock(status=42)
+        (build_response
+            .should_receive('is_running')
+            .and_return(build_not_finished))
+        (build_response
+            .should_receive('is_pending')
+            .and_return(build_not_finished))
+
+        cct._osbs = flexmock()
+        (cct._osbs
+            .should_receive('get_build')
+            .and_return(build_response))
+
+        should_receive = cct._osbs.should_receive(get_logs_fname)
+        if get_logs_exc:
+            should_receive.and_raise(get_logs_exc)
+        else:
+            should_receive.and_return(log_entries)
+
+        if get_logs_exc:
+            exc_type = builder_containerbuild.ContainerError
+            exc_msg = 'Exception while waiting for {what}: {why}'.format(
+                what='build logs',
+                why=get_logs_exc
+            )
+        elif build_not_finished:
+            exc_type = builder_containerbuild.ContainerError
+            exc_msg = ('Build log finished but build still has not finished: {}.'
+                       .format(build_response.status))
+        else:
+            exc_type = exc_msg = None
+
+        if exc_type is not None:
+            with pytest.raises(exc_type) as exc_info:
+                cct._write_incremental_logs('id', str(tmpdir))
+            assert str(exc_info.value) == exc_msg
+        else:
+            cct._write_incremental_logs('id', str(tmpdir))
+
+        if get_logs_exc is None:
+            self._check_logfiles(log_entries, str(tmpdir), False)
+
     def _mock_session(self, last_event_id, koji_task_id, pkg_info=USE_DEFAULT_PKG_INFO):
         if pkg_info == USE_DEFAULT_PKG_INFO:
             pkg_info = {'blocked': False}
@@ -234,21 +297,35 @@ class TestBuilder(object):
 
         return session
 
-    def _mock_osbs(self, koji_build_id, src, koji_task_id,
-                   orchestrator=False, flatpak=False, build_not_started=False,
-                   create_build_args=None):
-
+    def _mock_osbs(self, koji_build_id, src, koji_task_id, orchestrator=False, source=False,
+                   build_not_started=False, create_build_args=None):
         create_build_args = create_build_args or {}
-        create_build_args.setdefault('git_uri', src['git_uri'])
-        create_build_args.setdefault('git_ref', src['git_ref'])
         create_build_args.setdefault('user', 'owner-name')
-        create_build_args.setdefault('component', 'fedora-docker')
         create_build_args.setdefault('target', 'target-name')
-        create_build_args.setdefault('yum_repourls', [])
         create_build_args.setdefault('scratch', False)
-        create_build_args.setdefault('platforms', ['x86_64'])
-        create_build_args.setdefault('architecture', None)
-        create_build_args.pop('arch_override', None)
+
+        if not source:
+            create_build_args.setdefault('component', 'fedora-docker')
+            create_build_args.setdefault('git_uri', src['git_uri'])
+            create_build_args.setdefault('git_ref', src['git_ref'])
+            create_build_args.setdefault('yum_repourls', [])
+            create_build_args.setdefault('platforms', ['x86_64'])
+            create_build_args.setdefault('architecture', None)
+            create_build_args.pop('arch_override', None)
+        else:
+            create_build_args.setdefault('component', 'source_package-source')
+            if create_build_args.get('koji_build_id'):
+                create_build_args['sources_for_koji_build_id'] = create_build_args['koji_build_id']
+                create_build_args.pop('koji_build_id')
+            else:
+                create_build_args['sources_for_koji_build_id'] = 12345
+
+            if create_build_args.get('koji_build_nvr'):
+                create_build_args['sources_for_koji_build_nvr'] =\
+                    create_build_args['koji_build_nvr']
+                create_build_args.pop('koji_build_nvr')
+            else:
+                create_build_args['sources_for_koji_build_nvr'] = 'build_nvr'
 
         if not create_build_args.get('isolated'):
             create_build_args.pop('isolated', None)
@@ -297,6 +374,12 @@ class TestBuilder(object):
                 .with_args(koji_task_id=koji_task_id, **create_build_args)
                 .times(0 if build_not_started else 1)
                 .and_return(build_response))
+        elif source:
+            (osbs
+                .should_receive('create_source_container_build')
+                .with_args(koji_task_id=koji_task_id, **create_build_args)
+                .times(0 if build_not_started else 1)
+                .and_return(build_response))
         else:
             (osbs
                 .should_receive('create_orchestrator_build')
@@ -318,6 +401,7 @@ class TestBuilder(object):
                 .with_args(koji_task_id=koji_task_id, **legacy_args)
                 .times(0 if build_not_started else 1)
                 .and_return(build_response))
+
         (osbs
             .should_receive('wait_for_build_to_get_scheduled')
             .with_args('os-build-id'))
@@ -535,6 +619,61 @@ class TestBuilder(object):
                 'koji_builds': [koji_build_id]
             }
 
+    @pytest.mark.parametrize(('pkg_info', 'failure'), (
+        (None, 'not in list for tag'),
+        ({'blocked': True}, 'is blocked for'),
+        ({'blocked': False}, None),
+    ))
+    def test_osbs_build_source(self, pkg_info, failure):
+        koji_task_id = 123
+        last_event_id = 456
+        koji_build_id = 999
+        create_args = {'koji_build_id': 12345}
+
+        session = self._mock_session(last_event_id, koji_task_id, pkg_info)
+        (session
+            .should_receive('getBuild')
+            .and_return({'build_id': 12345, 'nvr': 'build_nvr',
+                         'package_name': 'source_package'}))
+        (session
+            .should_receive('getPackageConfig')
+            .with_args('dest-tag', 'source_package-source')
+            .and_return(pkg_info))
+        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+
+        task = builder_containerbuild.BuildSourceContainerTask(id=koji_task_id,
+                                                               method='buildSourceContainer',
+                                                               params='params',
+                                                               session=session,
+                                                               options=options,
+                                                               workdir='workdir')
+
+        (flexmock(task)
+            .should_receive('_write_incremental_logs'))
+        (flexmock(task)
+            .should_receive('_write_combined_log'))
+
+        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
+                                     src=None,
+                                     koji_task_id=koji_task_id,
+                                     source=True,
+                                     create_build_args=create_args.copy(),
+                                     build_not_started=bool(failure))
+
+        if failure:
+            with pytest.raises(koji.BuildError) as exc:
+                task.handler('target', opts=create_args)
+
+            assert failure in str(exc.value)
+
+        else:
+            task_response = task.handler('target', opts=create_args)
+
+            assert task_response == {
+                'repositories': ['unique-repo', 'primary-repo'],
+                'koji_builds': [koji_build_id]
+            }
+
     @pytest.mark.parametrize('reason, expected_exc_type', [
         ('canceled', builder_containerbuild.ContainerCancelled),
         ('failed', builder_containerbuild.ContainerError),
@@ -563,7 +702,8 @@ class TestBuilder(object):
 
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,
-                                     koji_task_id=koji_task_id)
+                                     koji_task_id=koji_task_id,
+                                     create_build_args={'git_branch': 'some'})
 
         build_finished_response = flexmock(status=500, json={})
         (build_finished_response
@@ -591,7 +731,69 @@ class TestBuilder(object):
                 .once())
 
         with pytest.raises(expected_exc_type):
-            task.handler(src['src'], 'target')
+            task.handler(src['src'], 'target', {'git_branch': 'some'})
+
+    @pytest.mark.parametrize('reason, expected_exc_type', [
+        ('canceled', builder_containerbuild.ContainerCancelled),
+        ('failed', builder_containerbuild.ContainerError),
+    ])
+    def test_createSourceContainer_failure_source(self, tmpdir, reason, expected_exc_type):
+        koji_task_id = 123
+        last_event_id = 456
+        koji_build_id = 999
+        create_args = {'koji_build_id': 12345}
+
+        session = self._mock_session(last_event_id, koji_task_id)
+        (session
+            .should_receive('getBuild')
+            .and_return({'build_id': 12345, 'nvr': 'build_nvr',
+                         'package_name': 'source_package'}))
+        (session
+            .should_receive('getPackageConfig')
+            .with_args('dest-tag', 'source_package-source')
+            .and_return({'blocked': False}))
+        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+
+        task = builder_containerbuild.BuildSourceContainerTask(id=koji_task_id,
+                                                               method='buildSourceContainer',
+                                                               params='params',
+                                                               session=session,
+                                                               options=options,
+                                                               workdir='workdir')
+
+        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
+                                     src=None,
+                                     koji_task_id=koji_task_id,
+                                     source=True,
+                                     create_build_args=create_args.copy())
+
+        build_finished_response = flexmock(status=500, json={})
+        (build_finished_response
+            .should_receive('is_succeeded')
+            .and_return(False))
+        (build_finished_response
+            .should_receive('is_cancelled')
+            .and_return(reason == 'canceled'))
+        (build_finished_response
+            .should_receive('is_failed')
+            .and_return(reason == 'failed'))
+
+        (task._osbs
+            .should_receive('wait_for_build_to_finish')
+            .and_return(build_finished_response))
+
+        if reason == 'canceled':
+            task._osbs.wait_for_build_to_get_scheduled = \
+                lambda build_id: os.kill(os.getpid(), signal.SIGINT)
+            (task._osbs
+                .should_receive('cancel_build')
+                .once())
+            (session
+                .should_receive('cancelTask')
+                .once())
+
+        with pytest.raises(expected_exc_type):
+            task.handler('target', create_args)
 
     def test_get_build_target_failed(self, tmpdir):
         koji_task_id = 123
@@ -614,6 +816,27 @@ class TestBuilder(object):
                                                          demux=True)
         with pytest.raises(koji.BuildError) as exc:
             task.handler(src['src'], 'target', opts={})
+        assert "Target `target` not found" in str(exc.value)
+
+    def test_get_build_target_failed_source(self, tmpdir):
+        koji_task_id = 123
+        last_event_id = 456
+        session = flexmock()
+        (session
+            .should_receive('getLastEvent')
+            .and_return({'id': last_event_id}))
+        (session
+            .should_receive('getBuildTarget')
+            .with_args('target', event=last_event_id)
+            .and_return(None))
+        task = builder_containerbuild.BuildSourceContainerTask(id=koji_task_id,
+                                                               method='buildSourceContainer',
+                                                               params='params',
+                                                               session=session,
+                                                               options={},
+                                                               workdir=str(tmpdir))
+        with pytest.raises(koji.BuildError) as exc:
+            task.handler('target', opts={'koji_build_id': 12345})
         assert "Target `target` not found" in str(exc.value)
 
     def test_private_branch(self, tmpdir):
@@ -749,6 +972,68 @@ class TestBuilder(object):
                 'koji_builds': [koji_build_id]
             }
 
+    @pytest.mark.parametrize('log_upload_raises', (True, False))
+    @pytest.mark.parametrize('additional_args', (
+        {'scratch': True, 'koji_build_id': 12345},
+        {'scratch': False, 'koji_build_id': 12345},
+        {'scratch': True, 'koji_build_nvr': 'build_nvr'},
+        {'scratch': False, 'koji_build_nvr': 'build_nvr'},
+        {'signing_intent': 'some intent', 'koji_build_id': 12345},
+        {'signing_intent': 'some intent', 'koji_build_nvr': 'build_nvr'},
+        {'signing_intent': 'some intent', 'koji_build_nvr': 'build_nvr', 'koji_build_id': 12345},
+        {'koji_build_nvr': 'build_nvr', 'koji_build_id': 12345},
+    ))
+    def test_additional_args_source(self, log_upload_raises, additional_args):
+        koji_task_id = 123
+        last_event_id = 456
+        koji_build_id = 999
+
+        session = self._mock_session(last_event_id, koji_task_id)
+
+        (session
+            .should_receive('getPackageConfig')
+            .with_args('dest-tag', 'source_package-source')
+            .and_return({'blocked': False}))
+
+        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+
+        task = builder_containerbuild.BuildSourceContainerTask(id=koji_task_id,
+                                                               method='buildSourceContainer',
+                                                               params='params',
+                                                               session=session,
+                                                               options=options,
+                                                               workdir='workdir')
+
+        (session
+            .should_receive('getBuild')
+            .and_return({'build_id': 12345, 'nvr': 'build_nvr',
+                         'package_name': 'source_package'}))
+        (flexmock(task)
+            .should_receive('_write_incremental_logs'))
+        (flexmock(task)
+            .should_receive('_write_combined_log'))
+
+        if log_upload_raises:
+            (flexmock(task)
+                .should_receive('_incremental_upload_logs')
+                .and_raise(koji.ActionNotAllowed))
+        else:
+            (flexmock(task)
+                .should_call('_incremental_upload_logs'))
+
+        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
+                                     src=None,
+                                     koji_task_id=koji_task_id,
+                                     source=True,
+                                     create_build_args=additional_args.copy())
+
+        task_response = task.handler('target', opts=additional_args)
+
+        assert task_response == {
+            'repositories': ['unique-repo', 'primary-repo'],
+            'koji_builds': [koji_build_id]
+        }
+
     def test_flatpak_build(self, tmpdir):
         task_id = 123
         last_event_id = 456
@@ -780,11 +1065,9 @@ class TestBuilder(object):
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,
                                      koji_task_id=task_id,
-                                     orchestrator=True, flatpak=True,
+                                     orchestrator=True,
                                      create_build_args=additional_args.copy(),
                                      build_not_started=False)
-        build_response = flexmock()
-
         task_response = task.handler(src['src'], 'target', opts={
             'flatpak': True,
         })
@@ -792,7 +1075,6 @@ class TestBuilder(object):
             'repositories': ['unique-repo', 'primary-repo'],
             'koji_builds': [koji_build_id]
         }
-
 
     @pytest.mark.parametrize('orchestrator', (True, False))
     @pytest.mark.parametrize(('tag', 'release', 'is_oversized'), (
@@ -841,7 +1123,7 @@ class TestBuilder(object):
                                      src=src,
                                      koji_task_id=koji_task_id,
                                      orchestrator=orchestrator,
-                                     create_build_args=additional_args,
+                                     create_build_args=additional_args.copy(),
                                      build_not_started=is_oversized)
 
         if is_oversized:
@@ -917,12 +1199,71 @@ class TestBuilder(object):
                                      src=src,
                                      koji_task_id=koji_task_id,
                                      orchestrator=orchestrator,
-                                     create_build_args=additional_args,
+                                     create_build_args=additional_args.copy(),
                                      build_not_started=True)
 
         with pytest.raises(koji.BuildError) as exc_info:
             task.handler(src['src'], 'target', opts=additional_args)
         assert 'already exists' in str(exc_info.value)
+
+    @pytest.mark.parametrize(('create_args', 'cause'), (
+        ({'koji_build_id': 12345}, 'doesnt exist'),
+        ({'koji_build_nvr': 'build_nvr'}, 'doesnt exist'),
+        ({'koji_build_nvr': 'build_nvr', 'koji_build_id': 12345}, 'doesnt exist'),
+        ({'koji_build_nvr': 'build_nvr', 'koji_build_id': 12345}, 'mismatch'),
+    ))
+    def test_source_build_info(self, create_args, cause):
+        koji_task_id = 123
+        last_event_id = 456
+        koji_build_id = 999
+        different_build_id = 54321
+
+        session = self._mock_session(last_event_id, koji_task_id)
+
+        if cause == 'doesnt exist':
+            (session
+                .should_receive('getBuild')
+                .and_return({}))
+
+            build_id = create_args.get('koji_build_nvr') or create_args.get('koji_build_id')
+            log_message = "specified source build '{}' doesn't exist".format(build_id)
+
+        elif cause == 'mismatch':
+            (session
+                .should_receive('getBuild')
+                .and_return({'build_id': different_build_id, 'nvr': 'build_nvr',
+                             'package_name': 'package'}))
+
+            log_message = (
+                'koji_build_id {} does not match koji_build_nvr {} with id {}. '
+                'When specifying both an id and an nvr, they should point to the same image build'
+                .format(create_args['koji_build_id'], create_args['koji_build_nvr'],
+                        different_build_id)
+                )
+
+        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+
+        task = builder_containerbuild.BuildSourceContainerTask(id=koji_task_id,
+                                                               method='buildSourceContainer',
+                                                               params='params',
+                                                               session=session,
+                                                               options=options,
+                                                               workdir='workdir')
+        (flexmock(task)
+            .should_receive('_write_incremental_logs'))
+        (flexmock(task)
+            .should_receive('_write_combined_log'))
+
+        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
+                                     src=None,
+                                     koji_task_id=koji_task_id,
+                                     source=True,
+                                     create_build_args=create_args.copy(),
+                                     build_not_started=True)
+
+        with pytest.raises(koji.BuildError) as exc_info:
+            task.handler('target', opts=create_args)
+        assert log_message in str(exc_info.value)
 
     @pytest.mark.parametrize(('additional_args', 'raises'), (
         ({}, False),
@@ -1051,9 +1392,10 @@ class TestBuilder(object):
         ('target', None, ['string']),
         ('target', 123, ['string']),
 
-        ('opts', '{"a": "b"}', ['object', 'null']),
-        ('opts', 123, ['object', 'null']),
-        ('opts', [], ['object', 'null']),
+        ('opts', '{"a": "b"}', ['object']),
+        ('opts', 123, ['object']),
+        ('opts', [], ['object']),
+        ('opts', None, ['object']),
     ])
     def test_schema_validation_invalid_arg_types(self, arg_name, arg_value, expected_types):
         task = builder_containerbuild.BuildContainerTask(id=1,
@@ -1062,7 +1404,6 @@ class TestBuilder(object):
                                                          session=None,
                                                          options=None,
                                                          workdir='not used')
-
         task_args = {
             'src': arg_value if arg_name == 'src' else 'abc',
             'target': arg_value if arg_name == 'target' else 'xyz',
@@ -1076,7 +1417,35 @@ class TestBuilder(object):
         err_msg = 'is not of type {}'.format(expected_types_str)
         assert err_msg in str(exc_info.value)
 
-    @pytest.mark.parametrize('property_name, property_value, expected_types', [
+    @pytest.mark.parametrize('arg_name, arg_value, expected_types', [
+        ('target', None, ['string']),
+        ('target', 123, ['string']),
+
+        ('opts', '{"a": "b"}', ['object']),
+        ('opts', 123, ['object']),
+        ('opts', [], ['object']),
+        ('opts', None, ['object']),
+    ])
+    def test_schema_validation_invalid_arg_types_source(self, arg_name, arg_value, expected_types):
+        task = builder_containerbuild.BuildSourceContainerTask(id=1,
+                                                               method='buildSourceContainer',
+                                                               params={},
+                                                               session=None,
+                                                               options=None,
+                                                               workdir='not used')
+        task_args = {
+            'target': arg_value if arg_name == 'target' else 'xyz',
+            'opts': arg_value if arg_name == 'opts' else None,
+        }
+
+        with pytest.raises(jsonschema.ValidationError) as exc_info:
+            task.handler(**task_args)
+
+        expected_types_str = ', '.join('{!r}'.format(t) for t in expected_types)
+        err_msg = 'is not of type {}'.format(expected_types_str)
+        assert err_msg in str(exc_info.value)
+
+    @pytest.mark.parametrize(('property_name', 'property_value', 'expected_types'), [
         ('scratch', 'true', ['boolean']),
         ('scratch', 1, ['boolean']),
         ('scratch', None, ['boolean']),
@@ -1107,7 +1476,6 @@ class TestBuilder(object):
                                                               property_name,
                                                               property_value,
                                                               expected_types):
-
         task = builder_containerbuild.BuildContainerTask(id=1,
                                                          method='buildContainer',
                                                          params={},
@@ -1124,11 +1492,47 @@ class TestBuilder(object):
         err_msg = 'is not of type {}'.format(expected_types_str)
         assert err_msg in str(exc_info.value)
 
-    @pytest.mark.parametrize('build_opts', [
-        None,
-        {},
-        {'unknown_property': 'validates (for now)'},
+    @pytest.mark.parametrize(('property_name', 'property_value', 'expected_types', 'build_opts'), [
+        ('scratch', 'true', ['boolean'],
+         {'koji_build_id': 12345}),
+        ('scratch', 1, ['boolean'],
+         {'koji_build_id': 12345}),
+        ('scratch', None, ['boolean'],
+         {'koji_build_id': 12345}),
+        ('signing_intent', 123, ['string'],
+         {'koji_build_id': 12345}),
+        ('signing_intent', None, ['string'],
+         {'koji_build_id': 12345}),
+        ('koji_build_id', None, ['integer'],
+         {}),
+        ('koji_build_id', 'string', ['integer'],
+         {}),
+        ('koji_build_nvr', 123, ['string'],
+         {}),
+        ('koji_build_nvr', None, ['string'],
+         {}),
+    ])
+    def test_schema_validation_invalid_type_for_opts_property_source(self,
+                                                                     property_name,
+                                                                     property_value,
+                                                                     expected_types,
+                                                                     build_opts):
+        task = builder_containerbuild.BuildSourceContainerTask(id=1,
+                                                               method='buildSourceContainer',
+                                                               params={},
+                                                               session=None,
+                                                               options=None,
+                                                               workdir='not used')
+        build_opts[property_name] = property_value
 
+        with pytest.raises(jsonschema.ValidationError) as exc_info:
+            task.handler('target', build_opts)
+
+        expected_types_str = ', '.join('{!r}'.format(t) for t in expected_types)
+        err_msg = 'is not of type {}'.format(expected_types_str)
+        assert err_msg in str(exc_info.value)
+
+    @pytest.mark.parametrize('build_opts', [
         {'scratch': False,
          'isolated': False,
          'yum_repourls': None,
@@ -1151,7 +1555,7 @@ class TestBuilder(object):
          'compose_ids': [1, 2, 3],
          'signing_intent': 'No, I do not intend to sign anything.'},
     ])
-    def test_schema_validation_valid_options(self, build_opts, tmpdir):
+    def test_schema_validation_valid_options_container(self, build_opts, tmpdir):
         koji_task_id = 123
         last_event_id = 456
 
@@ -1172,7 +1576,45 @@ class TestBuilder(object):
             .and_return(folders_info['dockerfile_path']))
 
         (flexmock(task)
-            .should_receive('runBuilds')
-            .and_return([{'repository': 'something.somewhere'}]))
+            .should_receive('createContainer')
+            .and_return({'repositories': 'something.somewhere'}))
 
         task.handler(src['src'], 'target', build_opts)
+
+    @pytest.mark.parametrize('scratch', (True, False))
+    @pytest.mark.parametrize('signing_intent', (None, 'No, I do not intend to sign anything.'))
+    @pytest.mark.parametrize('build_opts', [
+        {'koji_build_id': 12345},
+        {'koji_build_nvr': 'build_nvr'},
+        {'koji_build_id': 12345,
+         'koji_build_nvr': 'build_nvr'},
+    ])
+    def test_schema_validation_valid_options_sourcecontainer(self, tmpdir, scratch,
+                                                             signing_intent, build_opts):
+        koji_task_id = 123
+        last_event_id = 456
+        source_koji_id = 12345
+        source_koji_nvr = 'build_nvr'
+        session = self._mock_session(last_event_id, koji_task_id)
+        (session
+            .should_receive('getBuild')
+            .and_return({'build_id': source_koji_id, 'nvr': source_koji_nvr,
+                         'package_name': 'package'}))
+
+        task = builder_containerbuild.BuildSourceContainerTask(id=koji_task_id,
+                                                               method='buildSourceContainer',
+                                                               params={},
+                                                               session=session,
+                                                               options={},
+                                                               workdir=str(tmpdir))
+
+        (flexmock(task)
+            .should_receive('createSourceContainer')
+            .and_return({'repositories': 'something.somewhere'}))
+
+        if scratch:
+            build_opts['scratch'] = scratch
+        if signing_intent:
+            build_opts['signing_intent'] = signing_intent
+
+        task.handler('target', build_opts)

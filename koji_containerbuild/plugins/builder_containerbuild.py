@@ -41,7 +41,7 @@ import koji
 import koji.plugin
 
 from koji.daemon import SCM, incremental_upload
-from koji.tasks import ServerExit, BaseTaskHandler
+from koji.tasks import BaseTaskHandler
 
 import osbs
 from osbs.api import OSBS
@@ -269,96 +269,12 @@ class LabelsWrapper(object):
             return "%s (or %s)" % (label_map[0], " or ".join(label_map[1:]))
 
 
-class BuildContainerTask(BaseTaskHandler):
-    # Start builds via osbs for each arch (this might change soon)
-    Methods = ['buildContainer']
-    # Same value as for regular 'build' method.
-    _taskWeight = 2.0
-
-    # JSON Schema definition for koji containerBuild task parameters
-    # Used to validate arguments passed to the handler() method of this class
-    PARAMS_SCHEMA = {
-        "$schema": "http://json-schema.org/draft-07/schema#",
-        "description": "Parameters for a koji containerBuild task.",
-
-        "type": "array",
-        "items": [
-            {
-                "type": "string",
-                "description": "Source URI."
-            },
-            {
-                "type": "string",
-                "description": "Build target."
-            },
-            {
-                "type": ["object", "null"],
-                "properties": {
-                    "scratch": {
-                        "type": "boolean",
-                        "description": "Perform a scratch build?"
-                    },
-                    "isolated": {
-                        "type": "boolean",
-                        "description": "Perform an isolated build?"
-                    },
-                    "yum_repourls": {
-                        "type": ["array", "null"],
-                        "items": {
-                            "type": "string"
-                        },
-                        "description": "URLs of yum repo files."
-                    },
-                    "git_branch": {
-                        "type": ["string", "null"],
-                        "description": "Git branch to build from."
-                    },
-                    "push_url": {
-                        "type": ["string", "null"]
-                    },
-                    "koji_parent_build": {
-                        "type": ["string", "null"],
-                        "description": "Overwrite parent image with image from koji build."
-                    },
-                    "release": {
-                        "type": ["string", "null"],
-                        "description": "Set release value."
-                    },
-                    "flatpak": {
-                        "type": "boolean",
-                        "description": "Build a flatpak instead of a container?"
-                    },
-                    "compose_ids": {
-                        "type": ["array", "null"],
-                        "items": {
-                            "type": "integer"
-                        },
-                        "description": "ODCS composes used."
-                    },
-                    "signing_intent": {
-                        "type": ["string", "null"],
-                        "description": "Signing intent of the ODCS composes."
-                    },
-                    "skip_build": {
-                        "type": "boolean",
-                        "description": "Skip build, just update buildconfig for autorebuild "
-                                       "and don't start build"
-                    },
-                    "triggered_after_koji_task": {
-                        "type": "integer",
-                        "description": "Koji task for which autorebuild runs"
-                    }
-                }
-            }
-        ]
-    }
-
-    def __init__(self, id, method, params, session, options, workdir=None, demux=True):
-        BaseTaskHandler.__init__(self, id, method, params, session, options,
-                                 workdir)
+class BaseContainerTask(BaseTaskHandler):
+    """Common class for BuildContainerTask and BuildSourceContainerTask"""
+    def __init__(self, id, method, params, session, options, workdir=None):
+        BaseTaskHandler.__init__(self, id, method, params, session, options, workdir)
         self._osbs = None
-        self.demux = demux
-
+        self.demux = None
         self._log_handler_added = False
 
     def osbs(self):
@@ -480,7 +396,6 @@ class BuildContainerTask(BaseTaskHandler):
             self.logger.info("%s written", logfile.name)
 
     def _write_incremental_logs(self, build_id, logs_dir):
-        build_logs = None
         if self.demux and hasattr(self.osbs(), 'get_orchestrator_build_logs'):
             self._write_demultiplexed_logs(build_id, logs_dir)
         else:
@@ -536,41 +451,187 @@ class BuildContainerTask(BaseTaskHandler):
         elif pkg_cfg['blocked']:
             raise koji.BuildError("package (container)  %s is blocked for tag %s" % (name, target_info['dest_tag_name']))
 
-    def runBuilds(self, src, target_info, arches, scratch=False, isolated=False,
-                  yum_repourls=None, branch=None, push_url=None,
-                  koji_parent_build=None, release=None,
-                  flatpak=False, signing_intent=None,
-                  compose_ids=None, skip_build=False, triggered_after_koji_task=None):
+    def handle_build_response(self, build_response, arch=None):
+        build_id = build_response.get_build_name()
+        self.logger.debug("OSBS build id: %r", build_id)
 
-        self.logger.debug("Spawning jobs for arches: %r" % (arches))
+        # When builds are cancelled the builder plugin process gets SIGINT and SIGKILL
+        # If osbs has started a build it should get cancelled
+        def sigint_handler(*args, **kwargs):
+            if not build_id:
+                return
 
-        results = []
+            self.logger.warn("Cannot read logs, cancelling build %s", build_id)
+            self.osbs().cancel_build(build_id)
 
-        kwargs = dict(
-            src=src,
-            target_info=target_info,
-            scratch=scratch,
-            isolated=isolated,
-            yum_repourls=yum_repourls,
-            branch=branch,
-            push_url=push_url,
-            arches=arches,
-            koji_parent_build=koji_parent_build,
-            release=release,
-            flatpak=flatpak,
-            signing_intent=signing_intent,
-            compose_ids=compose_ids,
-            skip_build=skip_build,
-            triggered_after_koji_task=triggered_after_koji_task
-        )
+        signal.signal(signal.SIGINT, sigint_handler)
 
-        results = []
-        semi_results = self.createContainer(**kwargs)
-        if semi_results is not None:
-            results = [semi_results]
+        self.logger.debug("Waiting for osbs build_id: %s to be scheduled.",
+                          build_id)
+        # we need to wait for kubelet to schedule the build, otherwise it's 500
+        self.osbs().wait_for_build_to_get_scheduled(build_id)
+        self.logger.debug("Build was scheduled")
 
-        self.logger.debug("Results: %r", results)
-        return results
+        osbs_logs_dir = self.resultdir()
+        koji.ensuredir(osbs_logs_dir)
+        pid = os.fork()
+        if pid:
+            try:
+                self._incremental_upload_logs(pid)
+            except koji.ActionNotAllowed:
+                pass
+        else:
+            self._osbs = None
+
+            try:
+                self._write_incremental_logs(build_id, osbs_logs_dir)
+            except Exception as error:
+                self.logger.info("Error while saving incremental logs: %s", error)
+                os._exit(1)
+            os._exit(0)
+
+        response = self.osbs().wait_for_build_to_finish(build_id)
+
+        self.logger.debug("OSBS build finished with status: %s. Build "
+                          "response: %s.", response.status,
+                          response.json)
+
+        self.logger.info("Response status: %r", response.is_succeeded())
+
+        if response.is_cancelled():
+            self.session.cancelTask(self.id)
+            raise ContainerCancelled('Image build was cancelled by OSBS.')
+
+        elif response.is_failed():
+            error_message = self._get_error_message(response)
+            if error_message:
+                raise ContainerError('Image build failed. %s. OSBS build id: %s' %
+                                     (error_message, build_id))
+            else:
+                raise ContainerError('Image build failed. OSBS build id: %s' %
+                                     build_id)
+
+        repositories = []
+        if response.is_succeeded():
+            repositories = self._get_repositories(response)
+
+        self.logger.info("Image available in the following repositories: %r",
+                         repositories)
+
+        koji_build_id = None
+        if response.is_succeeded():
+            koji_build_id = self._get_koji_build_id(response)
+
+        self.logger.info("Koji content generator build ID: %s", koji_build_id)
+
+        containerdata = {
+            'task_id': self.id,
+            'osbs_build_id': build_id,
+            'files': [],
+            'repositories': repositories,
+            'koji_build_id': koji_build_id,
+        }
+        if arch:
+            containerdata['arch'] = arch
+
+        return containerdata
+
+
+class BuildContainerTask(BaseContainerTask):
+    """Start builds via osbs for each arch (this might change soon)"""
+    Methods = ['buildContainer']
+    # Same value as for regular 'build' method.
+    _taskWeight = 2.0
+
+    # JSON Schema definition for koji buildContainer task parameters
+    # Used to validate arguments passed to the handler() method of this class
+    PARAMS_SCHEMA = {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "description": "Parameters for a koji buildContainer task.",
+
+        "type": "array",
+        "items": [
+            {
+                "type": "string",
+                "description": "Source URI."
+            },
+            {
+                "type": "string",
+                "description": "Build target."
+            },
+            {
+                "type": ["object"],
+                "properties": {
+                    "scratch": {
+                        "type": "boolean",
+                        "description": "Perform a scratch build?"
+                    },
+                    "isolated": {
+                        "type": "boolean",
+                        "description": "Perform an isolated build?"
+                    },
+                    "yum_repourls": {
+                        "type": ["array", "null"],
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "URLs of yum repo files."
+                    },
+                    "arch_override": {
+                        "type": ["string", "null"],
+                        "description": "Limit build to specific arches"
+                    },
+                    "git_branch": {
+                        "type": ["string", "null"],
+                        "description": "Git branch to build from."
+                    },
+                    "push_url": {
+                        "type": ["string", "null"]
+                    },
+                    "koji_parent_build": {
+                        "type": ["string", "null"],
+                        "description": "Overwrite parent image with image from koji build."
+                    },
+                    "release": {
+                        "type": ["string", "null"],
+                        "description": "Set release value."
+                    },
+                    "flatpak": {
+                        "type": "boolean",
+                        "description": "Build a flatpak instead of a container?"
+                    },
+                    "compose_ids": {
+                        "type": ["array", "null"],
+                        "items": {
+                            "type": "integer"
+                        },
+                        "description": "ODCS composes used."
+                    },
+                    "signing_intent": {
+                        "type": ["string", "null"],
+                        "description": "Signing intent of the ODCS composes."
+                    },
+                    "skip_build": {
+                        "type": "boolean",
+                        "description": "Skip build, just update buildconfig for autorebuild "
+                                       "and don't start build"
+                    },
+                    "triggered_after_koji_task": {
+                        "type": "integer",
+                        "description": "Koji task for which autorebuild runs"
+                    }
+                },
+                "additionalProperties": False
+            }
+        ],
+        "minItems": 3
+    }
+
+    def __init__(self, id, method, params, session, options, workdir=None, demux=True):
+        BaseContainerTask.__init__(self, id, method, params, session, options,
+                                   workdir)
+        self.demux = demux
+
 
     def createContainer(self, src=None, target_info=None, arches=None,
                         scratch=None, isolated=None, yum_repourls=[],
@@ -622,20 +683,20 @@ class BuildContainerTask(BaseTaskHandler):
         if triggered_after_koji_task is not None:
             create_build_args['triggered_after_koji_task'] = triggered_after_koji_task
 
-        try:
-            orchestrator_create_build_args = create_build_args.copy()
-            orchestrator_create_build_args['platforms'] = arches
-            if signing_intent:
-                orchestrator_create_build_args['signing_intent'] = signing_intent
-            if compose_ids:
-                orchestrator_create_build_args['compose_ids'] = compose_ids
-            if koji_parent_build:
-                orchestrator_create_build_args['koji_parent_build'] = koji_parent_build
-            if isolated:
-                orchestrator_create_build_args['isolated'] = isolated
-            if release:
-                orchestrator_create_build_args['release'] = release
+        orchestrator_create_build_args = create_build_args.copy()
+        orchestrator_create_build_args['platforms'] = arches
+        if signing_intent:
+            orchestrator_create_build_args['signing_intent'] = signing_intent
+        if compose_ids:
+            orchestrator_create_build_args['compose_ids'] = compose_ids
+        if koji_parent_build:
+            orchestrator_create_build_args['koji_parent_build'] = koji_parent_build
+        if isolated:
+            orchestrator_create_build_args['isolated'] = isolated
+        if release:
+            orchestrator_create_build_args['release'] = release
 
+        try:
             create_method = self.osbs().create_orchestrator_build
             self.logger.debug("Starting %s with params: '%s",
                               create_method, orchestrator_create_build_args)
@@ -661,90 +722,7 @@ class BuildContainerTask(BaseTaskHandler):
 
             return
 
-        build_id = build_response.get_build_name()
-        self.logger.debug("OSBS build id: %r", build_id)
-
-        # When builds are cancelled the builder plugin process gets SIGINT and SIGKILL
-        # If osbs has started a build it should get cancelled
-        def sigint_handler(*args, **kwargs):
-            if not build_id:
-                return
-
-            self.logger.warn("Cannot read logs, cancelling build %s", build_id)
-            self.osbs().cancel_build(build_id)
-
-        signal.signal(signal.SIGINT, sigint_handler)
-
-        self.logger.debug("Waiting for osbs build_id: %s to be scheduled.",
-                          build_id)
-        # we need to wait for kubelet to schedule the build, otherwise it's 500
-        self.osbs().wait_for_build_to_get_scheduled(build_id)
-        self.logger.debug("Build was scheduled")
-
-        osbs_logs_dir = self.resultdir()
-        koji.ensuredir(osbs_logs_dir)
-        pid = os.fork()
-        if pid:
-            try:
-                self._incremental_upload_logs(pid)
-            except koji.ActionNotAllowed:
-                pass
-        else:
-            self._osbs = None
-
-            try:
-                self._write_incremental_logs(build_id, osbs_logs_dir)
-            except Exception as error:
-                self.logger.info("Error while saving incremental logs: %s", error)
-                os._exit(1)
-            os._exit(0)
-
-        response = self.osbs().wait_for_build_to_finish(build_id)
-
-        self.logger.debug("OSBS build finished with status: %s. Build "
-                          "response: %s.", response.status,
-                          response.json)
-
-        self.logger.info("Response status: %r", response.is_succeeded())
-
-        if response.is_cancelled():
-            self.session.cancelTask(self.id)
-            raise ContainerCancelled(
-                'Image build was cancelled by OSBS, maybe by automated rebuild.'
-            )
-
-        elif response.is_failed():
-            error_message = self._get_error_message(response)
-            if error_message:
-                raise ContainerError('Image build failed. %s. OSBS build id: %s' %
-                                     (error_message, build_id))
-            else:
-                raise ContainerError('Image build failed. OSBS build id: %s' %
-                                     build_id)
-
-        repositories = []
-        if response.is_succeeded():
-            repositories = self._get_repositories(response)
-
-        self.logger.info("Image available in the following repositories: %r",
-                         repositories)
-
-        koji_build_id = None
-        if response.is_succeeded():
-            koji_build_id = self._get_koji_build_id(response)
-
-        self.logger.info("Koji content generator build ID: %s", koji_build_id)
-
-        containerdata = {
-            'arch': arch,
-            'task_id': self.id,
-            'osbs_build_id': build_id,
-            'files': [],
-            'repositories': repositories,
-            'koji_build_id': koji_build_id,
-        }
-
-        return containerdata
+        return self.handle_build_response(build_response, arch=arch)
 
     def getArchList(self, build_tag, extra=None):
         """Copied from build task"""
@@ -849,10 +827,6 @@ class BuildContainerTask(BaseTaskHandler):
 
     def handler(self, src, target, opts=None):
         jsonschema.validate([src, target, opts], self.PARAMS_SCHEMA)
-
-        if opts is None:
-            opts = {}
-
         self.opts = opts
         component = None
 
@@ -881,65 +855,235 @@ class BuildContainerTask(BaseTaskHandler):
         if not self.opts.get('scratch') and not flatpak:
             self.check_whitelist(component, target_info)
 
+        if flatpak:
+            expected_nvr = None
+
+        if not SCM.is_scm_url(src):
+            raise koji.BuildError('Invalid source specification: %s' % src)
+
+        # Scratch and auto release builds shouldn't be checked for nvr
+        if not self.opts.get('scratch') and expected_nvr:
+            try:
+                build_id = self.session.getBuild(expected_nvr)['id']
+            except:
+                self.logger.info("No build for %s found", expected_nvr, exc_info=True)
+            else:
+                raise koji.BuildError(
+                    "Build for %s already exists, id %s" % (expected_nvr, build_id))
+
+        self.logger.debug("Spawning jobs for arches: %r" % (archlist))
+
+        kwargs = dict(
+            src=src,
+            target_info=target_info,
+            scratch=opts.get('scratch', False),
+            isolated=opts.get('isolated', False),
+            yum_repourls=opts.get('yum_repourls', None),
+            branch=opts.get('git_branch', None),
+            push_url=opts.get('push_url', None),
+            arches=archlist,
+            koji_parent_build=opts.get('koji_parent_build'),
+            release=release_overwrite,
+            flatpak=flatpak,
+            signing_intent=opts.get('signing_intent', None),
+            compose_ids=opts.get('compose_ids', None),
+            skip_build=opts.get('skip_build', False),
+            triggered_after_koji_task=opts.get('triggered_after_koji_task', None)
+        )
+
+        results = []
+        semi_results = self.createContainer(**kwargs)
+        if semi_results is not None:
+            results = [semi_results]
+
+        self.logger.debug("Results: %r", results)
+
+        all_repositories = []
+        all_koji_builds = []
+
+        if not results:
+            return {
+                'repositories': all_repositories,
+                'koji_builds': all_koji_builds,
+                'build': 'skipped',
+            }
+
+        for result in results:
+            try:
+                repository = result.get('repositories')
+                all_repositories.extend(repository)
+            except Exception as error:
+                self.logger.error("Failed to merge list of repositories "
+                                  "%r. Reason (%s): %s", repository,
+                                  type(error), error)
+            koji_build_id = result.get('koji_build_id')
+            if koji_build_id:
+                all_koji_builds.append(koji_build_id)
+
+        return {
+            'repositories': all_repositories,
+            'koji_builds': all_koji_builds,
+        }
+
+
+class BuildSourceContainerTask(BaseContainerTask):
+    """Start builds via osbs"""
+    Methods = ['buildSourceContainer']
+    # Same value as for regular 'build' method.
+    _taskWeight = 2.0
+
+    # JSON Schema definition for koji buildSourceContainer task parameters
+    # Used to validate arguments passed to the handler() method of this class
+    PARAMS_SCHEMA = {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "description": "Parameters for a koji buildSourceContainer task.",
+
+        "type": "array",
+        "items": [
+            {
+                "type": "string",
+                "description": "Build target."
+            },
+            {
+                "type": ["object"],
+                "properties": {
+                    "scratch": {
+                        "type": "boolean",
+                        "description": "Perform a scratch build?"
+                    },
+                    "koji_build_id": {
+                        "type": ["integer"],
+                        "description": "Koji build id for sources",
+                        "examples": [1233, 1234, 1235]
+                    },
+                    "koji_build_nvr": {
+                        "type": ["string"],
+                        "description": "Koji build nvr for sources",
+                        "examples": [
+                           "some_image_build-3.0-30",
+                           "another_image_build-4.0-10"
+                        ]
+                    },
+                    "signing_intent": {
+                        "type": ["string"],
+                        "description": "Signing intent of the ODCS composes."
+                    },
+                },
+                "anyOf": [
+                    {"required": ["koji_build_nvr"]},
+                    {"required": ["koji_build_id"]}
+                ],
+                "additionalProperties": False
+            }
+        ],
+        "minItems": 2
+    }
+
+    def __init__(self, id, method, params, session, options, workdir=None, demux=False):
+        BaseContainerTask.__init__(self, id, method, params, session, options,
+                                   workdir)
+        self.demux = demux
+
+    def createSourceContainer(self, target_info=None, scratch=None, component=None,
+                              koji_build_id=None, koji_build_nvr=None, signing_intent=None):
+        this_task = self.session.getTaskInfo(self.id)
+        self.logger.debug("This task: %r", this_task)
+        owner_info = self.session.getUser(this_task['owner'])
+        self.logger.debug("Started by %s", owner_info['name'])
+
+        create_build_args = {
+            'user': owner_info['name'],
+            'component': component,
+            'sources_for_koji_build_id': koji_build_id,
+            'sources_for_koji_build_nvr': koji_build_nvr,
+            'target': target_info['name'],
+            'scratch': scratch,
+            'koji_task_id': self.id,
+        }
+
+        if signing_intent:
+            create_build_args['signing_intent'] = signing_intent
+
         try:
-            if flatpak:
-                expected_nvr = None
+            create_method = self.osbs().create_source_container_build
+            self.logger.debug("Starting %s with params: '%s",
+                              create_method, create_build_args)
+            build_response = create_method(**create_build_args)
+        except AttributeError:
+            raise koji.BuildError("method %s doesn't exists in osbs" % create_method)
 
-            if not SCM.is_scm_url(src):
-                raise koji.BuildError('Invalid source specification: %s' % src)
+        return self.handle_build_response(build_response)
 
-            # Scratch and auto release builds shouldn't be checked for nvr
-            if not self.opts.get('scratch') and expected_nvr:
-                try:
-                    build_id = self.session.getBuild(expected_nvr)['id']
-                except:
-                    self.logger.info("No build for %s found", expected_nvr, exc_info=True)
-                else:
-                    raise koji.BuildError(
-                        "Build for %s already exists, id %s" % (expected_nvr, build_id))
+    def get_source_build_info(self, build_id, build_nvr):
+        build_identifier = build_nvr or build_id
 
-            results = self.runBuilds(src, target_info, archlist,
-                                     scratch=opts.get('scratch', False),
-                                     isolated=opts.get('isolated', False),
-                                     yum_repourls=opts.get('yum_repourls', None),
-                                     branch=opts.get('git_branch', None),
-                                     push_url=opts.get('push_url', None),
-                                     koji_parent_build=opts.get('koji_parent_build'),
-                                     release=release_overwrite,
-                                     flatpak=flatpak,
-                                     compose_ids=opts.get('compose_ids', None),
-                                     signing_intent=opts.get('signing_intent', None),
-                                     skip_build=opts.get('skip_build', False),
-                                     triggered_after_koji_task=opts.get('triggered_after_koji_task', None),
-                                     )
-            all_repositories = []
-            all_koji_builds = []
+        koji_build = self.session.getBuild(build_identifier)
+        if not koji_build:
+            raise koji.BuildError("specified source build '%s' doesn't exist" % build_identifier)
 
-            if not results:
-                return {
-                    'repositories': all_repositories,
-                    'koji_builds': all_koji_builds,
-                    'build': 'skipped',
-                }
+        if build_id and (build_id != koji_build['build_id']):
+            err_msg = (
+                'koji_build_id {} does not match koji_build_nvr {} with id {}. '
+                'When specifying both an id and an nvr, they should point to the same image build'
+                .format(build_id, build_nvr, koji_build['build_id'])
+                )
+            raise koji.BuildError(err_msg)
 
-            for result in results:
-                try:
-                    repository = result.get('repositories')
-                    all_repositories.extend(repository)
-                except Exception as error:
-                    self.logger.error("Failed to merge list of repositories "
-                                      "%r. Reason (%s): %s", repository,
-                                      type(error), error)
-                koji_build_id = result.get('koji_build_id')
-                if koji_build_id:
-                    all_koji_builds.append(koji_build_id)
+        if not build_id:
+            build_id = koji_build['build_id']
+        if not build_nvr:
+            build_nvr = koji_build['nvr']
+        component = "%s-source" % koji_build['package_name']
 
-        except (SystemExit, ServerExit, KeyboardInterrupt):
-            # we do not trap these
-            raise
-        except:
-            # reraise the exception
-            raise
+        return component, build_id, build_nvr
+
+    def handler(self, target, opts=None):
+        jsonschema.validate([target, opts], self.PARAMS_SCHEMA)
+        self.opts = opts
+
+        self.event_id = self.session.getLastEvent()['id']
+        target_info = self.session.getBuildTarget(target, event=self.event_id)
+        if not target_info:
+            raise koji.BuildError("Target `%s` not found" % target)
+
+        component, build_id, build_nvr = self.get_source_build_info(opts.get('koji_build_id'),
+                                                                    opts.get('koji_build_nvr'))
+        # scratch builds do not get imported, and consequently not tagged
+        if not self.opts.get('scratch'):
+            self.check_whitelist(component, target_info)
+
+        self.logger.debug("Spawning job for sources")
+
+        kwargs = dict(
+            target_info=target_info,
+            scratch=opts.get('scratch', False),
+            component=component,
+            koji_build_id=build_id,
+            koji_build_nvr=build_nvr,
+            signing_intent=opts.get('signing_intent', None),
+        )
+
+        results = []
+        semi_results = self.createSourceContainer(**kwargs)
+        if semi_results is not None:
+            results = [semi_results]
+
+        self.logger.debug("Results: %r", results)
+
+        all_repositories = []
+        all_koji_builds = []
+
+        for result in results:
+            try:
+                repository = result.get('repositories')
+                all_repositories.extend(repository)
+            except Exception as error:
+                self.logger.error("Failed to merge list of repositories "
+                                  "%r. Reason (%s): %s", repository,
+                                  type(error), error)
+            koji_build_id = result.get('koji_build_id')
+            if koji_build_id:
+                all_koji_builds.append(koji_build_id)
 
         return {
             'repositories': all_repositories,

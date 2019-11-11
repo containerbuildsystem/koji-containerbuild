@@ -35,6 +35,22 @@ import kojihub
 logger = logging.getLogger('koji.plugins')
 
 
+def _get_task_opts_and_opts(opts, priority, channel):
+    if opts is None:
+        opts = {}
+
+    taskOpts = {}
+    if priority:
+        if priority < 0:
+            if not context.session.hasPerm('admin'):
+                raise koji.ActionNotAllowed('only admins may create'
+                                            ' high-priority tasks')
+        taskOpts['priority'] = koji.PRIO_DEFAULT + priority
+    if channel:
+        taskOpts['channel'] = channel
+
+    return opts, taskOpts
+
 @export
 def buildContainer(src, target, opts=None, priority=None, channel='container'):
     """Create a container build task
@@ -52,16 +68,25 @@ def buildContainer(src, target, opts=None, priority=None, channel='container'):
                         "container" channel)
     :returns: the task ID (integer)
     """
-    if opts is None:
-        opts = {}
+    new_opts, taskOpts = _get_task_opts_and_opts(opts, priority, channel)
+    return kojihub.make_task('buildContainer', [src, target, new_opts], **taskOpts)
 
-    taskOpts = {}
-    if priority:
-        if priority < 0:
-            if not context.session.hasPerm('admin'):
-                raise koji.ActionNotAllowed('only admins may create'
-                                            ' high-priority tasks')
-        taskOpts['priority'] = koji.PRIO_DEFAULT + priority
-    if channel:
-        taskOpts['channel'] = channel
-    return kojihub.make_task('buildContainer', [src, target, opts], **taskOpts)
+
+@export
+def buildSourceContainer(target, opts=None, priority=None, channel='container'):
+    """Create a source container build task
+
+    :param str target: The build target for this container.
+    :param dict opts: Settings for this build, for example "scratch: true".
+                      The full list of available options is in
+                      builder_containerbuild.py.
+    :param int priority: the amount to increase (or decrease) the task
+                         priority, relative to the default priority; higher
+                         values mean lower priority; only admins have the
+                         right to specify a negative priority here
+    :param str channel: the channel to allocate the task to (defaults to the
+                        "container" channel)
+    :returns: the task ID (integer)
+    """
+    new_opts, taskOpts = _get_task_opts_and_opts(opts, priority, channel)
+    return kojihub.make_task('buildSourceContainer', [target, new_opts], **taskOpts)

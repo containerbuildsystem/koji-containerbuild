@@ -21,7 +21,7 @@ from flexmock import flexmock
 from collections import OrderedDict
 
 from koji_containerbuild.plugins import cli_containerbuild
-from koji_containerbuild.plugins.cli_containerbuild import parse_arguments
+from koji_containerbuild.plugins.cli_containerbuild import parse_arguments, parse_source_arguments
 
 
 def mock_session(target,
@@ -77,6 +77,11 @@ def mock_session(target,
                    priority=priority, channel=channel)
         .and_return(task_id))
     (session
+        .should_receive('buildSourceContainer')
+        .with_args(target, dict,
+                   priority=priority, channel=channel)
+        .and_return(task_id))
+    (session
         .should_receive('getTaskResult')
         .with_args(task_id)
         .and_return(task_result))
@@ -88,9 +93,20 @@ def build_cli_args(target,
                    source,
                    git_branch='random-branch',
                    wait=None,
-                   background=False):
+                   background=False,
+                   build_type='container_build',
+                   koji_build_id=12345,
+                   koji_build_nvr='test_nvr'):
     """Build command line arguments for cli_containerbuild.handle_build()"""
-    args = [target, source, '--git-branch', git_branch]
+    if build_type == 'container_build' or build_type == 'flatpak_build':
+        args = [target, source, '--git-branch', git_branch]
+    elif build_type == 'source_container_build':
+        args = [target]
+        if koji_build_id:
+            args.extend(['--koji-build-id', koji_build_id])
+        if koji_build_nvr:
+            args.extend(['--koji-build-nvr', koji_build_nvr])
+
     if wait is not None:
         args.append('--wait' if wait else '--nowait')
     if background:
@@ -147,18 +163,17 @@ class TestCLI(object):
         (None, False),
         (True, True),
     ))
-    @pytest.mark.parametrize(('epoch', 'repo_url', 'git_branch',
+    @pytest.mark.parametrize(('repo_url', 'git_branch',
                               'channel_override', 'compose_ids', 'signing_intent'), (
-        (None, None, 'master', None, None, None),
-        ('Tuesday', None, 'master', None, None, None),
-        (None, ['http://test'], 'master', None, None, None),
-        (None, ['http://test1', 'http://test2'], 'master', None, None, None),
-        (None, None, 'stable', None, None, None),
-        (None, None, 'master', 'override', None, None),
-        (None, None, 'master', None, [1], None),
-        (None, None, 'master', None, [1, 2], None),
-        (None, None, 'master', None, None, 'intent1'),
-        ('Tuesday', ['http://test1', 'http://test2'],
+        (None, 'master', None, None, None),
+        (['http://test'], 'master', None, None, None),
+        (['http://test1', 'http://test2'], 'master', None, None, None),
+        (None, 'stable', None, None, None),
+        (None, 'master', 'override', None, None),
+        (None, 'master', None, [1], None),
+        (None, 'master', None, [1, 2], None),
+        (None, 'master', None, None, 'intent1'),
+        (['http://test1', 'http://test2'],
          'stable', 'override', None, None),
     ))
     @pytest.mark.parametrize(('scratch', 'isolated', 'koji_parent_build',
@@ -173,14 +188,14 @@ class TestCLI(object):
         (True, None, None, None, None),
         (True, None, 'parent_build', None, None),
     ))
-    def test_cli_args(self, tmpdir, scratch, wait, quiet,
-                      epoch, repo_url, git_branch, channel_override, release,
-                      isolated, koji_parent_build, flatpak, compose_ids,
-                      signing_intent):
+    def test_cli_container_args(self, tmpdir, scratch, wait, quiet,
+                                repo_url, git_branch, channel_override, release,
+                                isolated, koji_parent_build, flatpak, compose_ids,
+                                signing_intent):
         options = flexmock(allowed_scms='pkgs.example.com:/*:no')
         options.quiet = False
-        test_args = ['test', 'test']
-        expected_args = ['test', 'test']
+        test_args = ['test', 'source_repo://image#ref']
+        expected_args = ['test', 'source_repo://image#ref']
         expected_opts = {}
 
         if scratch:
@@ -194,11 +209,6 @@ class TestCLI(object):
 
         if quiet:
             test_args.append('--quiet')
-
-        if epoch:
-            test_args.append('--epoch')
-            test_args.append(epoch)
-            expected_opts['epoch'] = epoch
 
         if repo_url:
             expected_opts['yum_repourls'] = []
@@ -252,13 +262,87 @@ class TestCLI(object):
         assert build_opts.scratch == scratch
         assert build_opts.wait == wait
         assert build_opts.quiet == expected_quiet
-        assert build_opts.epoch == epoch
         assert build_opts.yum_repourls == repo_url
         assert build_opts.git_branch == git_branch
         assert build_opts.channel_override == expected_channel
         if not flatpak:
             assert build_opts.release == release
         assert build_opts.compose_ids == compose_ids
+        assert build_opts.signing_intent == signing_intent
+
+        assert parsed_args == expected_args
+        assert opts == expected_opts
+
+    @pytest.mark.parametrize(('wait', 'quiet'), (
+        (None, None),
+        (True, None),
+        (None, True),
+        (None, False),
+        (True, True),
+    ))
+    @pytest.mark.parametrize(('channel_override', 'signing_intent'), (
+        (None, None),
+        (None, 'intent1'),
+        ('override', None),
+        ('override', 'intent1'),
+    ))
+    @pytest.mark.parametrize(('scratch', 'koji_build_id', 'koji_build_nvr'), (
+        (None, 12345, None),
+        (True, 12345, None),
+        (None, None, 'build_nvr'),
+        (True, None, 'build_nvr'),
+        (None, 12345, 'build_nvr'),
+        (True, 12345, 'build_nvr'),
+    ))
+    def test_cli_source_args(self, wait, quiet, channel_override,
+                             signing_intent, scratch, koji_build_id, koji_build_nvr):
+        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options.quiet = False
+        test_args = ['test']
+        expected_args = ['test']
+        expected_opts = {}
+
+        if scratch:
+            test_args.append('--scratch')
+            expected_opts['scratch'] = scratch
+
+        if wait:
+            test_args.append('--wait')
+        elif wait is False:
+            test_args.append('--nowait')
+
+        if quiet:
+            test_args.append('--quiet')
+
+        if koji_build_id:
+            test_args.append('--koji-build-id')
+            test_args.append(koji_build_id)
+            expected_opts['koji_build_id'] = koji_build_id
+
+        if koji_build_nvr:
+            test_args.append('--koji-build-nvr')
+            test_args.append(koji_build_nvr)
+            expected_opts['koji_build_nvr'] = koji_build_nvr
+
+        if channel_override:
+            test_args.append('--channel-override')
+            test_args.append(channel_override)
+
+        if signing_intent:
+            test_args.append('--signing-intent')
+            test_args.append(signing_intent)
+            expected_opts['signing_intent'] = signing_intent
+
+        build_opts, parsed_args, opts, _ = parse_source_arguments(options, test_args)
+        expected_quiet = quiet or options.quiet
+        expected_channel = channel_override or 'container'
+
+        assert build_opts.scratch == scratch
+        assert build_opts.wait == wait
+        assert build_opts.quiet == expected_quiet
+        assert build_opts.koji_build_id == koji_build_id
+        assert build_opts.koji_build_nvr == koji_build_nvr
+        assert build_opts.channel_override == expected_channel
         assert build_opts.signing_intent == signing_intent
 
         assert parsed_args == expected_args
@@ -275,8 +359,8 @@ class TestCLI(object):
     def test_arch_override_restriction(self, tmpdir, scratch, arch_override, valid):
         options = flexmock(allowed_scms='pkgs.example.com:/*:no')
         options.quiet = False
-        test_args = ['test', 'test', '--git-branch', 'the-branch']
-        expected_args = ['test', 'test']
+        test_args = ['test', 'source_repo://image#ref', '--git-branch', 'the-branch']
+        expected_args = ['test', 'source_repo://image#ref']
         expected_opts = {'git_branch': 'the-branch'}
 
         if scratch:
@@ -301,6 +385,37 @@ class TestCLI(object):
         assert parsed_args == expected_args
         assert opts == expected_opts
 
+    @pytest.mark.parametrize(('source_url', 'valid', 'error_msg'), (
+        ('https://repo#revision', True, None),
+        ('https:/repo#revision', False,
+         'scm URL does not look like an URL to a source repository'),
+        ('https//repo#revision', False,
+         'scm URL does not look like an URL to a source repository'),
+        ('https://reporevision', False,
+         'scm URL must be of the form <url_to_repository>#<revision>)'),
+    ))
+    def test_source_restriction(self, tmpdir, source_url, valid, error_msg, capsys):
+        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options.quiet = False
+        test_args = ['test', '--git-branch', 'the-branch']
+        test_args.insert(1, source_url)
+        expected_args = ['test']
+        expected_args.append(source_url)
+        expected_opts = {'git_branch': 'the-branch'}
+
+        if not valid:
+            with pytest.raises(SystemExit):
+                parse_arguments(options, test_args, flatpak=False)
+
+            _, stderr_output = capsys.readouterr()
+            assert error_msg in stderr_output
+            return
+
+        build_opts, parsed_args, opts, _ = parse_arguments(options, test_args, flatpak=False)
+
+        assert parsed_args == expected_args
+        assert opts == expected_opts
+
     @pytest.mark.parametrize(('scratch', 'isolated', 'valid'), (
         (True, True, False),
         (True, None, True),
@@ -310,8 +425,8 @@ class TestCLI(object):
     def test_isolated_scratch_restriction(self, tmpdir, scratch, isolated, valid):
         options = flexmock(allowed_scms='pkgs.example.com:/*:no')
         options.quiet = False
-        test_args = ['test', 'test', '--git-branch', 'the-branch']
-        expected_args = ['test', 'test']
+        test_args = ['test', 'source_repo://image#ref', '--git-branch', 'the-branch']
+        expected_args = ['test', 'source_repo://image#ref']
         expected_opts = {'git_branch': 'the-branch'}
         release = '20.1'
 
@@ -355,8 +470,8 @@ class TestCLI(object):
                                          valid):
         options = flexmock(allowed_scms='pkgs.example.com:/*:no')
         options.quiet = False
-        test_args = ['test', 'test', '--git-branch', 'the-branch']
-        expected_args = ['test', 'test']
+        test_args = ['test', 'source_repo://image#ref', '--git-branch', 'the-branch']
+        expected_args = ['test', 'source_repo://image#ref']
         expected_opts = {'git_branch': 'the-branch'}
 
         if compose_ids:
@@ -395,9 +510,11 @@ class TestCLI(object):
         ('unknown dest tag', 'Unknown destination tag'),
         ('dest tag locked', 'is locked'),
         (':// not in URL', 'scm URL does not look like an URL to a source repository'),
-        ('# not in URL', 'scm URL must be of the form <url_to_repository>#<revision>)')
+        ('# not in URL', 'scm URL must be of the form <url_to_repository>#<revision>)'),
+        ('missing target', 'Exactly two arguments (a build target and a SCM URL) are required'),
+        ('missing source', 'Exactly two arguments (a build target and a SCM URL) are required'),
     ])
-    def test_build_sysexit(self, cause, stderr_msg, capsys):
+    def test_build_container_sysexit(self, cause, stderr_msg, capsys):
         target = 'target'
         source = 'https://repo#revision'
         if cause == ':// not in URL':
@@ -417,13 +534,55 @@ class TestCLI(object):
 
         args = build_cli_args(target, source)
 
+        if cause == 'missing target':
+            args.pop(0)
+        if cause == 'missing source':
+            args.pop(0)
+
         with pytest.raises(SystemExit):
             cli_containerbuild.handle_container_build(options, session, args)
 
         _, stderr_output = capsys.readouterr()
         assert stderr_msg in stderr_output
 
-    @pytest.mark.parametrize('flatpak', [True, False])
+    @pytest.mark.parametrize('cause, stderr_msg', [
+        ('unknown target', 'Unknown build target'),
+        ('unknown dest tag', 'Unknown destination tag'),
+        ('dest tag locked', 'is locked'),
+        ('no source build',
+         'at least one of --koji-build-id and --koji-build-nvr has to be specified'),
+        ('missing target', 'Exactly one argument (a build target) is required'),
+    ])
+    def test_build_source_container_sysexit(self, cause, stderr_msg, capsys):
+        target = 'target'
+        source = 'https://repo#revision'
+        options = flexmock(quiet=True)
+
+        session = mock_session(
+            target,
+            source,
+            target_known=(cause != 'unknown target'),
+            dest_tag_known=(cause != 'unknown dest tag'),
+            dest_tag_locked=(cause == 'dest tag locked')
+        )
+
+        if cause == 'no source build':
+            args = build_cli_args(target, source, build_type='source_container_build',
+                                  koji_build_id=None, koji_build_nvr=None)
+        else:
+            args = build_cli_args(target, source, build_type='source_container_build')
+
+        if cause == 'missing target':
+            args.pop(0)
+
+        with pytest.raises(SystemExit):
+            cli_containerbuild.handle_source_container_build(options, session, args)
+
+        _, stderr_output = capsys.readouterr()
+        assert stderr_msg in stderr_output
+
+    @pytest.mark.parametrize('handler_method', ('container_build', 'source_container_build',
+                                                'flatpak_build'))
     @pytest.mark.parametrize('quiet', [True, False])
     @pytest.mark.parametrize('build_result', [
         {},
@@ -445,7 +604,7 @@ class TestCLI(object):
             ['various_types', {'key': 'value'}]
         ]}
     ])
-    def test_build_success(self, build_result, quiet, flatpak, capsys):
+    def test_build_success(self, capsys, handler_method, build_result, quiet):
         target = 'target'
         source = 'https://repo#revision'
         task_id = '42'
@@ -461,13 +620,16 @@ class TestCLI(object):
             task_result=build_result
         )
 
-        args = build_cli_args(target, source)
-        handle_build = (cli_containerbuild.handle_flatpak_build if flatpak
-                        else cli_containerbuild.handle_container_build)
+        args = build_cli_args(target, source, build_type=handler_method)
+        if handler_method == 'container_build':
+            handle_build = cli_containerbuild.handle_container_build
+        elif handler_method == 'flatpak_build':
+            handle_build = cli_containerbuild.handle_flatpak_build
+        elif handler_method == 'source_container_build':
+            handle_build = cli_containerbuild.handle_source_container_build
 
         rv = handle_build(options, session, args)
         stdout_output, _ = capsys.readouterr()
-
         expected_output = expected_task_output(task_id, build_result,
                                                options.weburl, quiet=quiet)
 
@@ -475,7 +637,8 @@ class TestCLI(object):
         assert stdout_output == expected_output
         assert not session.status['logged_in']
 
-    def test_build_failure(self, capsys):
+    @pytest.mark.parametrize('handler_method', ('container_build', 'source_container_build'))
+    def test_build_failure(self, capsys, handler_method):
         target = 'target'
         source = 'https://repo#revision'
 
@@ -488,20 +651,25 @@ class TestCLI(object):
             task_result={'this': 'should not be in output'}
         )
 
-        args = build_cli_args(target, source)
+        args = build_cli_args(target, source, build_type=handler_method)
 
-        rv = cli_containerbuild.handle_container_build(options, session, args)
+        if handler_method == 'container_build':
+            handle_build = cli_containerbuild.handle_container_build
+        elif handler_method == 'source_container_build':
+            handle_build = cli_containerbuild.handle_source_container_build
+
+        rv = handle_build(options, session, args)
         stdout_output, _ = capsys.readouterr()
-
         assert rv != 0
         assert stdout_output == ''
         assert not session.status['logged_in']
 
+    @pytest.mark.parametrize('handler_method', ('container_build', 'source_container_build'))
     @pytest.mark.parametrize('why', [
         '--nowait',
         'running in background'
     ])
-    def test_no_wait(self, why, capsys):
+    def test_no_wait(self, capsys, handler_method, why):
         target = 'target'
         source = 'https://repo#revision'
 
@@ -515,16 +683,21 @@ class TestCLI(object):
         )
 
         wait = False if why == '--nowait' else None
-        args = build_cli_args(target, source, wait=wait)
+        args = build_cli_args(target, source, wait=wait, build_type=handler_method)
 
-        rv = cli_containerbuild.handle_container_build(options, session, args)
+        if handler_method == 'container_build':
+            handle_build = cli_containerbuild.handle_container_build
+        elif handler_method == 'source_container_build':
+            handle_build = cli_containerbuild.handle_source_container_build
+
+        rv = handle_build(options, session, args)
         stdout_output, _ = capsys.readouterr()
-
         assert rv is None
         assert stdout_output == ''
         assert session.status['logged_in']
 
-    def test_background_priority(self):
+    @pytest.mark.parametrize('handler_method', ('container_build', 'source_container_build'))
+    def test_background_priority(self, handler_method):
         target = 'target'
         source = 'https://repo#revision'
 
@@ -536,9 +709,13 @@ class TestCLI(object):
             priority=5
         )
 
-        args = build_cli_args(target, source, background=True)
+        args = build_cli_args(target, source, background=True, build_type=handler_method)
 
-        rv = cli_containerbuild.handle_container_build(options, session, args)
+        if handler_method == 'container_build':
+            handle_build = cli_containerbuild.handle_container_build
+        elif handler_method == 'source_container_build':
+            handle_build = cli_containerbuild.handle_source_container_build
 
+        rv = handle_build(options, session, args)
         assert rv == 0
         assert not session.status['logged_in']

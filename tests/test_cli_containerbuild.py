@@ -95,7 +95,7 @@ def build_cli_args(target,
                    wait=None,
                    background=False,
                    build_type='container_build',
-                   koji_build_id=12345,
+                   koji_build_id='12345',
                    koji_build_nvr='test_nvr'):
     """Build command line arguments for cli_containerbuild.handle_build()"""
     if build_type == 'container_build' or build_type == 'flatpak_build':
@@ -316,7 +316,7 @@ class TestCLI(object):
 
         if koji_build_id:
             test_args.append('--koji-build-id')
-            test_args.append(koji_build_id)
+            test_args.append(str(koji_build_id))  # parser parses strings
             expected_opts['koji_build_id'] = koji_build_id
 
         if koji_build_nvr:

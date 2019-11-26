@@ -179,6 +179,7 @@ def parse_source_arguments(options, args):
                       help=_("Signing intent of the ODCS composes [default: %default]."),
                       default=None, dest='signing_intent')
     parser.add_option("--koji-build-id",
+                      type="int",
                       help=_("Koji build id for sources, "
                              "is required or koji-build-nvr is provided"))
     parser.add_option("--koji-build-nvr",

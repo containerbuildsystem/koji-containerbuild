@@ -631,10 +631,11 @@ class TestBuilder(object):
         create_args = {'koji_build_id': 12345}
 
         session = self._mock_session(last_event_id, koji_task_id, pkg_info)
+        build_json = {'build_id': 12345, 'nvr': 'build_nvr', 'name': 'source_package',
+                      'extra': {'image': {}, 'typeinfo': {'image': {}, 'operator-manifests': {}}}}
         (session
             .should_receive('getBuild')
-            .and_return({'build_id': 12345, 'nvr': 'build_nvr',
-                         'package_name': 'source_package'}))
+            .and_return(build_json))
         (session
             .should_receive('getPackageConfig')
             .with_args('dest-tag', 'source_package-source')
@@ -744,10 +745,11 @@ class TestBuilder(object):
         create_args = {'koji_build_id': 12345}
 
         session = self._mock_session(last_event_id, koji_task_id)
+        build_json = {'build_id': 12345, 'nvr': 'build_nvr', 'name': 'source_package',
+                      'extra': {'image': {}, 'typeinfo': {'image': {}, 'operator-manifests': {}}}}
         (session
             .should_receive('getBuild')
-            .and_return({'build_id': 12345, 'nvr': 'build_nvr',
-                         'package_name': 'source_package'}))
+            .and_return(build_json))
         (session
             .should_receive('getPackageConfig')
             .with_args('dest-tag', 'source_package-source')
@@ -1004,10 +1006,11 @@ class TestBuilder(object):
                                                                options=options,
                                                                workdir='workdir')
 
+        build_json = {'build_id': 12345, 'nvr': 'build_nvr', 'name': 'source_package',
+                      'extra': {'image': {}, 'typeinfo': {'image': {}, 'operator-manifests': {}}}}
         (session
             .should_receive('getBuild')
-            .and_return({'build_id': 12345, 'nvr': 'build_nvr',
-                         'package_name': 'source_package'}))
+            .and_return(build_json))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
         (flexmock(task)
@@ -1206,40 +1209,71 @@ class TestBuilder(object):
             task.handler(src['src'], 'target', opts=additional_args)
         assert 'already exists' in str(exc_info.value)
 
-    @pytest.mark.parametrize(('create_args', 'cause'), (
-        ({'koji_build_id': 12345}, 'doesnt exist'),
-        ({'koji_build_nvr': 'build_nvr'}, 'doesnt exist'),
-        ({'koji_build_nvr': 'build_nvr', 'koji_build_id': 12345}, 'doesnt exist'),
-        ({'koji_build_nvr': 'build_nvr', 'koji_build_id': 12345}, 'mismatch'),
+    @pytest.mark.parametrize(('create_args', 'build_types', 'cause'), (
+        ({'koji_build_id': 12345},
+         ['image', 'operator-manifests'], 'doesnt exist'),
+        ({'koji_build_nvr': 'image_build-1-1'},
+         ['image', 'operator-manifests'], 'doesnt exist'),
+        ({'koji_build_nvr': 'image_build-1-1', 'koji_build_id': 12345},
+         ['image', 'operator-manifests'], 'doesnt exist'),
+        ({'koji_build_nvr': 'image_build-1-1', 'koji_build_id': 12345},
+         ['image', 'operator-manifests'], 'mismatch'),
+        ({'koji_build_nvr': 'rpm_build-1-1', 'koji_build_id': 12345},
+         ['rpm', 'operator-manifests'], 'wrong type'),
+        ({'koji_build_nvr': 'image_build-source-1-1', 'koji_build_id': 12345},
+         ['image', 'operator-manifests'], 'source build'),
     ))
-    def test_source_build_info(self, create_args, cause):
+    def test_source_build_info(self, create_args, build_types, cause):
         koji_task_id = 123
         last_event_id = 456
         koji_build_id = 999
         different_build_id = 54321
 
+        provided_nvr = create_args.get('koji_build_nvr')
+        provided_id = create_args.get('koji_build_id')
+        provided_name = None
+        if provided_nvr:
+            provided_name = provided_nvr.rsplit('-', 2)[0]
+
         session = self._mock_session(last_event_id, koji_task_id)
+
+        typeinfo_dict = {b_type: {} for b_type in build_types}
+        build_json = {'build_id': provided_id, 'nvr': provided_nvr, 'name': provided_name,
+                      'extra': {'typeinfo': typeinfo_dict, 'image': {}}}
+        if cause == 'source build':
+            build_json['extra']['image']['sources_for_nvr'] = 'some source'
+
+        (session
+            .should_receive('getBuild')
+            .and_return(build_json))
 
         if cause == 'doesnt exist':
             (session
                 .should_receive('getBuild')
                 .and_return({}))
 
-            build_id = create_args.get('koji_build_nvr') or create_args.get('koji_build_id')
+            build_id = provided_nvr or provided_id
             log_message = "specified source build '{}' doesn't exist".format(build_id)
 
         elif cause == 'mismatch':
             (session
                 .should_receive('getBuild')
-                .and_return({'build_id': different_build_id, 'nvr': 'build_nvr',
-                             'package_name': 'package'}))
+                .and_return({'build_id': different_build_id, 'nvr': provided_nvr,
+                             'name': provided_name}))
 
             log_message = (
                 'koji_build_id {} does not match koji_build_nvr {} with id {}. '
                 'When specifying both an id and an nvr, they should point to the same image build'
-                .format(create_args['koji_build_id'], create_args['koji_build_nvr'],
-                        different_build_id)
-                )
+                .format(provided_id, provided_nvr, different_build_id))
+
+        elif cause == 'wrong type':
+            log_message = (
+                'koji build {} is {} build, source container build needs image '
+                'build'.format(provided_nvr, sorted(build_types)))
+
+        elif cause == 'source build':
+            log_message = ('koji build {} is source container build, source container can not '
+                           'use source container build image'.format(provided_nvr))
 
         options = flexmock(allowed_scms='pkgs.example.com:/*:no')
 
@@ -1596,10 +1630,11 @@ class TestBuilder(object):
         source_koji_id = 12345
         source_koji_nvr = 'build_nvr'
         session = self._mock_session(last_event_id, koji_task_id)
+        build_json = {'build_id': source_koji_id, 'nvr': source_koji_nvr, 'name': 'package',
+                      'extra': {'image': {}, 'typeinfo': {'image': {}, 'operator-manifests': {}}}}
         (session
             .should_receive('getBuild')
-            .and_return({'build_id': source_koji_id, 'nvr': source_koji_nvr,
-                         'package_name': 'package'}))
+            .and_return(build_json))
 
         task = builder_containerbuild.BuildSourceContainerTask(id=koji_task_id,
                                                                method='buildSourceContainer',

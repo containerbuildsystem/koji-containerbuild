@@ -1045,7 +1045,7 @@ class BuildSourceContainerTask(BaseContainerTask):
             build_id = koji_build['build_id']
         if not build_nvr:
             build_nvr = koji_build['nvr']
-        component = "%s-source" % koji_build['package_name']
+        component = "%s-source" % koji_build['name']
 
         return component, build_id, build_nvr
 

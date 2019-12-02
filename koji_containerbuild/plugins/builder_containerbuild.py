@@ -1029,11 +1029,10 @@ class BuildSourceContainerTask(BaseContainerTask):
                 )
             raise koji.BuildError(err_msg)
 
-        build_types = koji_build['extra']['typeinfo']
-        if 'image' not in build_types:
-            types_list = sorted(build_types.keys())
-            err_msg = ('koji build {} is {} build, source container '
-                       'build needs image build'.format(koji_build['nvr'], types_list))
+        build_extras = koji_build['extra']
+        if 'image' not in build_extras:
+            err_msg = ('koji build {} is not image build which source container requires'
+                       .format(koji_build['nvr']))
             raise koji.BuildError(err_msg)
 
         elif 'sources_for_nvr' in koji_build['extra']['image']:

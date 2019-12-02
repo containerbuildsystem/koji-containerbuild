@@ -632,7 +632,7 @@ class TestBuilder(object):
 
         session = self._mock_session(last_event_id, koji_task_id, pkg_info)
         build_json = {'build_id': 12345, 'nvr': 'build_nvr', 'name': 'source_package',
-                      'extra': {'image': {}, 'typeinfo': {'image': {}, 'operator-manifests': {}}}}
+                      'extra': {'image': {}, 'operator-manifests': {}}}
         (session
             .should_receive('getBuild')
             .and_return(build_json))
@@ -746,7 +746,7 @@ class TestBuilder(object):
 
         session = self._mock_session(last_event_id, koji_task_id)
         build_json = {'build_id': 12345, 'nvr': 'build_nvr', 'name': 'source_package',
-                      'extra': {'image': {}, 'typeinfo': {'image': {}, 'operator-manifests': {}}}}
+                      'extra': {'image': {}, 'operator-manifests': {}}}
         (session
             .should_receive('getBuild')
             .and_return(build_json))
@@ -1007,7 +1007,7 @@ class TestBuilder(object):
                                                                workdir='workdir')
 
         build_json = {'build_id': 12345, 'nvr': 'build_nvr', 'name': 'source_package',
-                      'extra': {'image': {}, 'typeinfo': {'image': {}, 'operator-manifests': {}}}}
+                      'extra': {'image': {}, 'operator-manifests': {}}}
         (session
             .should_receive('getBuild')
             .and_return(build_json))
@@ -1239,7 +1239,7 @@ class TestBuilder(object):
 
         typeinfo_dict = {b_type: {} for b_type in build_types}
         build_json = {'build_id': provided_id, 'nvr': provided_nvr, 'name': provided_name,
-                      'extra': {'typeinfo': typeinfo_dict, 'image': {}}}
+                      'extra': typeinfo_dict}
         if cause == 'source build':
             build_json['extra']['image']['sources_for_nvr'] = 'some source'
 
@@ -1267,9 +1267,8 @@ class TestBuilder(object):
                 .format(provided_id, provided_nvr, different_build_id))
 
         elif cause == 'wrong type':
-            log_message = (
-                'koji build {} is {} build, source container build needs image '
-                'build'.format(provided_nvr, sorted(build_types)))
+            log_message = ('koji build {} is not image build which source container requires'
+                           .format(provided_nvr, sorted(build_types)))
 
         elif cause == 'source build':
             log_message = ('koji build {} is source container build, source container can not '
@@ -1631,7 +1630,7 @@ class TestBuilder(object):
         source_koji_nvr = 'build_nvr'
         session = self._mock_session(last_event_id, koji_task_id)
         build_json = {'build_id': source_koji_id, 'nvr': source_koji_nvr, 'name': 'package',
-                      'extra': {'image': {}, 'typeinfo': {'image': {}, 'operator-manifests': {}}}}
+                      'extra': {'image': {}, 'operator-manifests': {}}}
         (session
             .should_receive('getBuild')
             .and_return(build_json))

@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.16
+Version:        0.7.17
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -170,6 +170,18 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Dec 03 2019 Robert Cerven <rcerven@redhat.com> 0.7.17-1
+- use extra keys for build type instead of new typeinfo which is just on new
+  build (rcerven@redhat.com)
+- use koji build 'name' instead of 'package_name' for source containers, for
+  consistency with atomic-reator (rcerven@redhat.com)
+- Disallow building source container from source container image build, and
+  also disallow any other than 'image' build type (rcerven@redhat.com)
+- Fix koji-build-id type (mbasti@redhat.com)
+- source container build (rcerven@redhat.com)
+- pass triggered_afer_koji_task to osbs-client even when it is 0
+  (rcerven@redhat.com)
+
 * Tue Nov 05 2019 Robert Cerven <rcerven@redhat.com> 0.7.16-1
 - hub: improve docs for "buildContainer" RPC (kdreyer@redhat.com)
 - README: correct path to Koji Hub configuration file (kdreyer@redhat.com)

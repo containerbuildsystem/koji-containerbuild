@@ -583,7 +583,9 @@ class BuildContainerTask(BaseContainerTask):
                     },
                     "git_branch": {
                         "type": ["string", "null"],
-                        "description": "Git branch to build from."
+                        "description": "Git branch to build from. OSBS uses "
+                                       "this to determine which BuildConfig "
+                                       "to update."
                     },
                     "push_url": {
                         "type": ["string", "null"]

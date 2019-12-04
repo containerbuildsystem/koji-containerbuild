@@ -16,6 +16,7 @@ License along with this library; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 """
 
+import json
 import pytest
 from flexmock import flexmock
 from collections import OrderedDict
@@ -188,10 +189,11 @@ class TestCLI(object):
         (True, None, None, None, None),
         (True, None, 'parent_build', None, None),
     ))
+    @pytest.mark.parametrize('userdata', [None, {'custom': 'userdata'}])
     def test_cli_container_args(self, tmpdir, scratch, wait, quiet,
                                 repo_url, git_branch, channel_override, release,
                                 isolated, koji_parent_build, flatpak, compose_ids,
-                                signing_intent):
+                                signing_intent, userdata):
         options = flexmock(allowed_scms='pkgs.example.com:/*:no')
         options.quiet = False
         test_args = ['test', 'source_repo://image#ref']
@@ -254,6 +256,11 @@ class TestCLI(object):
             test_args.append('--signing-intent')
             test_args.append(signing_intent)
             expected_opts['signing_intent'] = signing_intent
+
+        if userdata:
+            test_args.append('--userdata')
+            test_args.append(json.dumps(userdata))
+            expected_opts['userdata'] = userdata
 
         build_opts, parsed_args, opts, _ = parse_arguments(options, test_args, flatpak=flatpak)
         expected_quiet = quiet or options.quiet

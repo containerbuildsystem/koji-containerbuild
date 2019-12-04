@@ -621,7 +621,11 @@ class BuildContainerTask(BaseContainerTask):
                     "triggered_after_koji_task": {
                         "type": "integer",
                         "description": "Koji task for which autorebuild runs"
-                    }
+                    },
+                    "userdata": {
+                        "type": "object",
+                        "description": "User defined dictionary containing custom metadata",
+                    },
                 },
                 "additionalProperties": False
             }

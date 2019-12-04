@@ -22,6 +22,8 @@
 
 from __future__ import print_function
 
+import json
+
 from koji.plugin import export_cli
 from koji_cli.lib import _, activate_session, parse_arches, \
                          OptionParser, watch_tasks, _running_in_bg
@@ -105,6 +107,8 @@ def parse_arguments(options, args, flatpak):
     parser.add_option("--skip-build", action="store_true",
                       help=_("Skip build and update buildconfig. "
                              "Use this option to update autorebuild settings"))
+    parser.add_option("--userdata",
+                      help=_("JSON dictionary of user defined custom metadata"))
     if not flatpak:
         parser.add_option("--release",
                           help=_("Set release value"))
@@ -132,7 +136,8 @@ def parse_arguments(options, args, flatpak):
     if not build_opts.git_branch:
         parser.error(_("git-branch must be specified"))
 
-    keys = ('scratch', 'yum_repourls', 'git_branch', 'signing_intent', 'compose_ids', 'skip_build')
+    keys = ('scratch', 'yum_repourls', 'git_branch', 'signing_intent', 'compose_ids', 'skip_build',
+            'userdata')
 
     if flatpak:
         opts['flatpak'] = True
@@ -149,6 +154,9 @@ def parse_arguments(options, args, flatpak):
         val = getattr(build_opts, key)
         if val is not None:
             opts[key] = val
+            if key == 'userdata':
+                opts[key] = json.loads(val)
+
     # create the parser in this function and return it to
     # simplify the unit test cases
     return build_opts, args, opts, parser

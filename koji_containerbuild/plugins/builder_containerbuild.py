@@ -864,12 +864,17 @@ class BuildContainerTask(BaseContainerTask):
         # Scratch and auto release builds shouldn't be checked for nvr
         if not self.opts.get('scratch') and expected_nvr:
             try:
-                build_id = self.session.getBuild(expected_nvr)['id']
+                build = self.session.getBuild(expected_nvr)
+                build_id = build['id']
             except:
                 self.logger.info("No build for %s found", expected_nvr, exc_info=True)
             else:
-                raise koji.BuildError(
-                    "Build for %s already exists, id %s" % (expected_nvr, build_id))
+                if build['state'] in (koji.BUILD_STATES['FAILED'], koji.BUILD_STATES['CANCELED']):
+                    self.logger.info("Build for %s found, but with reusable state %s",
+                                     expected_nvr, build['state'], exc_info=True)
+                else:
+                    raise koji.BuildError("Build for %s already exists, id %s" %
+                                          (expected_nvr, build_id))
 
         self.logger.debug("Spawning jobs for arches: %r" % (archlist))
 

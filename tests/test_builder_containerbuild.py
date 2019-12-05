@@ -1143,12 +1143,18 @@ class TestBuilder(object):
             }
 
     @pytest.mark.parametrize('orchestrator', (True, False))
+    @pytest.mark.parametrize(('build_state', 'build_fails'), (
+        ('COMPLETE', True),
+        ('FAILED', False),
+        ('CANCELED', False),
+    ))
     @pytest.mark.parametrize(('df_release', 'param_release', 'expected'), (
         ('10', '11', '11'),
         (None, '11', '11'),
         ('10', None, '10'),
     ))
-    def test_build_nvr_exists(self, tmpdir, orchestrator, df_release, param_release, expected):
+    def test_build_nvr_exists(self, tmpdir, orchestrator, build_state, build_fails,
+                              df_release, param_release, expected):
         koji_task_id = 123
         last_event_id = 456
         koji_build_id = 999
@@ -1158,7 +1164,7 @@ class TestBuilder(object):
         (session
             .should_receive('getBuild')
             .with_args('fedora-docker-25-%s' % expected)
-            .and_return({'id': last_event_id}))
+            .and_return({'id': last_event_id, 'state': koji.BUILD_STATES[build_state]}))
 
         dockerfile_content = dedent("""\
             FROM fedora
@@ -1203,11 +1209,14 @@ class TestBuilder(object):
                                      koji_task_id=koji_task_id,
                                      orchestrator=orchestrator,
                                      create_build_args=additional_args.copy(),
-                                     build_not_started=True)
+                                     build_not_started=build_fails)
 
-        with pytest.raises(koji.BuildError) as exc_info:
+        if build_fails:
+            with pytest.raises(koji.BuildError) as exc_info:
+                task.handler(src['src'], 'target', opts=additional_args)
+            assert 'already exists' in str(exc_info.value)
+        else:
             task.handler(src['src'], 'target', opts=additional_args)
-        assert 'already exists' in str(exc_info.value)
 
     @pytest.mark.parametrize(('create_args', 'build_types', 'cause'), (
         ({'koji_build_id': 12345},

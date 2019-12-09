@@ -15,24 +15,25 @@ You should have received a copy of the GNU Lesser General Public
 License along with this library; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 """
-
-from flexmock import flexmock
-from textwrap import dedent
-from collections import namedtuple
-import pytest
-import jsonschema
-import osbs
 import os
 import os.path
 import signal
+from collections import namedtuple
+from textwrap import dedent
+
+import json
+import jsonschema
 import koji
-from koji_containerbuild.plugins import builder_containerbuild
+import osbs
+import pytest
+from flexmock import flexmock
 from osbs.exceptions import OsbsValidationException
 try:
     from osbs.exceptions import OsbsOrchestratorNotEnabled
 except ImportError:
     from osbs.exceptions import OsbsValidationException as OsbsOrchestratorNotEnabled
 
+from koji_containerbuild.plugins import builder_containerbuild
 
 USE_DEFAULT_PKG_INFO = object()
 
@@ -348,6 +349,9 @@ class TestBuilder(object):
             (build_response
                 .should_receive('get_build_name')
                 .and_return('os-build-id'))
+            (build_response
+                .should_receive('get_annotations')
+                .and_return({}))
 
         build_finished_response = flexmock(status='200', json={})
         (build_finished_response
@@ -365,6 +369,9 @@ class TestBuilder(object):
         (build_finished_response
             .should_receive('get_repositories')
             .and_return({'unique': ['unique-repo'], 'primary': ['primary-repo']}))
+        (build_finished_response
+            .should_receive('get_annotations')
+            .and_return({}))
 
         osbs = flexmock()
 
@@ -1661,3 +1668,50 @@ class TestBuilder(object):
             build_opts['signing_intent'] = signing_intent
 
         task.handler('target', build_opts)
+
+    @pytest.mark.parametrize('annotations', (
+        {},
+        {'koji_task_annotations_whitelist': []},
+        {'koji_task_annotations_whitelist': [], 'remote_source_url': 'stub_url'},
+        {'koji_task_annotations_whitelist': ['remote_source_url'],
+         'remote_source_url': 'stub_url'},
+        {'remote_source_url': 'stub_url'},
+        {'a': '1', 'b': '2'},
+        {'koji_task_annotations_whitelist': ['a', 'b'], 'a': '1', 'b': '2', 'c': '3'},
+        {'koji_task_annotations_whitelist': ['a', 'b'], 'a': '1', 'c': '3'}
+        ))
+    def test_upload_annotations(self, tmpdir, annotations):
+        def mock_incremental_upload(session, fname, fd, uploadpath, logger=None):
+            with open(os.path.join(uploadpath, fname), 'w') as f:
+                data = fd.read()
+                f.write(data)
+
+        builder_containerbuild.incremental_upload = mock_incremental_upload
+
+        annotations_file = tmpdir.join('build_annotations.json').strpath
+        cct = builder_containerbuild.BuildContainerTask(id=1,
+                                                        method='buildContainer',
+                                                        params='params',
+                                                        session='session',
+                                                        workdir='workdir',
+                                                        options='options')
+        flexmock(cct).should_receive('getUploadPath').and_return(tmpdir.strpath)
+
+        build_result = flexmock()
+        build_result.should_receive('get_annotations').and_return(annotations)
+        cct.upload_build_annotations(build_result)
+        whitelist = annotations.get('koji_task_annotations_whitelist')
+        if not whitelist or len(annotations) < 2:
+            assert not os.path.exists(annotations_file)
+        else:
+            assert os.path.exists(annotations_file)
+            with open(annotations_file) as f:
+                build_annotations = json.load(f)
+            for key, value in build_annotations.items():
+                assert key in whitelist
+                assert value == annotations[key]
+            for item in whitelist:
+                if item in annotations:
+                    assert item in build_annotations
+                else:
+                    assert item not in build_annotations

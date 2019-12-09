@@ -70,8 +70,10 @@ Requires:   python-urlgrabber
 Requires:   python-dockerfile-parse
 %if 0%{with python3}
 Requires:   python3-jsonschema
+Requires:   python3-six
 %else
 Requires:   python2-jsonschema
+Requires:   python-six
 %endif
 
 %description builder
@@ -170,6 +172,9 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Dec 10 2019 Athos Ribeiro <athos@redhat.com>
+- Require python-six for builder plugin
+
 * Tue Dec 10 2019 Robert Cerven <rcerven@redhat.com> 0.7.18-1
 - Enable shellcheck (bash) lint (mbasti@redhat.com)
 - Fail build for existing build if build state isn't failed or canceled, which

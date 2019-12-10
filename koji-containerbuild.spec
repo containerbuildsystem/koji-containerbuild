@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.17
+Version:        0.7.18
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -170,6 +170,13 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Dec 10 2019 Robert Cerven <rcerven@redhat.com> 0.7.18-1
+- Enable shellcheck (bash) lint (mbasti@redhat.com)
+- Fail build for existing build if build state isn't failed or canceled, which
+  will be refunded and reusable (rcerven@redhat.com)
+- add custom userdata dictionary to args list (mlangsdo@redhat.com)
+- builder: describe the purpose of git_branch parameter (kdreyer@redhat.com)
+
 * Tue Dec 03 2019 Robert Cerven <rcerven@redhat.com> 0.7.17-1
 - use extra keys for build type instead of new typeinfo which is just on new
   build (rcerven@redhat.com)

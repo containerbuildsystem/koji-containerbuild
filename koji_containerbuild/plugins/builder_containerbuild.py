@@ -867,6 +867,12 @@ class BuildContainerTask(BaseContainerTask):
         if not SCM.is_scm_url(src):
             raise koji.BuildError('Invalid source specification: %s' % src)
 
+        # don't check build nvr for autorebuild as they might be using
+        # add_timestamp_to_release
+        triggered_after_koji_task = opts.get('triggered_after_koji_task', None)
+        if triggered_after_koji_task:
+            expected_nvr = None
+
         # Scratch and auto release builds shouldn't be checked for nvr
         if not self.opts.get('scratch') and expected_nvr:
             try:

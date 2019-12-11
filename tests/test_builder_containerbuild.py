@@ -1150,28 +1150,36 @@ class TestBuilder(object):
             }
 
     @pytest.mark.parametrize('orchestrator', (True, False))
-    @pytest.mark.parametrize(('build_state', 'build_fails'), (
-        ('COMPLETE', True),
-        ('FAILED', False),
-        ('CANCELED', False),
+    @pytest.mark.parametrize(('build_state', 'triggered_after_koji_task', 'build_fails'), (
+        ('COMPLETE', True, False),
+        ('COMPLETE', False, True),
+        ('FAILED', True, False),
+        ('FAILED', False, False),
+        ('CANCELED', True, False),
+        ('CANCELED', False, False),
     ))
     @pytest.mark.parametrize(('df_release', 'param_release', 'expected'), (
         ('10', '11', '11'),
         (None, '11', '11'),
         ('10', None, '10'),
     ))
-    def test_build_nvr_exists(self, tmpdir, orchestrator, build_state, build_fails,
-                              df_release, param_release, expected):
+    def test_build_nvr_exists(self, tmpdir, orchestrator, build_state, triggered_after_koji_task,
+                              build_fails, df_release, param_release, expected):
         koji_task_id = 123
         last_event_id = 456
         koji_build_id = 999
 
         session = self._mock_session(last_event_id, koji_task_id)
 
-        (session
-            .should_receive('getBuild')
-            .with_args('fedora-docker-25-%s' % expected)
-            .and_return({'id': last_event_id, 'state': koji.BUILD_STATES[build_state]}))
+        if triggered_after_koji_task:
+            (session
+                .should_receive('getBuild')
+                .never())
+        else:
+            (session
+                .should_receive('getBuild')
+                .with_args('fedora-docker-25-%s' % expected)
+                .and_return({'id': last_event_id, 'state': koji.BUILD_STATES[build_state]}))
 
         dockerfile_content = dedent("""\
             FROM fedora
@@ -1211,6 +1219,9 @@ class TestBuilder(object):
         additional_args = {}
         if param_release:
             additional_args['release'] = param_release
+        if triggered_after_koji_task:
+            additional_args['triggered_after_koji_task'] = 12345
+
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,
                                      koji_task_id=koji_task_id,

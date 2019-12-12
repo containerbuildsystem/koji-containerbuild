@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.18
+Version:        0.7.18.1
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -172,8 +172,12 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
-* Tue Dec 10 2019 Athos Ribeiro <athos@redhat.com>
+* Tue Dec 12 2019 Athos Ribeiro <athos@redhat.com>
 - Require python-six for builder plugin
+
+* Thu Dec 12 2019 Robert Cerven <rcerven@redhat.com> 0.7.18.1-1
+- don't check for build nvr existance for autorebuilds which have
+  'triggered_after_koji_task', (rcerven@redhat.com)
 
 * Tue Dec 10 2019 Robert Cerven <rcerven@redhat.com> 0.7.18-1
 - Enable shellcheck (bash) lint (mbasti@redhat.com)

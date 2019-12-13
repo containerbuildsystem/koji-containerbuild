@@ -126,18 +126,21 @@ class TestBuilder(object):
             with open(logfile_path) as log_file:
                 assert log_file.read() == logs_content
 
-    def _check_non_orchestrator_logs(self, log_entries, logs_dir):
+    def _check_non_orchestrator_logs(self, log_entries, logs_dir, source):
         logs_content = ''.join(line + '\n' for line in log_entries)
-        logfile_path = os.path.join(logs_dir, 'openshift-incremental.log')
+        if source:
+            logfile_path = os.path.join(logs_dir, 'orchestrator.log')
+        else:
+            logfile_path = os.path.join(logs_dir, 'openshift-incremental.log')
         with open(logfile_path) as log_file:
             assert log_file.read() == logs_content
 
-    def _check_logfiles(self, log_entries, logs_dir, orchestrator):
+    def _check_logfiles(self, log_entries, logs_dir, orchestrator, source=False):
         # check that all the log entries for a build are where they are supposed to be
         if orchestrator:
             self._check_orchestrator_logs(log_entries, logs_dir)
         else:
-            self._check_non_orchestrator_logs(log_entries, logs_dir)
+            self._check_non_orchestrator_logs(log_entries, logs_dir, source=source)
 
     @pytest.mark.parametrize('orchestrator', [False, True])
     @pytest.mark.parametrize('get_logs_exc', [None, Exception('error')])
@@ -265,7 +268,7 @@ class TestBuilder(object):
             cct._write_incremental_logs('id', str(tmpdir))
 
         if get_logs_exc is None:
-            self._check_logfiles(log_entries, str(tmpdir), False)
+            self._check_logfiles(log_entries, str(tmpdir), False, source=True)
 
     def _mock_session(self, last_event_id, koji_task_id, pkg_info=USE_DEFAULT_PKG_INFO):
         if pkg_info == USE_DEFAULT_PKG_INFO:

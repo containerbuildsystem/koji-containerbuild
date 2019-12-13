@@ -279,6 +279,7 @@ class BaseContainerTask(BaseTaskHandler):
         self._osbs = None
         self.demux = None
         self._log_handler_added = False
+        self.incremental_log_basename = 'openshift-incremental.log'
 
     def osbs(self):
         """Handler of OSBS object"""
@@ -345,10 +346,9 @@ class BaseContainerTask(BaseTaskHandler):
             watcher.clean()
 
     def _write_combined_log(self, build_id, logs_dir):
-        log_basename = 'openshift-incremental.log'
-        log_filename = os.path.join(logs_dir, log_basename)
+        log_filename = os.path.join(logs_dir, self.incremental_log_basename)
 
-        self.logger.info("Will write follow log: %s", log_basename)
+        self.logger.info("Will write follow log: %s", self.incremental_log_basename)
         try:
             log = self.osbs().get_build_logs(build_id, follow=True)
         except Exception as error:
@@ -364,7 +364,7 @@ class BaseContainerTask(BaseTaskHandler):
                                                                        error)
                 raise ContainerError(msg)
 
-        self.logger.info("%s written", log_basename)
+        self.logger.info("%s written", self.incremental_log_basename)
 
     def _write_demultiplexed_logs(self, build_id, logs_dir):
         self.logger.info("Will write demuxed logs in: %s/", logs_dir)
@@ -1013,9 +1013,9 @@ class BuildSourceContainerTask(BaseContainerTask):
     }
 
     def __init__(self, id, method, params, session, options, workdir=None, demux=False):
-        BaseContainerTask.__init__(self, id, method, params, session, options,
-                                   workdir)
+        BaseContainerTask.__init__(self, id, method, params, session, options, workdir)
         self.demux = demux
+        self.incremental_log_basename = 'orchestrator.log'
 
     def createSourceContainer(self, target_info=None, scratch=None, component=None,
                               koji_build_id=None, koji_build_nvr=None, signing_intent=None):

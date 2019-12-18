@@ -642,8 +642,7 @@ class BuildContainerTask(BaseContainerTask):
                         "type": "object",
                         "description": "User defined dictionary containing custom metadata",
                     },
-                },
-                "additionalProperties": True
+                }
             }
         ],
         "minItems": 3

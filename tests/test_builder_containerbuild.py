@@ -1617,6 +1617,10 @@ class TestBuilder(object):
          'flatpak': False,
          'compose_ids': [1, 2, 3],
          'signing_intent': 'No, I do not intend to sign anything.'},
+
+        {'version': '1.2',  # ignored
+         'name': 'foo',     # ignored
+         'git_branch': 'master'},
     ])
     def test_schema_validation_valid_options_container(self, build_opts, tmpdir):
         koji_task_id = 123

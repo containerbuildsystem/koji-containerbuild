@@ -84,6 +84,11 @@ if [[ $OS != "fedora" ]]; then
   $RUN $PYTHON get-pip.py
 fi
 
+# https://github.com/jaraco/zipp/issues/28
+if [[ $PYTHON_VERSION == 2 ]]; then
+  $RUN $PIP install zipp==1.0.0
+fi
+
 # Install koji-containerbuild
 $RUN $PYTHON setup.py install
 

@@ -456,7 +456,8 @@ class BaseContainerTask(BaseTaskHandler):
 
     def upload_build_annotations(self, build_response):
         annotations = build_response.get_annotations() or {}
-        whitelist = annotations.get('koji_task_annotations_whitelist', [])
+        whitelist_str = annotations.get('koji_task_annotations_whitelist', "[]")
+        whitelist = json.loads(whitelist_str)
         task_annotations = {k: v for k, v in annotations.items() if k in whitelist}
         if task_annotations:
             f = StringIO()

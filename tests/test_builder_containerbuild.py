@@ -1689,14 +1689,14 @@ class TestBuilder(object):
 
     @pytest.mark.parametrize('annotations', (
         {},
-        {'koji_task_annotations_whitelist': []},
-        {'koji_task_annotations_whitelist': [], 'remote_source_url': 'stub_url'},
-        {'koji_task_annotations_whitelist': ['remote_source_url'],
+        {'koji_task_annotations_whitelist': '[]'},
+        {'koji_task_annotations_whitelist': '[]', 'remote_source_url': 'stub_url'},
+        {'koji_task_annotations_whitelist': '["remote_source_url"]',
          'remote_source_url': 'stub_url'},
         {'remote_source_url': 'stub_url'},
         {'a': '1', 'b': '2'},
-        {'koji_task_annotations_whitelist': ['a', 'b'], 'a': '1', 'b': '2', 'c': '3'},
-        {'koji_task_annotations_whitelist': ['a', 'b'], 'a': '1', 'c': '3'}
+        {'koji_task_annotations_whitelist': '["a", "b"]', 'a': '1', 'b': '2', 'c': '3'},
+        {'koji_task_annotations_whitelist': '["a", "b"]', 'a': '1', 'c': '3'}
         ))
     def test_upload_annotations(self, tmpdir, annotations):
         def mock_incremental_upload(session, fname, fd, uploadpath, logger=None):
@@ -1719,6 +1719,9 @@ class TestBuilder(object):
         build_result.should_receive('get_annotations').and_return(annotations)
         cct.upload_build_annotations(build_result)
         whitelist = annotations.get('koji_task_annotations_whitelist')
+        if whitelist:
+            whitelist = json.loads(whitelist)
+
         if not whitelist or len(annotations) < 2:
             assert not os.path.exists(annotations_file)
         else:

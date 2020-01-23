@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.18.3
+Version:        0.7.19
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -172,6 +172,25 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Thu Jan 23 2020 Robert Cerven <rcerven@redhat.com> 0.7.19-1
+- update setup version for 0.7.19 (rcerven@redhat.com)
+- Handle whitelist annotation as a string (athos@redhat.com)
+- Fix dependency error in test script (athos@redhat.com)
+- Unit test to make sure additional properties are fine (twaugh@redhat.com)
+- Automatic commit of package [koji-containerbuild] minor release [0.7.18.3-1].
+  (rcerven@redhat.com)
+- Allow additional properties for containerbuild (rcerven@redhat.com)
+- Automatic commit of package [koji-containerbuild] minor release [0.7.18.2-1].
+  (rcerven@redhat.com)
+- Allow additional properties for containerbuild (rcerven@redhat.com)
+- use orchestrator.log name for log in task for source container
+  (rcerven@redhat.com)
+- Automatic commit of package [koji-containerbuild] minor release [0.7.18.1-1].
+  (rcerven@redhat.com)
+- don't check for build nvr existance for autorebuilds which have
+  'triggered_after_koji_task', (rcerven@redhat.com)
+- Generate build_annotations.json file (athos@redhat.com)
+
 * Wed Dec 18 2019 Robert Cerven <rcerven@redhat.com> 0.7.18.3-1
 - Allow additional properties for containerbuild (rcerven@redhat.com)
 

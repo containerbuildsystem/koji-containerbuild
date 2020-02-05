@@ -1,0 +1,37 @@
+# https://packit.dev/docs/configuration/
+
+specfile_path: koji-containerbuild.spec
+
+# to be copied to dist-git during an update
+synced_files:
+    - koji-containerbuild.spec
+    - .packit.yaml
+
+# name in upstream package repository/registry (e.g. in PyPI)
+upstream_package_name: koji-containerbuild
+# name of downstream (Fedora) RPM package
+downstream_package_name: koji-containerbuild
+
+# for packit service (Github app)
+jobs:
+- job: sync_from_downstream
+  trigger: commit
+- job: propose_downstream
+  trigger: release
+  metadata:
+    dist-git-branch: master
+- job: propose_downstream
+  trigger: release
+  metadata:
+    dist-git-branch: f31
+- job: propose_downstream
+  trigger: release
+  metadata:
+    dist-git-branch: f30
+- job: copr_build
+  trigger: pull_request
+  metadata:
+    targets:
+    - fedora-all
+    - epel-7
+    - epel-8

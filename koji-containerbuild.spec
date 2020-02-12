@@ -66,7 +66,6 @@ Group:      Applications/System
 Requires:   koji-builder
 Requires:   koji-containerbuild
 Requires:   osbs-client
-Requires:   python-urlgrabber
 Requires:   python-dockerfile-parse
 %if 0%{with python3}
 Requires:   python3-jsonschema

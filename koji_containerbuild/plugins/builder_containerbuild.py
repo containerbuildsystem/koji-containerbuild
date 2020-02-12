@@ -587,6 +587,13 @@ class BuildContainerTask(BaseContainerTask):
                         "type": "boolean",
                         "description": "Perform an isolated build?"
                     },
+                    "dependency_replacements": {
+                        "type": ["array", "null"],
+                        "items": {
+                            "type": "string"
+                        },
+                        "description": "Cachito dependency replacements"
+                    },
                     "yum_repourls": {
                         "type": ["array", "null"],
                         "items": {
@@ -659,7 +666,8 @@ class BuildContainerTask(BaseContainerTask):
                         scratch=None, isolated=None, yum_repourls=[],
                         branch=None, push_url=None, koji_parent_build=None,
                         release=None, flatpak=False, signing_intent=None,
-                        compose_ids=None, skip_build=False, triggered_after_koji_task=None):
+                        compose_ids=None, skip_build=False, triggered_after_koji_task=None,
+                        dependency_replacements=None):
         if not yum_repourls:
             yum_repourls = []
 
@@ -689,6 +697,7 @@ class BuildContainerTask(BaseContainerTask):
             'user': owner_info['name'],
             'component': component,
             'target': target_info['name'],
+            'dependency_replacements': dependency_replacements,
             'yum_repourls': yum_repourls,
             'scratch': scratch,
             'koji_task_id': self.id,
@@ -911,6 +920,7 @@ class BuildContainerTask(BaseContainerTask):
             target_info=target_info,
             scratch=opts.get('scratch', False),
             isolated=opts.get('isolated', False),
+            dependency_replacements=opts.get('dependency_replacements', None),
             yum_repourls=opts.get('yum_repourls', None),
             branch=opts.get('git_branch', None),
             push_url=opts.get('push_url', None),

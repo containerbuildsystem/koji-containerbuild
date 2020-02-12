@@ -312,6 +312,7 @@ class TestBuilder(object):
             create_build_args.setdefault('component', 'fedora-docker')
             create_build_args.setdefault('git_uri', src['git_uri'])
             create_build_args.setdefault('git_ref', src['git_ref'])
+            create_build_args.setdefault('dependency_replacements', None)
             create_build_args.setdefault('yum_repourls', [])
             create_build_args.setdefault('platforms', ['x86_64'])
             create_build_args.setdefault('architecture', None)
@@ -1517,6 +1518,9 @@ class TestBuilder(object):
         ('isolated', 1, ['boolean']),
         ('isolated', None, ['boolean']),
 
+        ('dependency_replacements', 'gomod:foo.bar/project:1', ['array', 'null']),
+        ('dependency_replacements', ['gomod:foo.bar/project:1', 1], ['string']),
+
         ('yum_repourls', 'just.one.url', ['array', 'null']),
         ('yum_repourls', ['some.url', 1], ['string']),
 
@@ -1598,6 +1602,7 @@ class TestBuilder(object):
     @pytest.mark.parametrize('build_opts', [
         {'scratch': False,
          'isolated': False,
+         'dependency_replacements': None,
          'yum_repourls': None,
          'git_branch': None,
          'push_url': None,
@@ -1609,6 +1614,7 @@ class TestBuilder(object):
 
         {'scratch': False,
          'isolated': False,
+         'dependency_replacements': ['gomod:foo/bar:1', 'gomod:foo/baz:2'],
          'yum_repourls': ['url.1', 'url.2'],
          'git_branch': 'master',
          'push_url': 'here.please',

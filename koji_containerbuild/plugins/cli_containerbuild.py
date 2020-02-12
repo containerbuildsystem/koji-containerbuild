@@ -88,6 +88,9 @@ def parse_arguments(options, args, flatpak):
                       default=options.quiet)
     parser.add_option("--background", action="store_true",
                       help=_("Run the build at a lower priority"))
+    parser.add_option("--replace-dependency", dest='dependency_replacements',
+                      metavar="pkg_manager:name:version[:new_name]", action='append',
+                      help=_("Cachito dependency replacement. May be used multiple times."))
     parser.add_option("--repo-url", dest='yum_repourls', metavar="REPO_URL",
                       action='append',
                       help=_("URL of yum repo file. May be used multiple times."))
@@ -137,7 +140,7 @@ def parse_arguments(options, args, flatpak):
         parser.error(_("git-branch must be specified"))
 
     keys = ('scratch', 'yum_repourls', 'git_branch', 'signing_intent', 'compose_ids', 'skip_build',
-            'userdata')
+            'userdata', 'dependency_replacements')
 
     if flatpak:
         opts['flatpak'] = True

@@ -2,6 +2,7 @@
 set -eux
 
 # Prepare env vars
+ENGINE=${ENGINE:="podman"}
 OS=${OS:="centos"}
 OS_VERSION=${OS_VERSION:="7"}
 PYTHON_VERSION=${PYTHON_VERSION:="2"}
@@ -13,7 +14,7 @@ if [[ $OS == "fedora" ]]; then
 fi
 
 CONTAINER_NAME="koji-containerbuild-$OS-$OS_VERSION-py$PYTHON_VERSION"
-RUN="docker exec -ti $CONTAINER_NAME"
+RUN="$ENGINE exec -ti $CONTAINER_NAME"
 if [[ $OS == "fedora" ]]; then
   PIP_PKG="python$PYTHON_VERSION-pip"
   PIP="pip$PYTHON_VERSION"
@@ -31,8 +32,8 @@ else
   PYTHON="python"
 fi
 # Create container if needed
-if [[ $(docker ps -q -f name=$CONTAINER_NAME | wc -l) -eq 0 ]]; then
-  docker run --name $CONTAINER_NAME -d -v $PWD:$PWD:z -w $PWD -ti $IMAGE sleep infinity
+if [[ $($ENGINE ps -q -f name="$CONTAINER_NAME" | wc -l) -eq 0 ]]; then
+  $ENGINE run --name "$CONTAINER_NAME" -d -v "$PWD":"$PWD":z -w "$PWD" -ti "$IMAGE" sleep infinity
 fi
 
 # Install dependencies

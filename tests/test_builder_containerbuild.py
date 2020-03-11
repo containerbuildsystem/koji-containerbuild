@@ -1154,13 +1154,22 @@ class TestBuilder(object):
             }
 
     @pytest.mark.parametrize('orchestrator', (True, False))
-    @pytest.mark.parametrize(('build_state', 'triggered_after_koji_task', 'build_fails'), (
-        ('COMPLETE', True, False),
-        ('COMPLETE', False, True),
-        ('FAILED', True, False),
-        ('FAILED', False, False),
-        ('CANCELED', True, False),
-        ('CANCELED', False, False),
+    @pytest.mark.parametrize(('build_state', 'triggered_after_koji_task',
+                              'skip_build', 'build_fails'), (
+        ('COMPLETE', True, True, False),
+        ('COMPLETE', True, False, False),
+        ('COMPLETE', False, True, False),
+        ('COMPLETE', False, False, True),
+
+        ('FAILED', True, True, False),
+        ('FAILED', True, False, False),
+        ('FAILED', False, True, False),
+        ('FAILED', False, False, False),
+
+        ('CANCELED', True, True, False),
+        ('CANCELED', True, False, False),
+        ('CANCELED', False, True, False),
+        ('CANCELED', False, False, False),
     ))
     @pytest.mark.parametrize(('df_release', 'param_release', 'expected'), (
         ('10', '11', '11'),
@@ -1168,14 +1177,14 @@ class TestBuilder(object):
         ('10', None, '10'),
     ))
     def test_build_nvr_exists(self, tmpdir, orchestrator, build_state, triggered_after_koji_task,
-                              build_fails, df_release, param_release, expected):
+                              skip_build, build_fails, df_release, param_release, expected):
         koji_task_id = 123
         last_event_id = 456
         koji_build_id = 999
 
         session = self._mock_session(last_event_id, koji_task_id)
 
-        if triggered_after_koji_task:
+        if triggered_after_koji_task or skip_build:
             (session
                 .should_receive('getBuild')
                 .never())
@@ -1225,6 +1234,8 @@ class TestBuilder(object):
             additional_args['release'] = param_release
         if triggered_after_koji_task:
             additional_args['triggered_after_koji_task'] = 12345
+        if skip_build:
+            additional_args['skip_build'] = True
 
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,

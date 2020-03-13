@@ -22,17 +22,7 @@ Group:          Applications/System
 
 License:        LGPLv2
 URL:            https://github.com/containerbuildsystem/%{name}
-#Use the following commands to generate the tarball:
-#
-#    git clone --single-branch --branch koji-containerbuild-VERSION-RELEASE \
-#      https://github.com/containerbuildsystem/koji-containerbuild.git && \
-#    cd ./koji-containerbuild && \
-#    python setup.py sdist
-#
-#Where:
-#- VERSION is version macro from specfile
-#- RELEASE is release macro from specfile and dist is not defined (empty)
-Source0:        %{name}-%{version}.tar.gz
+Source0:        https://github.com/containerbuildsystem/%{name}/archive/%{name}-%{version}.tar.gz
 BuildArch:      noarch
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 

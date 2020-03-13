@@ -24,7 +24,6 @@ License:        LGPLv2
 URL:            https://github.com/containerbuildsystem/%{name}
 Source0:        https://github.com/containerbuildsystem/%{name}/archive/%{name}-%{version}.tar.gz
 BuildArch:      noarch
-BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 %if 0%{with python3}
 BuildRequires:  python3-devel

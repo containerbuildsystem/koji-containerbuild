@@ -22,7 +22,7 @@ Group:          Applications/System
 
 License:        LGPLv2
 URL:            https://github.com/containerbuildsystem/%{name}
-Source0:        https://github.com/containerbuildsystem/%{name}/archive/%{name}-%{version}.tar.gz
+Source0:        https://github.com/containerbuildsystem/%{name}/archive/%{version}.tar.gz
 BuildArch:      noarch
 
 %if 0%{with python3}

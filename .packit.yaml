@@ -5,12 +5,6 @@ downstream_package_name: koji-containerbuild
 
 # for packit service (Github app)
 jobs:
-- job: sync_from_downstream
-  trigger: commit
-- job: propose_downstream
-  trigger: release
-  metadata:
-    dist-git-branch: fedora-all
 - job: copr_build
   trigger: pull_request
   metadata:

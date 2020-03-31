@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.20.1
+Version:        0.7.21
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -160,6 +160,16 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Mar 31 2020 Martin Bašti <mbasti@redhat.com> 0.7.21-1
+- tito: tag only with version (mbasti@redhat.com)
+- specfile: remove unneded buildroot definition (mbasti@redhat.com)
+- specfile: properly identify upstream source (mbasti@redhat.com)
+- tito: use version tagger (mbasti@redhat.com)
+- don't check for build existance with skip-build (rcerven@redhat.com)
+- Change travis for working with Fedora 31 (sergsalatsky1703@gmail.com)
+- Use podman as testing container engine (sergsalatsky1703@gmail.com)
+- Simplify packit config (mbasti@redhat.com)
+
 * Mon Feb 24 2020 Robert Cerven <rcerven@redhat.com> 0.7.20.1-1
 - update setup version for 0.7.20.1 (rcerven@redhat.com)
 - allow compose_ids used together with repo_url (rcerven@redhat.com)

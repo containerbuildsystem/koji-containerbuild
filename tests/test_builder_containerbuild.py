@@ -1610,36 +1610,39 @@ class TestBuilder(object):
         err_msg = 'is not of type {}'.format(expected_types_str)
         assert err_msg in str(exc_info.value)
 
-    @pytest.mark.parametrize('build_opts', [
-        {'scratch': False,
-         'isolated': False,
-         'dependency_replacements': None,
-         'yum_repourls': None,
-         'git_branch': None,
-         'push_url': None,
-         'koji_parent_build': None,
-         'release': None,
-         'flatpak': False,
-         'compose_ids': None,
-         'signing_intent': None},
+    @pytest.mark.parametrize(('build_opts', 'valid'), [
+        ({'scratch': False,
+          'isolated': False,
+          'dependency_replacements': None,
+          'yum_repourls': None,
+          'git_branch': None,
+          'push_url': None,
+          'koji_parent_build': None,
+          'release': None,
+          'flatpak': False,
+          'compose_ids': None,
+          'signing_intent': None},
+         True),
 
-        {'scratch': False,
-         'isolated': False,
-         'dependency_replacements': ['gomod:foo/bar:1', 'gomod:foo/baz:2'],
-         'yum_repourls': ['url.1', 'url.2'],
-         'git_branch': 'master',
-         'push_url': 'here.please',
-         'koji_parent_build': 'some-or-other',
-         'release': 'v8',
-         'flatpak': False,
-         'compose_ids': [1, 2, 3],
-         'signing_intent': 'No, I do not intend to sign anything.'},
+        ({'scratch': False,
+          'isolated': False,
+          'dependency_replacements': ['gomod:foo/bar:1', 'gomod:foo/baz:2'],
+          'yum_repourls': ['url.1', 'url.2'],
+          'git_branch': 'master',
+          'push_url': 'here.please',
+          'koji_parent_build': 'some-or-other',
+          'release': 'v8',
+          'flatpak': False,
+          'compose_ids': [1, 2, 3],
+          'signing_intent': 'No, I do not intend to sign anything.'},
+         True),
 
-        {'version': '1.2',  # ignored
-         'name': 'foo',     # ignored
-         'git_branch': 'master'},
+        ({'version': '1.2',  # invalid
+          'name': 'foo',     # invalid
+          'git_branch': 'master'},
+         False),
     ])
-    def test_schema_validation_valid_options_container(self, build_opts, tmpdir):
+    def test_schema_validation_valid_options_container(self, build_opts, valid, tmpdir):
         koji_task_id = 123
         last_event_id = 456
 
@@ -1663,7 +1666,11 @@ class TestBuilder(object):
             .should_receive('createContainer')
             .and_return({'repositories': 'something.somewhere'}))
 
-        task.handler(src['src'], 'target', build_opts)
+        if valid:
+            task.handler(src['src'], 'target', build_opts)
+        else:
+            with pytest.raises(jsonschema.exceptions.ValidationError):
+                task.handler(src['src'], 'target', build_opts)
 
     @pytest.mark.parametrize('scratch', (True, False))
     @pytest.mark.parametrize('signing_intent', (None, 'No, I do not intend to sign anything.'))

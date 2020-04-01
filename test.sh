@@ -77,8 +77,9 @@ $RUN $PIP install --upgrade --force-reinstall \
     git+https://github.com/containerbuildsystem/dockerfile-parse
 
 # CentOS needs to have setuptools updates to make pytest-cov work
+# setuptools will no longer support python2 starting on version 45
 if [[ $OS != "fedora" ]]; then
-  $RUN $PIP install -U setuptools
+  $RUN $PIP install -U 'setuptools<45'
 
   # Watch out for https://github.com/pypa/setuptools/issues/937
   $RUN curl -O https://bootstrap.pypa.io/2.6/get-pip.py
@@ -88,6 +89,11 @@ fi
 # https://github.com/jaraco/zipp/issues/28
 if [[ $PYTHON_VERSION == 2 ]]; then
   $RUN $PIP install zipp==1.0.0
+fi
+
+# configparser no longer supports python 2
+if [[ $PYTHON_VERSION == 2 ]]; then
+  $RUN $PIP install configparser==4.0.2
 fi
 
 # Install koji-containerbuild

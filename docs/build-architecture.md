@@ -1,43 +1,42 @@
-This document describes some general concepts behind container build architecture.
+# Container Build Architecture
 
-Let's say we have CLI named `rpkg` which is client of `pyrpkg` library. How koji configuration comes into container-build workflow:
+Let's say we have CLI named `rpkg` which is client of `pyrpkg` library. This is
+how koji configuration comes into container-build workflow
 
 1. Developer clones dist-git repository (`rpkg clone` command)
+1. Developer switches branch (`rpkg switch-branch`). Let's say branch is
+   `${BRANCH}`
+1. In this branch there is a Dockerfile which contains several `LABEL`
+   directives. One of them is `BZComponent`. Let's call this value
+   `${COMPONENT}`
+1. Developer wants to build the container so they issue `rpkg container-build`
+   command
 
-2. Developer switches branch (`rpkg switch-branch`). Let's say branch is `${BRANCH}`.
+Now some automagic comes into the game
 
-3. In this branch there is a Dockerfile which contains several `LABEL` directives. One of them is `BZComponent`. Let's call this value `${COMPONENT}`.
-
-4. Developer wants to build the container so they issue `rpkg container-build` command.
-
-Now some automagic comes into the game:
-
-1. `rpkg` constructs Koji target by appending `-docker-candidate` to the branch name.
-   In our case it is `${BRANCH}-docker-candidate`.
-
-2. During the build Koji buildroot tag is used as yum repository. *The
+1. `rpkg` constructs Koji target by appending `-docker-candidate` to the branch
+   name. In our case it is `${BRANCH}-docker-candidate`
+1. During the build Koji buildroot tag is used as yum repository. *The
    semantic of buildroot tag differs from rpm builds* as it should contain
-   either:
-
-   - candidate (rpm) packages (to be released) - a tag ending with `-candidate`.
-
-   - released (rpm) packages - a tag without any suffix.
-
-3. Usually neither candidate nor released tags have architecture set in
+   either
+   - Candidate (rpm) packages (to be released) ― a tag ending with `-candidate`
+   - Released (rpm) packages ― a tag without any suffix
+1. Usually neither candidate nor released tags have architecture set in
    Koji. This means a yum repository isn't generated for these tags. To
    workaround this we don't add architecture to these tags but create special
    "build" tag for containers. These builds tags have suffix `-container-build`
-   and inherit from either candidate or released tags.
-
-4. After the container build succeeds it is tagged to the destination tag.
+   and inherit from either candidate or released tags
+1. After the container build succeeds it is tagged to the destination tag.
    Due to Koji policy, the build needs to be added to (whitelisted in) this
    destination tag. Use `${COMPONENT}` to add the package to this destination
-   tag.
+   tag
 
-This automagic is hardcoded in the `pyrpkg` library but its clients (like `fedpkg`) can override this behaviour if needed.
+This automagic is hardcoded in the `pyrpkg` library but its clients (like
+`fedpkg`) can override this behaviour if needed.
 
-Example:
+Example
 
+```shell
     $ rpkg co rsyslog-docker
     $ cd ./rsyslog-docker
     $ rpkg switch-branch extras-rhel-7.1
@@ -62,3 +61,4 @@ Example:
     Package                 Tag                     Extra Arches     Owner
     ----------------------- ----------------------- ---------------- ---------------
     rsyslog-docker          extras-rhel-7.1                          foo-owner
+```

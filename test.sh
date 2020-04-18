@@ -110,6 +110,13 @@ case ${ACTION} in
   $RUN $PIP install bandit
   TEST_CMD="bandit-baseline -r koji_containerbuild -ll -ii"
   ;;
+"pylint")
+  # This can run only at fedora because pylint is not packaged in centos
+  # use distro pylint to not get too new pylint version
+  $RUN $PKG install -y "${PYTHON}-pylint"
+  PACKAGES='koji_containerbuild tests'
+  TEST_CMD="${PYTHON} -m pylint ${PACKAGES}"
+  ;;
 *)
   echo "Unknown action: ${ACTION}"
   exit 2

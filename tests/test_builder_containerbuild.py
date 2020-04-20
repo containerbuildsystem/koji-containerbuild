@@ -26,10 +26,10 @@ from textwrap import dedent
 import json
 import jsonschema
 import koji
-import osbs
 import pytest
 from flexmock import flexmock
-from osbs.exceptions import OsbsValidationException
+
+import osbs
 try:
     from osbs.exceptions import OsbsOrchestratorNotEnabled
 except ImportError:
@@ -49,7 +49,7 @@ builder_containerbuild.incremental_upload = mock_incremental_upload
 
 LogEntry = namedtuple('LogEntry', ['platform', 'line'])
 logs = [LogEntry(None, 'orchestrator'),
-        LogEntry('x86_64', 'Hurray for bacon: \u2017'),
+        LogEntry('x86_64', u'Hurray for bacon: \u2017'),
         LogEntry('x86_64', 'line 2')]
 
 
@@ -85,7 +85,7 @@ class TestBuilder(object):
 
         expected_conf_section = 'scratch' if scratch else 'default'
 
-        assert type(osbs_obj) is osbs.api.OSBS
+        assert isinstance(osbs_obj, osbs.api.OSBS)
         assert osbs_obj.os_conf.conf_section == expected_conf_section
         assert osbs_obj.build_conf.conf_section == expected_conf_section
 
@@ -964,7 +964,7 @@ class TestBuilder(object):
                 .should_receive('_incremental_upload_logs')
                 .and_raise(koji.ActionNotAllowed))
         else:
-             (flexmock(task)
+            (flexmock(task)
                 .should_call('_incremental_upload_logs'))
 
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
@@ -976,7 +976,7 @@ class TestBuilder(object):
         task_response = task.handler(src['src'], 'target', opts=additional_args)
 
         if orchestrator and additional_args.get('skip_build', None):
-             assert task_response == {
+            assert task_response == {
                 'repositories': [],
                 'koji_builds': [],
                 'build': 'skipped'
@@ -1312,7 +1312,7 @@ class TestBuilder(object):
 
         elif cause == 'wrong type':
             log_message = ('koji build {} is not image build which source container requires'
-                           .format(provided_nvr, sorted(build_types)))
+                           .format(provided_nvr))
 
         elif cause == 'source build':
             log_message = ('koji build {} is source container build, source container can not '

@@ -34,7 +34,7 @@ def mock_session(target,
                  dest_tag_locked=False,
                  task_id='42',
                  task_success=True,
-                 task_result={},
+                 task_result=None,
                  priority=None,
                  channel=cli_containerbuild.DEFAULT_CHANNEL,
                  running_in_background=False):
@@ -44,6 +44,9 @@ def mock_session(target,
     The default argument values are set up for a successful build,
     as long as `target` and `source` match those provided via CLI args.
     """
+    if not task_result:
+        task_result = {}
+
     (flexmock(cli_containerbuild)
         .should_receive('activate_session'))  # and do nothing
     (flexmock(cli_containerbuild)

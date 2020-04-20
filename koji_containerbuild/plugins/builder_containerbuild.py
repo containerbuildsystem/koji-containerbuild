@@ -37,13 +37,12 @@ from distutils.version import LooseVersion
 import dockerfile_parse
 import json
 import jsonschema
-import koji
 from six import StringIO
 
 # this is present because in some versions of koji, callback functions assume koji.plugin is
 # imported
 import koji.plugin
-
+import koji
 from koji.daemon import SCM, incremental_upload
 from koji.tasks import BaseTaskHandler
 
@@ -166,7 +165,7 @@ class FileWatcher(object):
         except OSError:
             self.logger.error("The build has been cancelled")
             raise koji.ActionNotAllowed
-        except:
+        except Exception:
             self.logger.error("Error reading mock log: %s", fpath)
             self.logger.error(''.join(traceback.format_exception(*sys.exc_info())))
             return False
@@ -241,8 +240,10 @@ class LabelsWrapper(object):
                     if '-' in tag:
                         continue
                     tags.append(tag.strip())
-        finally:
-            return tags
+        except Exception:
+            pass
+
+        return tags
 
     def get_missing_label_ids(self):
         data = self.get_data_labels()
@@ -393,7 +394,7 @@ class BaseContainerTask(BaseTaskHandler):
                 platform_logs[platform].write((entry.line + '\n').encode('utf-8'))
                 platform_logs[platform].flush()
             except Exception as error:
-                msg = "Exception (%s) while writing build logs: %s", type(error), error
+                msg = "Exception ({}) while writing build logs: {}".format(type(error), error)
                 raise ContainerError(msg)
         for logfile in platform_logs.values():
             logfile.close()
@@ -477,7 +478,7 @@ class BaseContainerTask(BaseTaskHandler):
             if not build_id:
                 return
 
-            self.logger.warn("Cannot read logs, cancelling build %s", build_id)
+            self.logger.warning("Cannot read logs, cancelling build %s", build_id)
             self.osbs().cancel_build(build_id)
 
         signal.signal(signal.SIGINT, sigint_handler)
@@ -662,10 +663,11 @@ class BuildContainerTask(BaseContainerTask):
         BaseContainerTask.__init__(self, id, method, params, session, options,
                                    workdir)
         self.demux = demux
+        self.event_id = None
 
 
     def createContainer(self, src=None, target_info=None, arches=None,
-                        scratch=None, isolated=None, yum_repourls=[],
+                        scratch=None, isolated=None, yum_repourls=None,
                         branch=None, push_url=None, koji_parent_build=None,
                         release=None, flatpak=False, signing_intent=None,
                         compose_ids=None, skip_build=False, triggered_after_koji_task=None,
@@ -905,7 +907,7 @@ class BuildContainerTask(BaseContainerTask):
             try:
                 build = self.session.getBuild(expected_nvr)
                 build_id = build['id']
-            except:
+            except Exception:
                 self.logger.info("No build for %s found", expected_nvr, exc_info=True)
             else:
                 if build['state'] in (koji.BUILD_STATES['FAILED'], koji.BUILD_STATES['CANCELED']):
@@ -1027,6 +1029,7 @@ class BuildSourceContainerTask(BaseContainerTask):
     def __init__(self, id, method, params, session, options, workdir=None, demux=False):
         BaseContainerTask.__init__(self, id, method, params, session, options, workdir)
         self.demux = demux
+        self.event_id = None
         self.incremental_log_basename = 'orchestrator.log'
 
     def createSourceContainer(self, target_info=None, scratch=None, component=None,

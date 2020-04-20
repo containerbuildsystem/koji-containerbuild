@@ -393,8 +393,7 @@ class BaseContainerTask(BaseTaskHandler):
                 platform_logs[platform].write((entry.line + '\n').encode('utf-8'))
                 platform_logs[platform].flush()
             except Exception as error:
-                msg = "Exception (%s) while writing build logs: %s" % (type(error),
-                                                                       error)
+                msg = "Exception (%s) while writing build logs: %s", type(error), error
                 raise ContainerError(msg)
         for logfile in platform_logs.values():
             logfile.close()
@@ -449,7 +448,7 @@ class BaseContainerTask(BaseTaskHandler):
         """
         pkg_cfg = self.session.getPackageConfig(target_info['dest_tag_name'],
                                                 name)
-        self.logger.debug("%r" % pkg_cfg)
+        self.logger.debug("%r", pkg_cfg)
         # Make sure package is on the list for this tag
         if pkg_cfg is None:
             raise koji.BuildError("package (container) %s not in list for tag %s" % (name, target_info['dest_tag_name']))
@@ -769,7 +768,7 @@ class BuildContainerTask(BaseContainerTask):
             self.logger.debug('Got extra arches: %s', extra)
             arches = "%s %s" % (arches, extra)
         archlist = arches.split()
-        self.logger.debug('base archlist: %r' % archlist)
+        self.logger.debug('base archlist: %r', archlist)
 
         override = self.opts.get('arch_override')
         if (self.opts.get('isolated') or self.opts.get('scratch')) and override:
@@ -916,7 +915,7 @@ class BuildContainerTask(BaseContainerTask):
                     raise koji.BuildError("Build for %s already exists, id %s" %
                                           (expected_nvr, build_id))
 
-        self.logger.debug("Spawning jobs for arches: %r" % (archlist))
+        self.logger.debug("Spawning jobs for arches: %r", archlist)
 
         kwargs = dict(
             src=src,

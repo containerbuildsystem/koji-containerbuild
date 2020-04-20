@@ -20,6 +20,8 @@
 # Authors:
 #       Pavol Babincak <pbabinca@redhat.com>
 
+from __future__ import absolute_import
+
 import sys
 import logging
 

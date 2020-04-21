@@ -278,6 +278,7 @@ class LabelsWrapper(object):
 class BaseContainerTask(BaseTaskHandler):
     """Common class for BuildContainerTask and BuildSourceContainerTask"""
     def __init__(self, id, method, params, session, options, workdir=None):
+        # pylint: disable=redefined-builtin
         BaseTaskHandler.__init__(self, id, method, params, session, options, workdir)
         self._osbs = None
         self.demux = None
@@ -660,11 +661,11 @@ class BuildContainerTask(BaseContainerTask):
     }
 
     def __init__(self, id, method, params, session, options, workdir=None, demux=True):
+        # pylint: disable=redefined-builtin
         BaseContainerTask.__init__(self, id, method, params, session, options,
                                    workdir)
         self.demux = demux
         self.event_id = None
-
 
     def createContainer(self, src=None, target_info=None, arches=None,
                         scratch=None, isolated=None, yum_repourls=None,
@@ -1027,6 +1028,7 @@ class BuildSourceContainerTask(BaseContainerTask):
     }
 
     def __init__(self, id, method, params, session, options, workdir=None, demux=False):
+        # pylint: disable=redefined-builtin
         BaseContainerTask.__init__(self, id, method, params, session, options, workdir)
         self.demux = demux
         self.event_id = None

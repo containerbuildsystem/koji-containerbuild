@@ -31,7 +31,7 @@ from koji.plugin import export
 
 koji_hub_path = '/usr/share/koji-hub/'
 sys.path.insert(0, koji_hub_path)
-import kojihub
+import kojihub  # noqa: E402 # pylint: disable=import-error
 
 #logger = logging.getLogger('koji.plugins.containerbuild')
 logger = logging.getLogger('koji.plugins')

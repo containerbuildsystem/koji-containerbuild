@@ -431,7 +431,9 @@ class TestCLI(object):
             assert error_msg in stderr_output
             return
 
+        # pylint: disable=unused-variable
         build_opts, parsed_args, opts, _ = parse_arguments(options, test_args, flatpak=False)
+        # pylint: enable=unused-variable
 
         assert parsed_args == expected_args
         assert opts == expected_opts

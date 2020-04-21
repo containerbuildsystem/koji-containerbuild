@@ -418,7 +418,7 @@ class TestBuilder(object):
         (osbs
             .should_receive('wait_for_build_to_get_scheduled')
             .with_args('os-build-id'))
-        (osbs.should_receive('cancel_build').never)
+        (osbs.should_receive('cancel_build').never)  # pylint: disable=expression-not-assigned
         if orchestrator:
             (osbs
                 .should_receive('get_orchestrator_build_logs')

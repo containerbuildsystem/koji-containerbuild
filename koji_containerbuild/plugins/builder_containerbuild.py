@@ -181,6 +181,7 @@ class FileWatcher(object):
             yield (fd, fname)
 
     def clean(self):
+        # pylint: disable=unused-variable
         for (fname, (fd, inode, size, fpath)) in self._logs.items():
             if fd:
                 fd.close()

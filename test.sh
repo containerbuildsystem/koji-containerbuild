@@ -137,6 +137,7 @@ case ${ACTION} in
   TEST_CMD="bandit-baseline -r koji_containerbuild -ll -ii"
   ;;
 "pylint")
+  setup_kojic
   # This can run only at fedora because pylint is not packaged in centos
   # use distro pylint to not get too new pylint version
   $RUN $PKG install -y "${PYTHON}-pylint"

@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.21
+Version:        0.7.22
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -160,6 +160,27 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri Apr 24 2020 Martin Bašti <mbasti@redhat.com> 0.7.22-1
+- Install koji-c and deps for pylint run (athos@redhat.com)
+- Replace "Signed-off-by:" maintainer task with DCO... (ben.alkov@redhat.com)
+- Add markdownlint config/rules (ben.alkov@redhat.com)
+- Enable MD linting via Travis/test.sh (ben.alkov@redhat.com)
+- Lint all Markdown files (ben.alkov@redhat.com)
+- Mute other errors (ssalatsk@redhat.com)
+- Mute 'redefined-builtin' warning (ssalatsk@redhat.com)
+- Fix single errors (ssalatsk@redhat.com)
+- Fix 'logging-not-lazy' (ssalatsk@redhat.com)
+- Import 'absolute_import' (ssalatsk@redhat.com)
+- Update travis CI for pylint testing (ssalatsk@redhat.com)
+- Add pylint testing (ssalatsk@redhat.com)
+- packit: don't propose downstream update (mbasti@redhat.com)
+- Revert "Allow additional properties for containerbuild" (mlangsdo@redhat.com)
+- fix: tito py2 support (mbasti@redhat.com)
+- fix: update tito builder to match with expected value in %%setup
+  (mastyk@redhat.com)
+- Freeze python 2 test dependency verions (athos@redhat.com)
+- fix: add custom builder for tito (mastyk@redhat.com)
+
 * Tue Mar 31 2020 Martin Bašti <mbasti@redhat.com> 0.7.21-1
 - tito: tag only with version (mbasti@redhat.com)
 - specfile: remove unneded buildroot definition (mbasti@redhat.com)

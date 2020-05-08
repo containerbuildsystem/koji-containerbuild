@@ -49,10 +49,13 @@ from koji.tasks import BaseTaskHandler
 import osbs
 from osbs.api import OSBS
 from osbs.conf import Configuration
+from osbs.http import HttpSession
 try:
     from osbs.exceptions import OsbsOrchestratorNotEnabled
 except ImportError:
     from osbs.exceptions import OsbsValidationException as OsbsOrchestratorNotEnabled
+from osbs.exceptions import OsbsResponseException, OsbsException
+
 
 OSBS_VERSION = osbs.__version__
 OSBS_FLATPAK_SUPPORT_VERSION = '0.43'  # based on OSBS 2536f24 released on osbs-0.43
@@ -556,6 +559,38 @@ class BaseContainerTask(BaseTaskHandler):
             containerdata['arch'] = arch
 
         return containerdata
+
+    def check_servers_up(self, flags=None):
+        flags = flags or {}
+        status_session = HttpSession()
+        for url, services in flags.items():
+            for service in services:
+                status_url = "{url}/api/v1/components?name={service}".format(url=url,
+                                                                             service=service)
+                try:
+                    status_json = status_session.get(status_url, retries_enabled=False).json()
+                except OsbsException:
+                    msg = "url {} does not respond".format(url)
+                    self.logger.error(msg)
+                    raise koji.BuildError(msg)
+                except OsbsResponseException:
+                    msg = "url {} does not provide network status for {}".format(url, service)
+                    self.logger.error(msg)
+                    raise koji.BuildError(msg)
+                if not status_json.get("data"):
+                    msg = "at url {}, failed to get network status for {}".format(url, service)
+                    self.logger.error(msg)
+                    raise koji.BuildError(msg)
+                else:
+                    status_comp = status_json["data"][0]
+                    if status_comp["status"] != 1:
+                        self.logger.info("{} unavailable, deferring".format(service))
+                        return False
+        return True
+
+    def checkHost(self, hostdata):
+        flags = {}  # How to get flags?
+        return self.check_servers_up(flags)
 
 
 class BuildContainerTask(BaseContainerTask):

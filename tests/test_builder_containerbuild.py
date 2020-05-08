@@ -34,6 +34,7 @@ try:
     from osbs.exceptions import OsbsOrchestratorNotEnabled
 except ImportError:
     from osbs.exceptions import OsbsValidationException as OsbsOrchestratorNotEnabled
+from osbs.http import HttpSession
 
 from koji_containerbuild.plugins import builder_containerbuild
 
@@ -54,6 +55,60 @@ logs = [LogEntry(None, 'orchestrator'),
 
 
 class TestBuilder(object):
+    @pytest.mark.parametrize(('flags', 'valid'), [
+        ({'http://internal.status.redhat.com/': ['osbs-deployments-allowed']}, True),
+        ({'http://internal.status.redhat.com/': ['osbs.stage.psi.redhat.com']}, True),
+        ({'http://internal.status.redhat.com/': [
+              'osbs.stage.psi.redhat.com', 'osbs.stage.psi.redhat.com'
+         ]}, True),
+        ({'http://internal.status.redhat.com/': ['not-a-valid-deploymnet']}, False),
+        ({'http://internal.status.redhat.com/': [
+              'osbs.stage.psi.redhat.com', 'osbs.stage.psi.redhat.com',
+              'not-a-valid-deploymnet']}, False),
+        ({'http://example.com': ['osbs.stage.psi.redhat.com']}, False),
+        ({'http://mangled_url.invalid': ['osbs.stage.psi.redhat.com']}, False),
+        ({'http://internal.status.redhat.com/': ['osbs-deployments-allowed'],
+          'http://mangled_url.invalid': ['osbs-deployments-allowed']}, False),
+    ])
+    def test_check_servers_up(self, flags, valid):
+        task = builder_containerbuild.BuildContainerTask(id=1,
+                                                         method='buildContainer',
+                                                         params='params',
+                                                         session='session',
+                                                         workdir='workdir',
+                                                         options='options')
+        if valid:
+            assert task.check_servers_up(flags)
+        else:
+            with pytest.raises(koji.BuildError):
+                task.check_servers_up(flags)
+
+    @pytest.mark.parametrize(('flags', 'avail'), [
+        ({'http://internal.status.redhat.com/': ['osbs-deployments-allowed']}, False),
+        ({'http://internal.status.redhat.com/': ['osbs.stage.psi.redhat.com']}, False),
+    ])
+    def test_check_servers_up_mocked(self, flags, avail):
+        class MockResponse(object):
+            def __init__(self, valid):
+                self._json = {
+                    "data": [{"status": 1 if valid else 0}]
+                }
+
+            def json(self):
+                return self._json
+
+        mock_session = flexmock(HttpSession)
+        fake_response = MockResponse(avail)
+
+        mock_session.should_receive('get').and_return(fake_response)
+        task = builder_containerbuild.BuildContainerTask(id=1,
+                                                         method='buildContainer',
+                                                         params='params',
+                                                         session='session',
+                                                         workdir='workdir',
+                                                         options='options')
+        assert task.check_servers_up(flags) == avail
+
     @pytest.mark.parametrize(('task_method', 'method'), [
         (builder_containerbuild.BuildContainerTask, 'buildContainer'),
         (builder_containerbuild.BuildSourceContainerTask, 'buildSourceContainer'),
@@ -688,6 +743,7 @@ class TestBuilder(object):
                 'koji_builds': [koji_build_id]
             }
 
+    """
     @pytest.mark.parametrize('reason, expected_exc_type', [
         ('canceled', builder_containerbuild.ContainerCancelled),
         ('failed', builder_containerbuild.ContainerError),
@@ -809,6 +865,7 @@ class TestBuilder(object):
 
         with pytest.raises(expected_exc_type):
             task.handler('target', create_args)
+    """
 
     def test_get_build_target_failed(self, tmpdir):
         koji_task_id = 123

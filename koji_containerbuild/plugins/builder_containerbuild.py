@@ -589,8 +589,12 @@ class BaseContainerTask(BaseTaskHandler):
         return True
 
     def checkHost(self, hostdata):
-        flags = {}  # How to get flags?
-        return self.check_servers_up(flags)
+        #flags = {}  # How to get flags?
+        #return self.check_servers_up(flags)
+        self.logger.info("task {} at time {}".format(self.id, time.strftime("%H:%M:%S")))
+        if int(strftime("%M")) % 3:
+            return True
+        return False
 
 
 class BuildContainerTask(BaseContainerTask):

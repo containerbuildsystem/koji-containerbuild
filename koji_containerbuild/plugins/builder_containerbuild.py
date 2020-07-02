@@ -864,6 +864,12 @@ class BuildContainerTask(BaseContainerTask):
         self.opts = opts
         component = None
 
+        if not opts.get('git_branch'):
+            raise koji.BuildError("Git branch must be specified")
+
+        if opts.get('scratch') and opts.get('isolated'):
+            raise koji.BuildError("Build cannot be both isolated and scratch")
+
         self.event_id = self.session.getLastEvent()['id']
         target_info = self.session.getBuildTarget(target, event=self.event_id)
         if not target_info:

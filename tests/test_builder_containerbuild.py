@@ -17,6 +17,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 """
 from __future__ import absolute_import
 
+from copy import deepcopy
 import os
 import os.path
 import signal
@@ -611,21 +612,23 @@ class TestBuilder(object):
             (flexmock(task)
                 .should_receive('_write_combined_log'))
 
+        build_args = {'git_branch': 'working'}
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,
                                      koji_task_id=koji_task_id,
                                      orchestrator=orchestrator,
                                      build_not_started=bool(failure),
+                                     create_build_args=deepcopy(build_args),
                                      )
 
         if failure:
             with pytest.raises(koji.BuildError) as exc:
-                task.handler(src['src'], 'target', opts={})
+                task.handler(src['src'], 'target', opts=build_args)
 
             assert failure in str(exc.value)
 
         else:
-            task_response = task.handler(src['src'], 'target', opts={})
+            task_response = task.handler(src['src'], 'target', opts=build_args)
 
             assert task_response == {
                 'repositories': ['unique-repo', 'primary-repo'],
@@ -717,7 +720,7 @@ class TestBuilder(object):
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,
                                      koji_task_id=koji_task_id,
-                                     create_build_args={'git_branch': 'some'})
+                                     create_build_args={'git_branch': 'working'})
 
         build_finished_response = flexmock(status=500, json={})
         (build_finished_response
@@ -745,7 +748,7 @@ class TestBuilder(object):
                 .once())
 
         with pytest.raises(expected_exc_type):
-            task.handler(src['src'], 'target', {'git_branch': 'some'})
+            task.handler(src['src'], 'target', {'git_branch': 'working'})
 
     @pytest.mark.parametrize('reason, expected_exc_type', [
         ('canceled', builder_containerbuild.ContainerCancelled),
@@ -830,8 +833,43 @@ class TestBuilder(object):
                                                          workdir=str(tmpdir),
                                                          demux=True)
         with pytest.raises(koji.BuildError) as exc:
-            task.handler(src['src'], 'target', opts={})
+            task.handler(src['src'], 'target', opts={'git_branch': 'working'})
         assert "Target `target` not found" in str(exc.value)
+
+    def test_missing_git_branch(self, tmpdir):
+        koji_task_id = 123
+        last_event_id = 456
+
+        session = self._mock_session(last_event_id, koji_task_id)
+        src = self._mock_git_source()
+        task = builder_containerbuild.BuildContainerTask(id=koji_task_id,
+                                                         method='buildContainer',
+                                                         params='params',
+                                                         session=session,
+                                                         options={},
+                                                         workdir=str(tmpdir),
+                                                         demux=True)
+        with pytest.raises(koji.BuildError) as exc:
+            task.handler(src['src'], 'target', opts={})
+        assert "Git branch must be specified" in str(exc.value)
+
+    def test_scratch_and_isolated_conflict(self, tmpdir):
+        koji_task_id = 123
+        last_event_id = 456
+
+        session = self._mock_session(last_event_id, koji_task_id)
+        src = self._mock_git_source()
+        task = builder_containerbuild.BuildContainerTask(id=koji_task_id,
+                                                         method='buildContainer',
+                                                         params='params',
+                                                         session=session,
+                                                         options={},
+                                                         workdir=str(tmpdir),
+                                                         demux=True)
+        with pytest.raises(koji.BuildError) as exc:
+            task.handler(src['src'], 'target', opts={'scratch': True, 'isolated': True,
+                                                     'git_branch': 'working'})
+        assert "Build cannot be both isolated and scratch" in str(exc.value)
 
     def test_get_build_target_failed_source(self, tmpdir):
         koji_task_id = 123
@@ -967,15 +1005,17 @@ class TestBuilder(object):
             (flexmock(task)
                 .should_call('_incremental_upload_logs'))
 
+        build_args = deepcopy(additional_args)
+        build_args['git_branch'] = 'working'
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,
                                      koji_task_id=koji_task_id,
                                      orchestrator=orchestrator,
-                                     create_build_args=additional_args.copy())
+                                     create_build_args=deepcopy(build_args))
 
-        task_response = task.handler(src['src'], 'target', opts=additional_args)
+        task_response = task.handler(src['src'], 'target', opts=build_args)
 
-        if orchestrator and additional_args.get('skip_build', None):
+        if orchestrator and build_args.get('skip_build', None):
             assert task_response == {
                 'repositories': [],
                 'koji_builds': [],
@@ -1076,17 +1116,16 @@ class TestBuilder(object):
 
         additional_args = {
             'flatpak': True,
+            'git_branch': 'working',
         }
 
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,
                                      koji_task_id=task_id,
                                      orchestrator=True,
-                                     create_build_args=additional_args.copy(),
+                                     create_build_args=deepcopy(additional_args),
                                      build_not_started=False)
-        task_response = task.handler(src['src'], 'target', opts={
-            'flatpak': True,
-        })
+        task_response = task.handler(src['src'], 'target', opts=additional_args)
         assert task_response == {
             'repositories': ['unique-repo', 'primary-repo'],
             'koji_builds': [koji_build_id]
@@ -1132,7 +1171,7 @@ class TestBuilder(object):
             (flexmock(task)
                 .should_receive('_write_combined_log'))
 
-        additional_args = {}
+        additional_args = {'git_branch': 'working'}
         if release:
             additional_args['release'] = release
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
@@ -1231,7 +1270,7 @@ class TestBuilder(object):
             (flexmock(task)
                 .should_receive('_write_combined_log'))
 
-        additional_args = {}
+        additional_args = {'git_branch': 'working'}
         if param_release:
             additional_args['release'] = param_release
         if triggered_after_koji_task:
@@ -1376,18 +1415,20 @@ class TestBuilder(object):
         (flexmock(task)
             .should_receive('_write_demultiplexed_logs'))
 
+        build_args = deepcopy(additional_args)
+        build_args['git_branch'] = 'working'
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,
                                      koji_task_id=koji_task_id,
                                      orchestrator=True,
                                      build_not_started=raises,
-                                     create_build_args=additional_args.copy())
+                                     create_build_args=deepcopy(build_args))
 
         if raises:
             with pytest.raises(koji.BuildError):
-                task.handler(src['src'], 'target', opts=additional_args)
+                task.handler(src['src'], 'target', opts=build_args)
         else:
-            task_response = task.handler(src['src'], 'target', opts=additional_args)
+            task_response = task.handler(src['src'], 'target', opts=build_args)
 
             assert task_response == {
                 'repositories': ['unique-repo', 'primary-repo'],
@@ -1404,8 +1445,8 @@ class TestBuilder(object):
         ({'isolated': True, 'arch_override': ''}, False),
         ({'isolated': False, 'arch_override': 'x86_64'}, True),
         ({'isolated': False, 'arch_override': ''}, False),
-        ({'scratch': True, 'isolated': True, 'arch_override': 'x86_64'}, False),
-        ({'scratch': True, 'isolated': True, 'arch_override': ''}, False),
+        ({'scratch': True, 'isolated': True, 'arch_override': 'x86_64'}, True),
+        ({'scratch': True, 'isolated': True, 'arch_override': ''}, True),
         ({'scratch': False, 'isolated': True, 'arch_override': 'x86_64'}, False),
         ({'scratch': False, 'isolated': True, 'arch_override': ''}, False),
         ({'scratch': True, 'isolated': False, 'arch_override': 'x86_64'}, False),
@@ -1444,18 +1485,20 @@ class TestBuilder(object):
             (flexmock(task)
                 .should_receive('_write_combined_log'))
 
+        build_args = deepcopy(additional_args)
+        build_args['git_branch'] = 'working'
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,
                                      koji_task_id=koji_task_id,
                                      orchestrator=orchestrator,
                                      build_not_started=raises,
-                                     create_build_args=additional_args.copy())
+                                     create_build_args=deepcopy(build_args))
 
         if raises:
             with pytest.raises(koji.BuildError):
-                task.handler(src['src'], 'target', opts=additional_args)
+                task.handler(src['src'], 'target', opts=build_args)
         else:
-            task_response = task.handler(src['src'], 'target', opts=additional_args)
+            task_response = task.handler(src['src'], 'target', opts=build_args)
 
             assert task_response == {
                 'repositories': ['unique-repo', 'primary-repo'],
@@ -1617,7 +1660,7 @@ class TestBuilder(object):
           'isolated': False,
           'dependency_replacements': None,
           'yum_repourls': None,
-          'git_branch': None,
+          'git_branch': 'working',
           'push_url': None,
           'koji_parent_build': None,
           'release': None,
@@ -1630,7 +1673,7 @@ class TestBuilder(object):
           'isolated': False,
           'dependency_replacements': ['gomod:foo/bar:1', 'gomod:foo/baz:2'],
           'yum_repourls': ['url.1', 'url.2'],
-          'git_branch': 'master',
+          'git_branch': 'working',
           'push_url': 'here.please',
           'koji_parent_build': 'some-or-other',
           'release': 'v8',
@@ -1641,7 +1684,7 @@ class TestBuilder(object):
 
         ({'version': '1.2',  # invalid
           'name': 'foo',     # invalid
-          'git_branch': 'master'},
+          'git_branch': 'working'},
          False),
     ])
     def test_schema_validation_valid_options_container(self, build_opts, valid, tmpdir):

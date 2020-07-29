@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.7.22
+Version:        0.8.0
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -160,6 +160,10 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed Jul 29 2020 Robert Cerven <rcerven@redhat.com> 0.8.0-1
+- Early check for missing branch, and scratch with isolated build conflict
+  (rcerven@redhat.com)
+
 * Fri Apr 24 2020 Martin Bašti <mbasti@redhat.com> 0.7.22-1
 - Install koji-c and deps for pylint run (athos@redhat.com)
 - Replace "Signed-off-by:" maintainer task with DCO... (ben.alkov@redhat.com)

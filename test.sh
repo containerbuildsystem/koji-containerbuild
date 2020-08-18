@@ -145,7 +145,7 @@ case ${ACTION} in
   TEST_CMD="${PYTHON} -m pylint ${PACKAGES}"
   ;;
 "markdownlint")
-  $RUN gem install mdl
+  $RUN gem install "mdl:0.9"
   TEST_CMD="mdl -g ."
   ;;
 *)

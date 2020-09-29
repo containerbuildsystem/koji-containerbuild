@@ -607,7 +607,8 @@ class BuildContainerTask(BaseContainerTask):
                     },
                     "arch_override": {
                         "type": ["string", "null"],
-                        "description": "Limit build to specific arches"
+                        "description": "Limit build to specific arches. "
+                                       "Separate each arch with a space."
                     },
                     "git_branch": {
                         "type": ["string", "null"],

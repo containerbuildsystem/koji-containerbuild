@@ -119,6 +119,12 @@ RUN="$ENGINE exec -ti $CONTAINER_NAME"
     $RUN $PIP install configparser==4.0.2
   fi
 
+  # pyrsistent >= 0.17 no longer supports python 2
+  # pyrsistent is a dependency of jsonschema
+  if [[ $PYTHON_VERSION == 2 ]]; then
+    $RUN $PIP install 'pyrsistent==0.16.*'
+  fi
+
   # Install koji-containerbuild
   $RUN $PYTHON setup.py install
 

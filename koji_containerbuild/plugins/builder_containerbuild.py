@@ -53,6 +53,7 @@ try:
     from osbs.exceptions import OsbsOrchestratorNotEnabled
 except ImportError:
     from osbs.exceptions import OsbsValidationException as OsbsOrchestratorNotEnabled
+from osbs.exceptions import OsbsValidationException
 
 OSBS_VERSION = osbs.__version__
 OSBS_FLATPAK_SUPPORT_VERSION = '0.43'  # based on OSBS 2536f24 released on osbs-0.43
@@ -744,7 +745,8 @@ class BuildContainerTask(BaseContainerTask):
             self.logger.debug("Starting %s with params: '%s'",
                               create_method, create_build_args)
             build_response = create_method(**create_build_args)
-
+        except OsbsValidationException as exc:
+            raise ContainerError('OSBS validation exception: {0}'.format(exc))
         if build_response is None:
             self.logger.debug("Build was skipped")
 

@@ -36,6 +36,8 @@ try:
 except ImportError:
     from osbs.exceptions import OsbsValidationException as OsbsOrchestratorNotEnabled
 
+from osbs.exceptions import OsbsValidationException
+
 from koji_containerbuild.plugins import builder_containerbuild
 
 USE_DEFAULT_PKG_INFO = object()
@@ -305,7 +307,8 @@ class TestBuilder(object):
         return session
 
     def _mock_osbs(self, koji_build_id, src, koji_task_id, orchestrator=False, source=False,
-                   build_not_started=False, create_build_args=None):
+                   build_not_started=False, create_build_args=None,
+                   with_osbsvalidationexception=False):
         create_build_args = create_build_args or {}
         create_build_args.setdefault('user', 'owner-name')
         create_build_args.setdefault('target', 'target-name')
@@ -383,11 +386,18 @@ class TestBuilder(object):
         osbs = flexmock()
 
         if orchestrator:
-            (osbs
-                .should_receive('create_orchestrator_build')
-                .with_args(koji_task_id=koji_task_id, **create_build_args)
-                .times(0 if build_not_started else 1)
-                .and_return(build_response))
+            if with_osbsvalidationexception:
+                (osbs
+                    .should_receive('create_orchestrator_build')
+                    .with_args(koji_task_id=koji_task_id, **create_build_args)
+                    .times(1)
+                    .and_raise(OsbsValidationException))
+            else:
+                (osbs
+                    .should_receive('create_orchestrator_build')
+                    .with_args(koji_task_id=koji_task_id, **create_build_args)
+                    .times(0 if build_not_started else 1)
+                    .and_return(build_response))
         elif source:
             (osbs
                 .should_receive('create_source_container_build')
@@ -1805,3 +1815,55 @@ class TestBuilder(object):
                     assert item in build_annotations
                 else:
                     assert item not in build_annotations
+
+    def test_raise_OsbsValidationException(self, tmpdir):
+        df_content = """\
+            FROM fedora
+            LABEL com.redhat.component="fedora-docker" \
+                  name="osbs-test/reject-hyphen-in-version-label" \
+                  version="reject-hyphen.in.version.label"
+        """
+        orchestrator = True
+        folder_info = self._mock_folders(str(tmpdir),
+                                         dockerfile_content=df_content)
+        koji_task_id = 123
+        last_event_id = 456
+        koji_build_id = 999
+
+        session = self._mock_session(last_event_id, koji_task_id)
+        src = self._mock_git_source()
+        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+
+        builder_containerbuild.incremental_upload = mock_incremental_upload
+
+        task = builder_containerbuild.BuildContainerTask(id=koji_task_id,
+                                                         method='buildContainer',
+                                                         params='params',
+                                                         session=session,
+                                                         options=options,
+                                                         workdir='workdir',
+                                                         demux=orchestrator)
+
+        (flexmock(task)
+            .should_receive('fetchDockerfile')
+            .with_args(src['src'], 'build-tag')
+            .and_return(folder_info['dockerfile_path']))
+        (flexmock(task)
+            .should_receive('_write_incremental_logs'))
+        if orchestrator:
+            (flexmock(task)
+                .should_receive('_write_demultiplexed_logs'))
+        else:
+            (flexmock(task)
+                .should_receive('_write_combined_log'))
+
+        build_args = {'git_branch': 'working'}
+        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
+                                     src=src,
+                                     koji_task_id=koji_task_id,
+                                     orchestrator=orchestrator,
+                                     create_build_args=deepcopy(build_args),
+                                     with_osbsvalidationexception=True
+                                     )
+        with pytest.raises(builder_containerbuild.ContainerError):
+            task.handler(src['src'], 'target', opts=build_args)

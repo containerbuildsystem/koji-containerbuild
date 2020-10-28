@@ -1,4 +1,3 @@
 flexmock>=0.10.3
 pytest>=4.1.0
-pytest-capturelog
 pytest-cov

@@ -10,13 +10,6 @@ ACTION=${ACTION:="test"}
 IMAGE="$OS:$OS_VERSION"
 CONTAINER_NAME="koji-containerbuild-$OS-$OS_VERSION-py$PYTHON_VERSION"
 
-if [[ $ACTION == "markdownlint" ]]; then
-  IMAGE="ruby"
-  CONTAINER_NAME="koji-containerbuild-$ACTION-$IMAGE"
-fi
-
-RUN="$ENGINE exec -ti $CONTAINER_NAME"
-
 # Use arrays to prevent globbing and word splitting
 engine_mounts=(-v "$PWD":"$PWD":z)
 for dir in ${EXTRA_MOUNT:-}; do
@@ -32,115 +25,106 @@ elif [[ $($ENGINE ps -q -f name="$CONTAINER_NAME" | wc -l) -eq 0 ]]; then
 fi
 
 function setup_kojic() {
-  # Pull fedora images from registry.fedoraproject.org
-  if [[ $OS == "fedora" ]]; then
-    IMAGE="registry.fedoraproject.org/$IMAGE"
-  fi
-
-  if [[ $OS == "fedora" ]]; then
-    PIP_PKG="python$PYTHON_VERSION-pip"
-    PIP="pip$PYTHON_VERSION"
-    PKG="dnf"
-    PKG_EXTRA="dnf-plugins-core git-core
-              python$PYTHON_VERSION-koji python$PYTHON_VERSION-koji-hub"
-    BUILDDEP="dnf builddep"
-    PYTHON="python$PYTHON_VERSION"
-  else
-    PIP_PKG="python-pip"
+  RUN="$ENGINE exec -i $CONTAINER_NAME"
+  if [[ $OS == "centos" ]]; then
+    PYTHON="python"
+    PIP_PKG="$PYTHON-pip"
     PIP="pip"
     PKG="yum"
-    PKG_EXTRA="yum-utils git-core koji koji-hub"
+    PKG_EXTRA=(yum-utils git-core koji koji-hub)
     BUILDDEP="yum-builddep"
-    PYTHON="python"
-  fi
-  # Create container if needed
-  if [[ $($ENGINE ps -q -f name="$CONTAINER_NAME" | wc -l) -eq 0 ]]; then
-    $ENGINE run --name "$CONTAINER_NAME" -d -v "$PWD":"$PWD":z -w "$PWD" -ti "$IMAGE" sleep infinity
+  else
+    PYTHON="python$PYTHON_VERSION"
+    PIP_PKG="$PYTHON-pip"
+    PIP="pip$PYTHON_VERSION"
+    PKG="dnf"
+    PKG_EXTRA=(dnf-plugins-core git-core "$PYTHON"-koji "$PYTHON"-koji-hub)
+    BUILDDEP=(dnf builddep)
   fi
 
-  # Install dependencies
-  if [[ $OS != "fedora" ]]; then $RUN $PKG install -y epel-release; fi
-  $RUN $PKG install -y $PKG_EXTRA
-  $RUN $BUILDDEP -y koji-containerbuild.spec
+  PIP_INST=("$PIP" install --index-url "${PYPI_INDEX:-https://pypi.org/simple}")
+
+  if [[ $OS == "centos" ]]; then
+    $RUN $PKG install -y epel-release;
+  fi
+
+  $RUN $PKG install -y "${PKG_EXTRA[@]}"
+  [[ ${PYTHON_VERSION} == '3' ]] && WITH_PY3=1 || WITH_PY3=0
+  $RUN "${BUILDDEP[@]}" -y koji-containerbuild.spec
+
   # Install pip package
   $RUN $PKG install -y $PIP_PKG
-  if [[ $PYTHON_VERSION == 3 && $OS_VERSION == rawhide ]]; then
+  if [[ ${WITH_PY3} && $OS_VERSION == rawhide ]]; then
     # https://fedoraproject.org/wiki/Changes/Making_sudo_pip_safe
     $RUN mkdir -p /usr/local/lib/python3.6/site-packages/
   fi
-RUN="$ENGINE exec -ti $CONTAINER_NAME"
 
-  # Install other dependencies for tests
-  if [[ $PYTHON_VERSION == 3 ]]; then
+  # Install other dependencies for unit tests
+  if [[ ${WITH_PY3} == 1 ]]; then
     OSBS_CLIENT_DEPS="python3-PyYAML"
   else
     OSBS_CLIENT_DEPS="PyYAML"
   fi
+
   $RUN $PKG install -y $OSBS_CLIENT_DEPS
 
-  # Install latest osbs-client by installing dependencies from the master branch
-  # and running pip install with '--no-deps' to avoid compilation
-  # This would also ensure all the deps are specified in the spec
+  # Install osbs-client dependencies based on specfile
+  # from specified git source (default: upstream master)
   $RUN rm -rf /tmp/osbs-client
-  $RUN git clone https://github.com/projectatomic/osbs-client /tmp/osbs-client
-  [[ ${PYTHON_VERSION} == '3' ]] && WITH_PY3=1 || WITH_PY3=0
-  $RUN $BUILDDEP --define "with_python3 ${WITH_PY3}" -y /tmp/osbs-client/osbs-client.spec
+  $RUN git clone --depth 1 --single-branch \
+       https://github.com/projectatomic/osbs-client --branch master /tmp/osbs-client
+  # RPM install build dependencies for osbs-client
+  $RUN "${BUILDDEP[@]}" --define "with_python3 ${WITH_PY3}" -y /tmp/osbs-client/osbs-client.spec
 
-  if [[ ${OS} == "centos" && ${PYTHON_VERSION} == 2 ]]; then
+  if [[ ${OS} == "centos" && ${WITH_PY3} == 0 ]]; then
       # there is no package that could provide more-itertools module on centos7
       # latest version with py2 support in PyPI is 5.0.0, never version causes
       # failures with py2
-      $RUN $PIP install 'more-itertools==5.*'
+      $RUN "${PIP_INST[@]}" 'more-itertools==5.*'
   fi
 
-  $RUN $PIP install --upgrade --no-deps --force-reinstall git+https://github.com/projectatomic/osbs-client
-
-  # Install the latest dockerfile-parse from git
-  $RUN $PIP install --upgrade --force-reinstall \
+  # Run pip install with '--no-deps' to avoid compilation.
+  # This will also ensure all the deps are specified in the spec
+  # Pip install osbs-client from git master
+  $RUN "${PIP_INST[@]}" --upgrade --no-deps --force-reinstall \
+      git+https://github.com/projectatomic/osbs-client
+  # Pip install dockerfile-parse from git master
+  $RUN "${PIP_INST[@]}" --upgrade --force-reinstall \
       git+https://github.com/containerbuildsystem/dockerfile-parse
 
   # CentOS needs to have setuptools updates to make pytest-cov work
   # setuptools will no longer support python2 starting on version 45
-  if [[ $OS != "fedora" ]]; then
-    $RUN $PIP install -U 'setuptools<45'
+  if [[ $OS == "centos" ]]; then
+    $RUN "${PIP_INST[@]}" -U 'setuptools<45'
 
     # Watch out for https://github.com/pypa/setuptools/issues/937
     $RUN curl -O https://bootstrap.pypa.io/2.6/get-pip.py
     $RUN $PYTHON get-pip.py
   fi
 
-  # https://github.com/jaraco/zipp/issues/28
   if [[ $PYTHON_VERSION == 2 ]]; then
-    $RUN $PIP install zipp==1.0.0
+    # https://github.com/jaraco/zipp/issues/28
+    $RUN "${PIP_INST[@]}" zipp==1.0.0
+
+    # configparser no longer supports python 2
+    $RUN "${PIP_INST[@]}" configparser==4.0.2
+
+    # pyrsistent >= 0.17 no longer supports python 2
+    # pyrsistent is a dependency of jsonschema
+    $RUN "${PIP_INST[@]}" 'pyrsistent==0.16.*'
   fi
 
-  # configparser no longer supports python 2
-  if [[ $PYTHON_VERSION == 2 ]]; then
-    $RUN $PIP install configparser==4.0.2
-  fi
-
-  # pyrsistent >= 0.17 no longer supports python 2
-  # pyrsistent is a dependency of jsonschema
-  if [[ $PYTHON_VERSION == 2 ]]; then
-    $RUN $PIP install 'pyrsistent==0.16.*'
-  fi
-
-  # Install koji-containerbuild
+  # Setuptools install koji-c from source
   $RUN $PYTHON setup.py install
 
-  # Install packages for tests
-  $RUN $PIP install -r tests/requirements.txt
+  # Pip install packages for unit tests
+  $RUN "${PIP_INST[@]}" -r tests/requirements.txt
 }
 
 case ${ACTION} in
 "test")
   setup_kojic
-  TEST_CMD="pytest -vv tests --cov koji_containerbuild"
-  ;;
-"bandit")
-  setup_kojic
-  $RUN $PIP install bandit
-  TEST_CMD="bandit-baseline -r koji_containerbuild -ll -ii"
+  TEST_CMD="coverage run --source=koji_containerbuild -m pytest tests"
   ;;
 "pylint")
   setup_kojic
@@ -150,9 +134,10 @@ case ${ACTION} in
   PACKAGES='koji_containerbuild tests'
   TEST_CMD="${PYTHON} -m pylint ${PACKAGES}"
   ;;
-"markdownlint")
-  $RUN gem install "mdl:0.9"
-  TEST_CMD="mdl -g ."
+"bandit")
+  setup_kojic
+  $RUN "${PIP_INST[@]}" bandit
+  TEST_CMD="bandit-baseline -r koji_containerbuild -ll -ii"
   ;;
 *)
   echo "Unknown action: ${ACTION}"
@@ -161,6 +146,7 @@ case ${ACTION} in
 esac
 
 # Run tests
+# shellcheck disable=SC2086
 $RUN ${TEST_CMD} "$@"
 
 echo "To run tests again:"

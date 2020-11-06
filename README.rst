@@ -1,8 +1,16 @@
 Koji containerbuild
 ===================
 
-.. image:: https://coveralls.io/repos/github/containerbuildsystem/koji-containerbuild/badge.svg?branch=master
-   :target: https://coveralls.io/github/containerbuildsystem/koji-containerbuild?branch=master
+.. image:: https://coveralls.io/repos/containerbuildsystem/koji-containerbuild/badge.svg?branch=master
+   :target: https://coveralls.io/r/containerbuildsystem/koji-containerbuild?branch=master
+.. image:: https://img.shields.io/lgtm/grade/python/g/containerbuildsystem/koji-containerbuild.svg?logo=lgtm&logoWidth=18
+   :target: https://lgtm.com/projects/g/containerbuildsystem/koji-containerbuild/context:python
+.. image:: https://img.shields.io/lgtm/alerts/g/containerbuildsystem/koji-containerbuild.svg?logo=lgtm&logoWidth=18
+   :target: https://lgtm.com/projects/g/containerbuildsystem/koji-containerbuild/alerts
+.. image:: https://github.com/containerbuildsystem/koji-containerbuild/workflows/Linters/badge.svg?branch=master&event=push
+   :target: https://github.com/containerbuildsystem/koji-containerbuild/actions?query=event%3Apush+branch%3Amaster+workflow%3A%22Linters%22
+.. image:: https://github.com/containerbuildsystem/koji-containerbuild/workflows/Unittests/badge.svg?branch=master&event=push
+   :target: https://github.com/containerbuildsystem/koji-containerbuild/actions?query=event%3Apush+branch%3Amaster+workflow%3A%22Unittests%22
 
 This package extends Koji buildsystem with plugin which allows building
 containers via OpenShift buildsystem. Additionally it provides CLI tool to

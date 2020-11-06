@@ -33,7 +33,6 @@ koji_hub_path = '/usr/share/koji-hub/'
 sys.path.insert(0, koji_hub_path)
 import kojihub  # noqa: E402 # pylint: disable=import-error
 
-#logger = logging.getLogger('koji.plugins.containerbuild')
 logger = logging.getLogger('koji.plugins')
 
 
@@ -52,6 +51,7 @@ def _get_task_opts_and_opts(opts, priority, channel):
         taskOpts['channel'] = channel
 
     return opts, taskOpts
+
 
 @export
 def buildContainer(src, target, opts=None, priority=None, channel='container'):

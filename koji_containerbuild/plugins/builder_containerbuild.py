@@ -99,9 +99,11 @@ METADATA_TAG = "_metadata_"
 
 ANNOTATIONS_FILENAME = 'build_annotations.json'
 
+
 class ContainerError(koji.GenericError):
     """Raised when container creation fails"""
     faultCode = 2001
+
 
 class ContainerCancelled(koji.GenericError):
     """Raised when container creation is cancelled by OSBS"""
@@ -455,9 +457,11 @@ class BaseContainerTask(BaseTaskHandler):
         self.logger.debug("%r", pkg_cfg)
         # Make sure package is on the list for this tag
         if pkg_cfg is None:
-            raise koji.BuildError("package (container) %s not in list for tag %s" % (name, target_info['dest_tag_name']))
+            raise koji.BuildError("package (container) %s not in list for tag %s" %
+                                  (name, target_info['dest_tag_name']))
         elif pkg_cfg['blocked']:
-            raise koji.BuildError("package (container)  %s is blocked for tag %s" % (name, target_info['dest_tag_name']))
+            raise koji.BuildError("package (container)  %s is blocked for tag %s" %
+                                  (name, target_info['dest_tag_name']))
 
     def upload_build_annotations(self, build_response):
         annotations = build_response.get_annotations() or {}

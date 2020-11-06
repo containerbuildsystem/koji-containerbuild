@@ -1105,7 +1105,7 @@ class TestBuilder(object):
         last_event_id = 456
         koji_build_id = 999
 
-        session = self._mock_session(last_event_id, task_id, { 'blocked': False })
+        session = self._mock_session(last_event_id, task_id, {'blocked': False})
         folders_info = self._mock_folders(str(tmpdir))
         src = self._mock_git_source()
         options = flexmock(allowed_scms='pkgs.example.com:/*:no')

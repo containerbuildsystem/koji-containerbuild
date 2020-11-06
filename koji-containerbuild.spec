@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.8.0
+Version:        0.9.0
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -160,6 +160,15 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri Nov 06 2020 Robert Cerven <rcerven@redhat.com> 0.9.0-1
+- Add unit test (ben.alkov@redhat.com)
+- Trap OsbsValidationException, print it, and raise it as ContainerError
+  (ben.alkov@redhat.com)
+- 'pytest-capturelog' is dead and must be removed (ben.alkov@redhat.com)
+- builder: document space delimier for arch_override (kdreyer@redhat.com)
+- pyrsistent support for Py 2 ends with release 0.16 (ben.alkov@redhat.com)
+- [markdown] Use older version of mdl (0.9) (mbasti@redhat.com)
+
 * Wed Jul 29 2020 Robert Cerven <rcerven@redhat.com> 0.8.0-1
 - Early check for missing branch, and scratch with isolated build conflict
   (rcerven@redhat.com)

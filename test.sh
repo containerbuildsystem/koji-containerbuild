@@ -136,7 +136,7 @@ case ${ACTION} in
   ;;
 "bandit")
   setup_kojic
-  $RUN "${PIP_INST[@]}" bandit
+  $RUN "${PIP_INST[@]}" "bandit<1.6.2"
   TEST_CMD="bandit-baseline -r koji_containerbuild -ll -ii"
   ;;
 *)

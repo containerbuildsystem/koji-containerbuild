@@ -1,2 +1,3 @@
+importlib_metadata<3
 jsonschema
 six

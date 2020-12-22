@@ -125,9 +125,9 @@ def _expected_output(result, offset, indent):
             for line in _expected_output(item, offset+indent, indent):
                 yield line
     elif isinstance(result, dict):
-        for key, value in result.items():
+        for key in sorted(result):
             yield '{}{}:\n'.format(offset, key)
-            for line in _expected_output(value, offset+indent, indent):
+            for line in _expected_output(result[key], offset+indent, indent):
                 yield line
     else:
         yield '{}{}\n'.format(offset, result)

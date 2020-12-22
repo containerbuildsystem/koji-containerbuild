@@ -42,9 +42,9 @@ def print_result(result, level=0, indent=2):
         for item in result:
             print_result(item, level+1)
     elif isinstance(result, dict):
-        for key, value in result.items():
+        for key in sorted(result):
             print_value(key, level, indent, ':')
-            print_result(value, level+1)
+            print_result(result[key], level+1)
     else:
         print_value(result, level, indent)
 

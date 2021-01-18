@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.9.0
+Version:        0.10.0
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -160,6 +160,20 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Mon Jan 18 2021 Martin Bašti <mbasti@redhat.com> 0.10.0-1
+- Sort CLI output alphabetically (mbasti@redhat.com)
+- Pin 'bandit<1.6.3' to resolve an install error on Cent/Py2
+  (ben.alkov@redhat.com)
+- Add 'importlib_metadata' to requirements.txt and pin it < 3...
+  (ben.alkov@redhat.com)
+- Add pytest.ini for pytest improvements (ben.alkov@redhat.com)
+- Silence remaining flake8 hits; mostly WS and wraps (ben.alkov@redhat.com)
+- Add GH workflows (ben.alkov@redhat.com)
+- Add new reqs for unit tests (ben.alkov@redhat.com)
+- Refactor test.sh (ben.alkov@redhat.com)
+- Update README badges (ben.alkov@redhat.com)
+- Remove unneeded config files (ben.alkov@redhat.com)
+
 * Fri Nov 06 2020 Robert Cerven <rcerven@redhat.com> 0.9.0-1
 - Add unit test (ben.alkov@redhat.com)
 - Trap OsbsValidationException, print it, and raise it as ContainerError

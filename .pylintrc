@@ -50,7 +50,8 @@ disable=I,
         too-many-lines,
         unused-argument,
         wrong-import-order,
-        wrong-import-position
+        wrong-import-position,
+        raise-missing-from   # nice to have, but has to work with Python 2
 
 
 [REPORTS]

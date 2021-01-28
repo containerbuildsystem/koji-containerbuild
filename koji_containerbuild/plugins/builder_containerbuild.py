@@ -660,6 +660,10 @@ class BuildContainerTask(BaseContainerTask):
                         "type": "object",
                         "description": "User defined dictionary containing custom metadata",
                     },
+                    "operator_csv_modifications_url": {
+                        "type": ["string", "null"],
+                        "description": "URL to JSON file with operator CSV modifications",
+                    }
                 },
                 "additionalProperties": False
             }
@@ -679,7 +683,7 @@ class BuildContainerTask(BaseContainerTask):
                         branch=None, push_url=None, koji_parent_build=None,
                         release=None, flatpak=False, signing_intent=None,
                         compose_ids=None, skip_build=False, triggered_after_koji_task=None,
-                        dependency_replacements=None):
+                        dependency_replacements=None, operator_csv_modifications_url=None):
         if not yum_repourls:
             yum_repourls = []
 
@@ -722,6 +726,8 @@ class BuildContainerTask(BaseContainerTask):
             create_build_args['skip_build'] = True
         if triggered_after_koji_task is not None:
             create_build_args['triggered_after_koji_task'] = triggered_after_koji_task
+        if operator_csv_modifications_url:
+            create_build_args['operator_csv_modifications_url'] = operator_csv_modifications_url
 
         orchestrator_create_build_args = create_build_args.copy()
         orchestrator_create_build_args['platforms'] = arches

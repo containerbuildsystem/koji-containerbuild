@@ -477,6 +477,97 @@ class TestCLI(object):
         assert parsed_args == expected_args
         assert opts == expected_opts
 
+    @pytest.mark.parametrize(('op_csv_mods_url', 'isolated', 'valid'), (
+        (True, True, True),
+        (True, None, False),
+        (None, None, True),
+        (None, True, True),
+    ))
+    def test_isolated_operator_csv_modification_url(self, capsys, op_csv_mods_url, isolated, valid):
+        """Operator CSV modification URL can be used only together with isolated build"""
+        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options.quiet = False
+        test_args = ['test', 'source_repo://image#ref', '--git-branch', 'the-branch']
+        test_op_csv_mods_url = "https://example.com/test.json" if op_csv_mods_url else None
+        expected_args = ['test', 'source_repo://image#ref']
+        expected_opts = {'git_branch': 'the-branch'}
+        release = '20.1'
+
+        if op_csv_mods_url:
+            test_args.extend(['--operator-csv-modifications-url', test_op_csv_mods_url])
+            expected_opts['operator_csv_modifications_url'] = test_op_csv_mods_url
+
+        if isolated:
+            test_args.append('--isolated')
+            expected_opts['isolated'] = isolated
+
+            test_args.append('--release')
+            test_args.append(release)
+            expected_opts['release'] = release
+
+        if not valid:
+            with pytest.raises(SystemExit):
+                parse_arguments(options, test_args, flatpak=False)
+
+            _, stderr_output = capsys.readouterr()
+            error_msg = "Only --isolated builds support option --operator-csv-modifications-url"
+            assert error_msg in stderr_output
+
+            return
+
+        build_opts, parsed_args, opts, _ = parse_arguments(options, test_args, flatpak=False)
+
+        assert build_opts.operator_csv_modifications_url == test_op_csv_mods_url
+        assert build_opts.isolated == isolated
+
+        assert parsed_args == expected_args
+        assert opts == expected_opts
+
+    @pytest.mark.parametrize(('url', 'valid'), (
+        ('https://example.com/test.json', True),
+        ('https://example.com', True),
+        ('https//example.com', False),
+        ('example.com', False),
+    ))
+    def test_source_operator_csv_modification_url_invalid_value(self, url, valid, capsys):
+        """Test if exception is raised when value for --operator-csv-modifications-url
+        seems to be an invalid URL"""
+        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options.quiet = False
+        test_args = [
+            'test', 'source_repo://image#ref', '--git-branch', 'the-branch',
+            '--isolated', '--release', '20.3',
+            '--operator-csv-modifications-url', url
+        ]
+
+        expected_args = ['test', 'source_repo://image#ref']
+        expected_opts = {
+            'git_branch': 'the-branch',
+            'isolated': True,
+            'operator_csv_modifications_url': url,
+            'release': '20.3',
+        }
+
+        if not valid:
+            with pytest.raises(SystemExit):
+                parse_arguments(options, test_args, flatpak=False)
+
+            _, stderr_output = capsys.readouterr()
+
+            error_msg = (
+                "Value provided to --operator-csv-modifications-url "
+                "does not look like an URL"
+            )
+            assert error_msg in stderr_output
+            return
+
+        # pylint: disable=unused-variable
+        build_opts, parsed_args, opts, _ = parse_arguments(options, test_args, flatpak=False)
+        # pylint: enable=unused-variable
+
+        assert parsed_args == expected_args
+        assert opts == expected_opts
+
     @pytest.mark.parametrize((
         'compose_ids', 'signing_intent', 'yum_repourls', 'valid'
     ), (

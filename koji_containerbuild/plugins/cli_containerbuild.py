@@ -112,6 +112,12 @@ def parse_arguments(options, args, flatpak):
                              "Use this option to update autorebuild settings"))
     parser.add_option("--userdata",
                       help=_("JSON dictionary of user defined custom metadata"))
+    parser.add_option("--operator-csv-modifications-url",
+                      help=_("URL to JSON file with operator CSV modification"),
+                      action='store', default=None,
+                      dest='operator_csv_modifications_url', metavar='URL',
+                      )
+
     if not flatpak:
         parser.add_option("--release",
                           help=_("Set release value"))
@@ -135,12 +141,22 @@ def parse_arguments(options, args, flatpak):
     if build_opts.signing_intent and build_opts.compose_ids:
         parser.error(_("--signing-intent cannot be used with --compose-id"))
 
+    if build_opts.operator_csv_modifications_url and not build_opts.isolated:
+        parser.error(_("Only --isolated builds support option --operator-csv-modifications-url"))
+
+    if (
+        build_opts.operator_csv_modifications_url and
+        '://' not in build_opts.operator_csv_modifications_url
+    ):
+        parser.error(_("Value provided to --operator-csv-modifications-url "
+                       "does not look like an URL"))
+
     opts = {}
     if not build_opts.git_branch:
         parser.error(_("git-branch must be specified"))
 
     keys = ('scratch', 'yum_repourls', 'git_branch', 'signing_intent', 'compose_ids', 'skip_build',
-            'userdata', 'dependency_replacements')
+            'userdata', 'dependency_replacements', 'operator_csv_modifications_url')
 
     if flatpak:
         opts['flatpak'] = True

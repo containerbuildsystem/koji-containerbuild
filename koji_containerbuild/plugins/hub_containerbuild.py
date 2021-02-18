@@ -26,6 +26,7 @@ import sys
 import logging
 
 import koji
+import koji.tasks
 from koji.context import context
 from koji.plugin import export
 
@@ -34,6 +35,12 @@ sys.path.insert(0, koji_hub_path)
 import kojihub  # noqa: E402 # pylint: disable=import-error
 
 logger = logging.getLogger('koji.plugins')
+
+# update task signatures, so they can properly parse options for policies
+koji.tasks.LEGACY_SIGNATURES['buildContainer'] = [[['src', 'target', 'opts'],
+                                                  None, None, (None,)]]
+koji.tasks.LEGACY_SIGNATURES['buildSourceContainer'] = [[['target', 'opts'],
+                                                        None, None, (None,)]]
 
 
 def _get_task_opts_and_opts(opts, priority, channel):

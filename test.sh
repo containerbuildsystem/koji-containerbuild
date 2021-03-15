@@ -98,7 +98,7 @@ function setup_kojic() {
     $RUN "${PIP_INST[@]}" -U 'setuptools<45'
 
     # Watch out for https://github.com/pypa/setuptools/issues/937
-    $RUN curl -O https://bootstrap.pypa.io/2.6/get-pip.py
+    $RUN curl -O https://bootstrap.pypa.io/pip/2.6/get-pip.py
     $RUN $PYTHON get-pip.py
   fi
 

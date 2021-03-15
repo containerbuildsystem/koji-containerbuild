@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.10.0
+Version:        0.11.0
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -160,6 +160,13 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Mon Mar 15 2021 Martin Bašti <mbasti@redhat.com> 0.11.0-1
+- add task signatures to koji.task.LEGACY_SIGNATURES (tkopecek@redhat.com)
+- New option --operator-csv-modifications-url (mbasti@redhat.com)
+- Replace f32 with f33 to run bandit and pylint (cqi@redhat.com)
+- Fix coveralls 422 Client Error (qcxhome@gmail.com)
+- Replace f31 with f33 in CI workflow (qcxhome@gmail.com)
+
 * Mon Jan 18 2021 Martin Bašti <mbasti@redhat.com> 0.10.0-1
 - Sort CLI output alphabetically (mbasti@redhat.com)
 - Pin 'bandit<1.6.3' to resolve an install error on Cent/Py2

@@ -957,6 +957,7 @@ class BuildContainerTask(BaseContainerTask):
             compose_ids=opts.get('compose_ids', None),
             skip_build=skip_build,
             triggered_after_koji_task=triggered_after_koji_task,
+            operator_csv_modifications_url=opts.get('operator_csv_modifications_url'),
         )
 
         results = []

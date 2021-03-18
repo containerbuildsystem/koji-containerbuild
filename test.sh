@@ -112,7 +112,13 @@ function setup_kojic() {
     # pyrsistent >= 0.17 no longer supports python 2
     # pyrsistent is a dependency of jsonschema
     $RUN "${PIP_INST[@]}" 'pyrsistent==0.16.*'
+
+    # setuptools_scm >= 6 no longer supports python 2
+    $RUN "${PIP_INST[@]}" 'setuptools_scm<6'
   fi
+
+  # Workaround problems with dependency hell for older Pythons
+  $RUN "${PIP_INST[@]}" -U 'importlib_metadata<3;python_version<"3.8"'
 
   # Setuptools install koji-c from source
   $RUN $PYTHON setup.py install

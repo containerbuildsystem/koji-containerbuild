@@ -19,7 +19,7 @@ def get_requirements(requirements_file='requirements.txt'):
 
 setup(
     name="koji-containerbuild",
-    version="0.11.0",
+    version="0.11.1",
     author="Pavol Babincak",
     author_email="pbabinca@redhat.com",
     description="Container build support for Koji buildsystem",

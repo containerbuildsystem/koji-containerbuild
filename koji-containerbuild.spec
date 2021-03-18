@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.11.0
+Version:        0.11.1
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -160,6 +160,10 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Thu Mar 18 2021 Martin Bašti <mbasti@redhat.com> 0.11.1-1
+- Fix: Fix passing operator_csv_modifications_url param to orchestrator
+  (mbasti@redhat.com)
+
 * Mon Mar 15 2021 Martin Bašti <mbasti@redhat.com> 0.11.0-1
 - add task signatures to koji.task.LEGACY_SIGNATURES (tkopecek@redhat.com)
 - New option --operator-csv-modifications-url (mbasti@redhat.com)

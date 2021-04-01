@@ -54,6 +54,7 @@ try:
 except ImportError:
     from osbs.exceptions import OsbsValidationException as OsbsOrchestratorNotEnabled
 from osbs.exceptions import OsbsValidationException
+from osbs.utils import UserWarningsStore
 
 OSBS_VERSION = osbs.__version__
 OSBS_FLATPAK_SUPPORT_VERSION = '0.43'  # based on OSBS 2536f24 released on osbs-0.43
@@ -288,6 +289,7 @@ class BaseContainerTask(BaseTaskHandler):
         self.demux = None
         self._log_handler_added = False
         self.incremental_log_basename = 'openshift-incremental.log'
+        self._user_warnings = UserWarningsStore()
 
     def osbs(self):
         """Handler of OSBS object"""
@@ -383,12 +385,16 @@ class BaseContainerTask(BaseTaskHandler):
             raise ContainerError(msg)
         platform_logs = {}
         for entry in logs:
-            platform = entry.platform
+            platform, line = entry.platform, entry.line
             if platform == METADATA_TAG:
-                meta_file = entry.line
+                meta_file = line
                 source_file = os.path.join(koji.pathinfo.work(), meta_file)
                 uploadpath = os.path.join(logs_dir, os.path.basename(meta_file))
                 shutil.copy(source_file, uploadpath)
+                continue
+
+            if self._user_warnings.is_user_warning(line):
+                self._user_warnings.store(line)
                 continue
 
             if platform not in platform_logs:
@@ -396,11 +402,23 @@ class BaseContainerTask(BaseTaskHandler):
                 log_filename = os.path.join(logs_dir, "%s.log" % prefix)
                 platform_logs[platform] = open(log_filename, 'wb')
             try:
-                platform_logs[platform].write((entry.line + '\n').encode('utf-8'))
+                platform_logs[platform].write((line + '\n').encode('utf-8'))
                 platform_logs[platform].flush()
             except Exception as error:
                 msg = "Exception ({}) while writing build logs: {}".format(type(error), error)
                 raise ContainerError(msg)
+
+        if self._user_warnings:
+            try:
+                log_filename = os.path.join(logs_dir, "user_warnings.log")
+                with open(log_filename, 'wb') as logfile:
+                    logfile.write(str(self._user_warnings).encode('utf-8'))
+
+                self.logger.info("user_warnings.log written")
+            except Exception as error:
+                msg = "Exception ({}) while writing user warnings: {}".format(type(error), error)
+                raise ContainerError(msg)
+
         for logfile in platform_logs.values():
             logfile.close()
             self.logger.info("%s written", logfile.name)
@@ -559,6 +577,9 @@ class BaseContainerTask(BaseTaskHandler):
         }
         if arch:
             containerdata['arch'] = arch
+
+        if self._user_warnings:
+            containerdata['user_warnings'] = list(self._user_warnings)
 
         return containerdata
 

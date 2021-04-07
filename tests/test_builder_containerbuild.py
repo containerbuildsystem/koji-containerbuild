@@ -37,6 +37,7 @@ except ImportError:
     from osbs.exceptions import OsbsValidationException as OsbsOrchestratorNotEnabled
 
 from osbs.exceptions import OsbsValidationException
+from osbs.utils import UserWarningsStore
 
 from koji_containerbuild.plugins import builder_containerbuild
 
@@ -114,17 +115,23 @@ class TestBuilder(object):
             with open(source_file) as s, open(target_file) as t:
                 assert s.read() == t.read()
 
+        user_warnings = UserWarningsStore()
         log_contents = {}
         for entry in log_entries:
             platform = entry.platform or 'orchestrator'
 
             if platform == builder_containerbuild.METADATA_TAG:
                 check_meta_entry(entry.line)
+            elif user_warnings.is_user_warning(entry.line):
+                user_warnings.store(entry.line)
             else:
                 log_contents[platform] = '{old}{new}\n'.format(
                     old=log_contents.get(platform, ''),
                     new=entry.line
                 )
+
+        if user_warnings:
+            log_contents['user_warnings'] = str(user_warnings)
 
         for platform, logs_content in log_contents.items():
             logfile_path = os.path.join(logs_dir, platform + '.log')
@@ -160,11 +167,16 @@ class TestBuilder(object):
                                                         demux=orchestrator)
         if orchestrator:
             get_logs_fname = 'get_orchestrator_build_logs'
-            log_entries = [LogEntry(None, 'line 1'),
-                           LogEntry(None, 'line 2'),
-                           LogEntry('x86_64', 'line 1'),
-                           LogEntry('x86_64', 'line 2'),
-                           LogEntry(builder_containerbuild.METADATA_TAG, 'x.log')]
+            log_entries = [
+                LogEntry(None, 'line 1'),
+                LogEntry(None, 'line 2'),
+                LogEntry(None, 'log - USER_WARNING - {"message": "message"}'),
+                LogEntry('x86_64', 'line 1'),
+                LogEntry('x86_64', 'line 2'),
+                LogEntry('x86_64', 'log - USER_WARNING - {"message": "message"}'),
+                LogEntry('x86_64', 'log - USER_WARNING - {"message": "another_message"}'),
+                LogEntry(builder_containerbuild.METADATA_TAG, 'x.log')
+            ]
 
             koji_tmpdir = tmpdir.mkdir('koji')
             koji_tmpdir.join('x.log').write('line 1\n'

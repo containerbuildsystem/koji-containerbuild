@@ -110,7 +110,6 @@ class ContainerCancelled(koji.GenericError):
     faultCode = 2002
 
 
-# TODO: push this to upstream koji
 class My_SCM(SCM):
     def get_component(self):
         component = os.path.basename(self.repository)
@@ -777,7 +776,6 @@ class BuildContainerTask(BaseContainerTask):
         buildconfig = self.session.getBuildConfig(build_tag, event=self.event_id)
         arches = buildconfig['arches']
         if not arches:
-            # XXX - need to handle this better
             raise koji.BuildError("No arches for tag %(name)s [%(id)s]" % buildconfig)
         tag_archlist = [koji.canonArch(a) for a in arches.split()]
         self.logger.debug('arches: %s', arches)

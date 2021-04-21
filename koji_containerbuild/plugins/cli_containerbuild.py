@@ -127,7 +127,6 @@ def parse_arguments(options, args, flatpak):
     if len(args) != 2:
         parser.error(_("Exactly two arguments (a build target and a SCM URL) "
                        "are required"))
-        assert False
 
     source = args[1]
     if '://' not in source:
@@ -217,7 +216,6 @@ def parse_source_arguments(options, args):
 
     if len(args) != 1:
         parser.error(_("Exactly one argument (a build target) is required"))
-        assert False
 
     if not (build_opts.koji_build_id or build_opts.koji_build_nvr):
         parser.error(_("at least one of --koji-build-id and --koji-build-nvr has to be specified"))

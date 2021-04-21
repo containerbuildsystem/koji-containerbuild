@@ -219,8 +219,9 @@ class LabelsWrapper(object):
 
         parsed_labels = self.get_labels()
         for label_id in LABELS:
-            assert label_id in LABEL_NAME_MAP, ("Required LABEL doesn't map "
-                                                "to LABEL name in Dockerfile")
+            if label_id not in LABEL_NAME_MAP:
+                msg = "Required label '{}' doesn't map to name in Dockerfile".format(label_id)
+                raise ContainerError(msg)
 
             for label_name in LABEL_NAME_MAP[label_id]:
                 if label_name in self._label_overwrites:
@@ -270,7 +271,10 @@ class LabelsWrapper(object):
     def format_label(self, label_id):
         """Formats string with user-facing LABEL name and its alternatives"""
 
-        assert label_id in LABEL_NAME_MAP
+        if label_id not in LABEL_NAME_MAP:
+            msg = '"{}" does not contain "{}"'.format(LABEL_NAME_MAP, label_id)
+            raise ContainerError(msg)
+
         label_map = LABEL_NAME_MAP[label_id]
         if len(label_map) == 1:
             return label_map[0]
@@ -297,7 +301,9 @@ class BaseContainerTask(BaseTaskHandler):
                 os_conf = Configuration(conf_section='scratch')
                 build_conf = Configuration(conf_section='scratch')
             self._osbs = OSBS(os_conf, build_conf)
-            assert self._osbs
+            if not self._osbs:
+                msg = 'Could not successfully instantiate `osbs`'
+                raise ContainerError(msg)
             self.setup_osbs_logging()
 
         return self._osbs

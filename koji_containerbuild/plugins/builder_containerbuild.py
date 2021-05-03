@@ -292,7 +292,6 @@ class BaseContainerTask(BaseTaskHandler):
         self.demux = None
         self._log_handler_added = False
         self.incremental_log_basename = 'openshift-incremental.log'
-        self._user_warnings = UserWarningsStore()
 
     def osbs(self):
         """Handler of OSBS object"""
@@ -384,11 +383,12 @@ class BaseContainerTask(BaseTaskHandler):
     def _write_demultiplexed_logs(self, build_id, logs_dir):
         self.logger.info("Will write demuxed logs in: %s/", logs_dir)
         try:
-            logs = self.osbs().get_orchestrator_build_logs(build_id, follow=True)
+            logs = self.osbs().get_orchestrator_build_logs(build_id=build_id, follow=True)
         except Exception as error:
             msg = "Exception while waiting for orchestrator build logs: %s" % error
             raise ContainerError(msg)
         platform_logs = {}
+        user_warnings = UserWarningsStore()
         for entry in logs:
             platform, line = entry.platform, entry.line
             if platform == METADATA_TAG:
@@ -398,8 +398,8 @@ class BaseContainerTask(BaseTaskHandler):
                 shutil.copy(source_file, uploadpath)
                 continue
 
-            if self._user_warnings.is_user_warning(line):
-                self._user_warnings.store(line)
+            if user_warnings.is_user_warning(line):
+                user_warnings.store(line)
                 continue
 
             if platform not in platform_logs:
@@ -413,11 +413,11 @@ class BaseContainerTask(BaseTaskHandler):
                 msg = "Exception ({}) while writing build logs: {}".format(type(error), error)
                 raise ContainerError(msg)
 
-        if self._user_warnings:
+        if user_warnings:
             try:
                 log_filename = os.path.join(logs_dir, "user_warnings.log")
                 with open(log_filename, 'wb') as logfile:
-                    logfile.write(str(self._user_warnings).encode('utf-8'))
+                    logfile.write(str(user_warnings).encode('utf-8'))
 
                 self.logger.info("user_warnings.log written")
             except Exception as error:
@@ -438,6 +438,18 @@ class BaseContainerTask(BaseTaskHandler):
         if (build_response.is_running() or build_response.is_pending()):
             raise ContainerError("Build log finished but build still has not "
                                  "finished: %s." % build_response.status)
+
+    def _read_user_warnings(self, logs_dir):
+        log_filename = os.path.join(logs_dir, "user_warnings.log")
+
+        if os.path.isfile(log_filename):
+            try:
+                with open(log_filename, 'rb') as logfile:
+                    user_warnings = logfile.read().decode('utf-8')
+                    return user_warnings.splitlines()
+            except Exception as error:
+                msg = "Exception ({}) while reading user warnings: {}".format(type(error), error)
+                raise ContainerError(msg)
 
     def _get_repositories(self, response):
         repositories = []
@@ -537,6 +549,10 @@ class BaseContainerTask(BaseTaskHandler):
                 os._exit(1)
             os._exit(0)
 
+        # User warnings are being processed in a child process,
+        # so we have to collect them back when the process ends
+        user_warnings = self._read_user_warnings(osbs_logs_dir)
+
         response = self.osbs().wait_for_build_to_finish(build_id)
         if response.is_succeeded():
             self.upload_build_annotations(response)
@@ -580,11 +596,12 @@ class BaseContainerTask(BaseTaskHandler):
             'repositories': repositories,
             'koji_build_id': koji_build_id,
         }
+
+        if user_warnings:
+            containerdata['user_warnings'] = user_warnings
+
         if arch:
             containerdata['arch'] = arch
-
-        if self._user_warnings:
-            containerdata['user_warnings'] = list(self._user_warnings)
 
         return containerdata
 
@@ -994,6 +1011,7 @@ class BuildContainerTask(BaseContainerTask):
 
         all_repositories = []
         all_koji_builds = []
+        all_user_warnings = []
 
         if not results:
             return {
@@ -1014,10 +1032,19 @@ class BuildContainerTask(BaseContainerTask):
             if koji_build_id:
                 all_koji_builds.append(koji_build_id)
 
-        return {
+            user_warnings = result.get('user_warnings')
+            if user_warnings:
+                all_user_warnings.extend(user_warnings)
+
+        task_response = {
             'repositories': all_repositories,
             'koji_builds': all_koji_builds,
         }
+
+        if all_user_warnings:
+            task_response['user_warnings'] = all_user_warnings
+
+        return task_response
 
 
 class BuildSourceContainerTask(BaseContainerTask):
@@ -1179,6 +1206,7 @@ class BuildSourceContainerTask(BaseContainerTask):
 
         all_repositories = []
         all_koji_builds = []
+        all_user_warnings = []
 
         for result in results:
             try:
@@ -1192,7 +1220,16 @@ class BuildSourceContainerTask(BaseContainerTask):
             if koji_build_id:
                 all_koji_builds.append(koji_build_id)
 
-        return {
+            user_warnings = result.get('user_warnings')
+            if user_warnings:
+                all_user_warnings.extend(user_warnings)
+
+        task_response = {
             'repositories': all_repositories,
             'koji_builds': all_koji_builds,
         }
+
+        if all_user_warnings:
+            task_response['user_warnings'] = all_user_warnings
+
+        return task_response

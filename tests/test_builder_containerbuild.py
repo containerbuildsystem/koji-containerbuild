@@ -1879,3 +1879,113 @@ class TestBuilder(object):
                                      )
         with pytest.raises(builder_containerbuild.ContainerError):
             task.handler(src['src'], 'target', opts=build_args)
+
+    def test_user_warnings(self, tmpdir):
+        log_entries = [
+            LogEntry(None, 'orchestrator'),
+            LogEntry(None, 'log - USER_WARNING - {"message": "message"}'),
+            LogEntry('x86_64', 'log - USER_WARNING - {"message": "message"}'),
+            LogEntry('x86_64', 'log - USER_WARNING - {"message": "another_message"}')
+        ]
+
+        koji_task_id = 123
+        last_event_id = 456
+        koji_build_id = 999
+
+        session = self._mock_session(last_event_id, koji_task_id)
+        folders_info = self._mock_folders(str(tmpdir))
+        src = self._mock_git_source()
+        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+
+        builder_containerbuild.incremental_upload = mock_incremental_upload
+
+        task = builder_containerbuild.BuildContainerTask(id=koji_task_id,
+                                                         method='buildContainer',
+                                                         params='params',
+                                                         session=session,
+                                                         options=options,
+                                                         workdir=str(tmpdir),
+                                                         demux=True)
+
+        (flexmock(task)
+            .should_receive('fetchDockerfile')
+            .with_args(src['src'], 'build-tag')
+            .and_return(folders_info['dockerfile_path']))
+
+        build_args = {'git_branch': 'working'}
+        osbs = self._mock_osbs(koji_build_id=koji_build_id,
+                               src=src,
+                               koji_task_id=koji_task_id,
+                               orchestrator=True,
+                               create_build_args=deepcopy(build_args),
+                               )
+        task.osbs = osbs
+
+        (flexmock(task)
+            .should_receive('osbs')
+            .and_return(osbs))
+        (osbs
+            .should_receive('get_orchestrator_build_logs')
+            .with_args(build_id='os-build-id', follow=True)
+            .and_return(log_entries))
+
+        task_response = task.handler(src['src'], 'target', opts=build_args)
+        expected_user_warnings = ['message', 'another_message']
+        found_user_warnings = task_response['user_warnings']
+
+        assert sorted(found_user_warnings) == sorted(expected_user_warnings)
+
+    def test_user_warnings_source(self, tmpdir):
+        log_entries = [
+            LogEntry(None, 'orchestrator'),
+            LogEntry(None, 'log - USER_WARNING - {"message": "message"}'),
+            LogEntry('x86_64', 'log - USER_WARNING - {"message": "message"}'),
+            LogEntry('x86_64', 'log - USER_WARNING - {"message": "another_message"}')
+        ]
+
+        koji_task_id = 123
+        last_event_id = 456
+        koji_build_id = 999
+        create_args = {'koji_build_id': 12345}
+
+        session = self._mock_session(last_event_id, koji_task_id, {'blocked': False})
+        build_json = {'build_id': 12345, 'nvr': 'build_nvr', 'name': 'source_package',
+                      'extra': {'image': {}, 'operator-manifests': {}}}
+        (session
+            .should_receive('getBuild')
+            .and_return(build_json))
+        (session
+            .should_receive('getPackageConfig')
+            .with_args('dest-tag', 'source_package-source')
+            .and_return({'blocked': False}))
+        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+
+        task = builder_containerbuild.BuildSourceContainerTask(id=koji_task_id,
+                                                               method='buildSourceContainer',
+                                                               params='params',
+                                                               session=session,
+                                                               options=options,
+                                                               workdir=str(tmpdir),
+                                                               demux=True)
+
+        osbs = self._mock_osbs(koji_build_id=koji_build_id,
+                               src=None,
+                               koji_task_id=koji_task_id,
+                               source=True,
+                               create_build_args=create_args.copy(),
+                               build_not_started=False)
+        task.osbs = osbs
+
+        (flexmock(task)
+            .should_receive('osbs')
+            .and_return(osbs))
+        (osbs
+            .should_receive('get_orchestrator_build_logs')
+            .with_args(build_id='os-build-id', follow=True)
+            .and_return(log_entries))
+
+        task_response = task.handler('target', opts=create_args)
+        expected_user_warnings = ['message', 'another_message']
+        found_user_warnings = task_response['user_warnings']
+
+        assert sorted(found_user_warnings) == sorted(expected_user_warnings)

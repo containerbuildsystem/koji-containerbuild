@@ -101,6 +101,23 @@ METADATA_TAG = "_metadata_"
 ANNOTATIONS_FILENAME = 'build_annotations.json'
 
 
+def create_task_response(osbs_result):
+    """Create task response from an OSBS result"""
+    repositories = osbs_result.get('repositories', [])
+    koji_build_id = osbs_result.get('koji_build_id')
+    user_warnings = osbs_result.get('user_warnings', [])
+
+    task_response = {
+        'repositories': repositories,
+        'koji_builds': [koji_build_id] if koji_build_id else [],
+    }
+
+    if user_warnings:
+        task_response['user_warnings'] = user_warnings
+
+    return task_response
+
+
 class ContainerError(koji.GenericError):
     """Raised when container creation fails"""
     faultCode = 2001
@@ -1013,19 +1030,7 @@ class BuildContainerTask(BaseContainerTask):
                 'build': 'skipped',
             }
 
-        repositories = result.get('repositories', [])
-        koji_build_id = result.get('koji_build_id')
-        user_warnings = result.get('user_warnings', [])
-
-        task_response = {
-            'repositories': repositories,
-            'koji_builds': [koji_build_id] if koji_build_id else [],
-        }
-
-        if user_warnings:
-            task_response['user_warnings'] = user_warnings
-
-        return task_response
+        return create_task_response(result)
 
 
 class BuildSourceContainerTask(BaseContainerTask):
@@ -1182,16 +1187,4 @@ class BuildSourceContainerTask(BaseContainerTask):
 
         self.logger.debug("Result: %r", result)
 
-        repositories = result.get('repositories', [])
-        koji_build_id = result.get('koji_build_id')
-        user_warnings = result.get('user_warnings', [])
-
-        task_response = {
-            'repositories': repositories,
-            'koji_builds': [koji_build_id] if koji_build_id else [],
-        }
-
-        if user_warnings:
-            task_response['user_warnings'] = user_warnings
-
-        return task_response
+        return create_task_response(result)

@@ -1002,47 +1002,28 @@ class BuildContainerTask(BaseContainerTask):
             operator_csv_modifications_url=opts.get('operator_csv_modifications_url'),
         )
 
-        results = []
-        semi_results = self.createContainer(**kwargs)
-        if semi_results is not None:
-            results = [semi_results]
+        result = self.createContainer(**kwargs)
 
-        self.logger.debug("Results: %r", results)
+        self.logger.debug("Result: %r", result)
 
-        all_repositories = []
-        all_koji_builds = []
-        all_user_warnings = []
-
-        if not results:
+        if not result:
             return {
-                'repositories': all_repositories,
-                'koji_builds': all_koji_builds,
+                'repositories': [],
+                'koji_builds': [],
                 'build': 'skipped',
             }
 
-        for result in results:
-            try:
-                repository = result.get('repositories')
-                all_repositories.extend(repository)
-            except Exception as error:
-                self.logger.error("Failed to merge list of repositories "
-                                  "%r. Reason (%s): %s", repository,
-                                  type(error), error)
-            koji_build_id = result.get('koji_build_id')
-            if koji_build_id:
-                all_koji_builds.append(koji_build_id)
-
-            user_warnings = result.get('user_warnings')
-            if user_warnings:
-                all_user_warnings.extend(user_warnings)
+        repositories = result.get('repositories', [])
+        koji_build_id = result.get('koji_build_id')
+        user_warnings = result.get('user_warnings', [])
 
         task_response = {
-            'repositories': all_repositories,
-            'koji_builds': all_koji_builds,
+            'repositories': repositories,
+            'koji_builds': [koji_build_id] if koji_build_id else [],
         }
 
-        if all_user_warnings:
-            task_response['user_warnings'] = all_user_warnings
+        if user_warnings:
+            task_response['user_warnings'] = user_warnings
 
         return task_response
 
@@ -1197,39 +1178,20 @@ class BuildSourceContainerTask(BaseContainerTask):
             signing_intent=opts.get('signing_intent', None),
         )
 
-        results = []
-        semi_results = self.createSourceContainer(**kwargs)
-        if semi_results is not None:
-            results = [semi_results]
+        result = self.createSourceContainer(**kwargs)
 
-        self.logger.debug("Results: %r", results)
+        self.logger.debug("Result: %r", result)
 
-        all_repositories = []
-        all_koji_builds = []
-        all_user_warnings = []
-
-        for result in results:
-            try:
-                repository = result.get('repositories')
-                all_repositories.extend(repository)
-            except Exception as error:
-                self.logger.error("Failed to merge list of repositories "
-                                  "%r. Reason (%s): %s", repository,
-                                  type(error), error)
-            koji_build_id = result.get('koji_build_id')
-            if koji_build_id:
-                all_koji_builds.append(koji_build_id)
-
-            user_warnings = result.get('user_warnings')
-            if user_warnings:
-                all_user_warnings.extend(user_warnings)
+        repositories = result.get('repositories', [])
+        koji_build_id = result.get('koji_build_id')
+        user_warnings = result.get('user_warnings', [])
 
         task_response = {
-            'repositories': all_repositories,
-            'koji_builds': all_koji_builds,
+            'repositories': repositories,
+            'koji_builds': [koji_build_id] if koji_build_id else [],
         }
 
-        if all_user_warnings:
-            task_response['user_warnings'] = all_user_warnings
+        if user_warnings:
+            task_response['user_warnings'] = user_warnings
 
         return task_response

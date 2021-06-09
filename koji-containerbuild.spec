@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.11.0
+Version:        0.12.0
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -160,6 +160,20 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Wed Jun 09 2021 Robert Cerven <rcerven@redhat.com> 0.12.0-1
+- Factor out duplicated code for handling task response (mbasti@redhat.com)
+- Refactoring: simplify creation of tasks results (mbasti@redhat.com)
+- Test UW reading (ssalatsk@redhat.com)
+- Add user warnings to the task output (ssalatsk@redhat.com)
+- Provide an unit test for user warnings (ssalatsk@redhat.com)
+- Collect user warnings from logs and store them (ssalatsk@redhat.com)
+- Remove runtime assertions (ben.alkov@redhat.com)
+- No more TODOs and FIXME in code (mbasti@redhat.com)
+- Drop importlib_metadata from requirements.txt (miro@hroncok.cz)
+- Fix: Fix passing operator_csv_modifications_url param to orchestrator
+  (mbasti@redhat.com)
+- Replace deprecated get-pip.py url (mkosiarc@redhat.com)
+
 * Mon Mar 15 2021 Martin Bašti <mbasti@redhat.com> 0.11.0-1
 - add task signatures to koji.task.LEGACY_SIGNATURES (tkopecek@redhat.com)
 - New option --operator-csv-modifications-url (mbasti@redhat.com)

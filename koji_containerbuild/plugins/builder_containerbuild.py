@@ -705,7 +705,14 @@ class BuildContainerTask(BaseContainerTask):
                     },
                     "signing_intent": {
                         "type": ["string", "null"],
-                        "description": "Signing intent of the ODCS composes."
+                        "description": "Signing intent of the ODCS composes. "
+                        "This must be one of the signing intent names "
+                        "configured on the OSBS server, or null. If this "
+                        "value is null (the default), the server will use the "
+                        "signing intent of the compose_ids you specify, or "
+                        "default_signing_intent. To view the full list of "
+                        "possible names, see REACTOR_CONFIG in "
+                        "orchestrator.log."
                     },
                     "skip_build": {
                         "type": "boolean",
@@ -1073,7 +1080,14 @@ class BuildSourceContainerTask(BaseContainerTask):
                     },
                     "signing_intent": {
                         "type": ["string"],
-                        "description": "Signing intent of the ODCS composes."
+                        "description": "Signing intent of the ODCS composes. "
+                        "This must be one of the signing intent names "
+                        "configured on the OSBS server, or null. If this "
+                        "value is null (the default), the server will use the "
+                        "signing intent of the compose_ids you specify, or "
+                        "default_signing_intent. To view the full list of "
+                        "possible names, see REACTOR_CONFIG in "
+                        "orchestrator.log."
                     },
                 },
                 "anyOf": [

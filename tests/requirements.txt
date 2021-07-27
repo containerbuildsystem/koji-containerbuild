@@ -1,5 +1,5 @@
-flexmock>=0.10.3
-pytest>=4.1.0
+flexmock>=0.10.5
+pytest>=4.6.11
 pytest-cov
 pytest-html
 flake8

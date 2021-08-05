@@ -70,9 +70,13 @@ def buildContainer(src, target, opts=None, priority=None, channel='container'):
                       The full list of available options is in
                       builder_containerbuild.py.
     :param int priority: the amount to increase (or decrease) the task
-                         priority, relative to the default priority; higher
-                         values mean lower priority; only admins have the
-                         right to specify a negative priority here
+                         priority relative to Koji's default priority. A
+                         positive integer will lower the priority of this
+                         build, and Koji will process it after other tasks.
+                         Alternatively, a negative integer will raise the
+                         priority so that Koji processes this ahead of other
+                         tasks. Only Koji admins may specify a negative
+                         priority.
     :param str channel: the channel to allocate the task to (defaults to the
                         "container" channel)
     :returns: the task ID (integer)

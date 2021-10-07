@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.13.0
+Version:        1.0.dev0
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System

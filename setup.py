@@ -1,5 +1,7 @@
+import sys
 from setuptools import setup
 from setuptools.command.sdist import sdist
+from setuptools.command.build_py import build_py
 import subprocess
 
 
@@ -15,6 +17,21 @@ def get_requirements(requirements_file='requirements.txt'):
             for line in f.readlines()
             if not line.startswith('#')
             ]
+
+
+class Py2CLIOnlyBuild(build_py):
+
+    excluded = {
+        'koji_containerbuild/plugins/builder_containerbuild.py',
+        'koji_containerbuild/plugins/hub_containerbuild.py',
+    }
+
+    def find_package_modules(self, package, package_dir):
+        modules = build_py.find_package_modules(self, package, package_dir)
+        return [
+            (pkg, mod, file, ) for (pkg, mod, file, ) in modules
+            if file not in self.excluded
+        ]
 
 
 setup(
@@ -38,5 +55,7 @@ setup(
     ],
     cmdclass={
         'sdist': TitoDist,
+        # Only CLI for Py2
+        'build_py': build_py if sys.version_info[0] >= 3 else Py2CLIOnlyBuild,
     }
 )

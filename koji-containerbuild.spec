@@ -36,7 +36,7 @@ BuildRequires:  python-setuptools
 %description
 Koji support for building layered container images
 
-
+%if 0%{with python3}
 %package hub
 License:    LGPLv2
 Summary:    Hub plugin that extend Koji to build layered container images
@@ -56,18 +56,14 @@ Requires:   koji-builder
 Requires:   koji-containerbuild
 Requires:   osbs-client
 Requires:   python-dockerfile-parse
-%if 0%{with python3}
 Requires:   python3-jsonschema
 Requires:   python3-six
-%else
-Requires:   python2-jsonschema
-Requires:   python-six
-%endif
+
 
 %description builder
 Builder plugin that extend Koji to communicate with OpenShift build system and
 build layered container images.
-
+%endif # with_python3
 
 %package -n python2-%{name}-cli
 License:    LGPLv2
@@ -115,12 +111,12 @@ rm -rf $RPM_BUILD_ROOT
 %else
 %{__python2} setup.py install -O1 --skip-build --root $RPM_BUILD_ROOT
 %endif
+
+%if 0%{with python3}
 %{__install} -d $RPM_BUILD_ROOT%{_prefix}/lib/koji-hub-plugins
 %{__install} -p -m 0644 %{module}/plugins/hub_containerbuild.py $RPM_BUILD_ROOT%{_prefix}/lib/koji-hub-plugins/hub_containerbuild.py
 %{__install} -d $RPM_BUILD_ROOT%{_prefix}/lib/koji-builder-plugins
 %{__install} -p -m 0644 %{module}/plugins/builder_containerbuild.py $RPM_BUILD_ROOT%{_prefix}/lib/koji-builder-plugins/builder_containerbuild.py
-
-%if 0%{with python3}
 %{__install} -d $RPM_BUILD_ROOT%{python3_sitelib}/koji_cli_plugins
 %{__install} -p -m 0644 %{module}/plugins/cli_containerbuild.py $RPM_BUILD_ROOT%{python3_sitelib}/koji_cli_plugins/cli_containerbuild.py
 %else
@@ -144,16 +140,17 @@ rm -rf $RPM_BUILD_ROOT
 %if 0%{with python3}
 %files -n python%{python3_pkgversion}-%{name}-cli
 %{python3_sitelib}/koji_cli_plugins
-%else
-%files -n python2-%{name}-cli
-%{python2_sitelib}/koji_cli_plugins
-%endif
 
 %files hub
 %{_prefix}/lib/koji-hub-plugins/hub_containerbuild.py*
 
 %files builder
 %{_prefix}/lib/koji-builder-plugins/builder_containerbuild.py*
+%else
+%files -n python2-%{name}-cli
+%{python2_sitelib}/koji_cli_plugins
+%endif
+
 
 %clean
 rm -rf $RPM_BUILD_ROOT

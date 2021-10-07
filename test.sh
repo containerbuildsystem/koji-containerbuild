@@ -4,8 +4,8 @@ set -eux
 # Prepare env vars
 ENGINE=${ENGINE:="podman"}
 OS=${OS:="centos"}
-OS_VERSION=${OS_VERSION:="7"}
-PYTHON_VERSION=${PYTHON_VERSION:="2"}
+OS_VERSION=${OS_VERSION:="8"}
+PYTHON_VERSION=${PYTHON_VERSION:="3"}
 ACTION=${ACTION:="test"}
 IMAGE="$OS:$OS_VERSION"
 CONTAINER_NAME="koji-containerbuild-$OS-$OS_VERSION-py$PYTHON_VERSION"
@@ -26,7 +26,7 @@ fi
 
 function setup_kojic() {
   RUN="$ENGINE exec -i $CONTAINER_NAME"
-  if [[ $OS == "centos" ]]; then
+  if [[ $OS == "centos" && $OS_VERSION == "7" ]]; then
     PYTHON="python"
     PIP_PKG="$PYTHON-pip"
     PIP="pip"
@@ -59,38 +59,41 @@ function setup_kojic() {
     $RUN mkdir -p /usr/local/lib/python3.6/site-packages/
   fi
 
-  # Install other dependencies for unit tests
   if [[ ${WITH_PY3} == 1 ]]; then
+    # PY3 installing all dependencies
+
+    # Install other dependencies for unit tests
     OSBS_CLIENT_DEPS="python3-PyYAML"
+
+    $RUN $PKG install -y $OSBS_CLIENT_DEPS
+
+    # Install osbs-client dependencies based on specfile
+    # from specified git source (default: upstream master)
+    $RUN rm -rf /tmp/osbs-client
+    $RUN git clone --depth 1 --single-branch \
+         https://github.com/projectatomic/osbs-client --branch master /tmp/osbs-client
+    # RPM install build dependencies for osbs-client
+    $RUN "${BUILDDEP[@]}" --define "with_python3 ${WITH_PY3}" -y /tmp/osbs-client/osbs-client.spec
+
+    # Run pip install with '--no-deps' to avoid compilation.
+    # This will also ensure all the deps are specified in the spec
+    # Pip install osbs-client from git master
+    $RUN "${PIP_INST[@]}" --upgrade --no-deps --force-reinstall \
+        git+https://github.com/projectatomic/osbs-client
+    # Pip install dockerfile-parse from git master
+    $RUN "${PIP_INST[@]}" --upgrade --force-reinstall \
+        git+https://github.com/containerbuildsystem/dockerfile-parse
+
   else
-    OSBS_CLIENT_DEPS="PyYAML"
-  fi
+    # PY2 only CLI tests
 
-  $RUN $PKG install -y $OSBS_CLIENT_DEPS
-
-  # Install osbs-client dependencies based on specfile
-  # from specified git source (default: upstream master)
-  $RUN rm -rf /tmp/osbs-client
-  $RUN git clone --depth 1 --single-branch \
-       https://github.com/projectatomic/osbs-client --branch master /tmp/osbs-client
-  # RPM install build dependencies for osbs-client
-  $RUN "${BUILDDEP[@]}" --define "with_python3 ${WITH_PY3}" -y /tmp/osbs-client/osbs-client.spec
-
-  if [[ ${OS} == "centos" && ${WITH_PY3} == 0 ]]; then
+    if [[ ${OS} == "centos" ]]; then
       # there is no package that could provide more-itertools module on centos7
       # latest version with py2 support in PyPI is 5.0.0, never version causes
       # failures with py2
       $RUN "${PIP_INST[@]}" 'more-itertools==5.*'
+    fi
   fi
-
-  # Run pip install with '--no-deps' to avoid compilation.
-  # This will also ensure all the deps are specified in the spec
-  # Pip install osbs-client from git master
-  $RUN "${PIP_INST[@]}" --upgrade --no-deps --force-reinstall \
-      git+https://github.com/projectatomic/osbs-client
-  # Pip install dockerfile-parse from git master
-  $RUN "${PIP_INST[@]}" --upgrade --force-reinstall \
-      git+https://github.com/containerbuildsystem/dockerfile-parse
 
   # CentOS needs to have setuptools updates to make pytest-cov work
   # setuptools will no longer support python2 starting on version 45
@@ -130,20 +133,38 @@ function setup_kojic() {
 case ${ACTION} in
 "test")
   setup_kojic
-  TEST_CMD="coverage run --source=koji_containerbuild -m pytest tests"
+  if [[ $PYTHON_VERSION == 2 ]]; then
+    # PY2: only CLI is supported
+    TEST_PATHS="tests/test_cli_containerbuild.py"
+  else
+    TEST_PATHS="tests"
+  fi
+  TEST_CMD="coverage run --source=koji_containerbuild -m pytest ${TEST_PATHS}"
   ;;
 "pylint")
   setup_kojic
   # This can run only at fedora because pylint is not packaged in centos
   # use distro pylint to not get too new pylint version
   $RUN $PKG install -y "${PYTHON}-pylint"
-  PACKAGES='koji_containerbuild tests'
+  if [[ $PYTHON_VERSION == 2 ]]; then
+    # PY2: only CLI is supported
+    PACKAGES='koji_containerbuild/plugins/cli_containerbuild.py tests/test_cli_containerbuild.py'
+  else
+    PACKAGES='koji_containerbuild tests'
+  fi
   TEST_CMD="${PYTHON} -m pylint ${PACKAGES}"
   ;;
 "bandit")
   setup_kojic
-  $RUN "${PIP_INST[@]}" "bandit<1.6.2"
-  TEST_CMD="bandit-baseline -r koji_containerbuild -ll -ii"
+  if [[ $PYTHON_VERSION == 2 ]]; then
+    # PY2: only CLI is supported
+    $RUN "${PIP_INST[@]}" "bandit<1.6.2"
+    BANDIT_PATHS="koji_containerbuild/plugins/cli_containerbuild.py"
+  else
+    $RUN "${PIP_INST[@]}" "bandit"
+    BANDIT_PATHS="-r koji_containerbuild"
+  fi
+  TEST_CMD="bandit-baseline ${BANDIT_PATHS} -ll -ii"
   ;;
 *)
   echo "Unknown action: ${ACTION}"

@@ -19,6 +19,13 @@ submit builds based on koji CLI.
 Most likely you'll need to run own OpenShift instance. See OpenShift
 documentation how to setup that.
 
+Supported versions of python
+----------------------------
+
+Python 2.7+ is supported only by Koji CLI plugin
+Python 3.6+ is supported by all plugins
+
+
 Build a package
 ---------------
 

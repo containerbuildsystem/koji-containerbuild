@@ -36,7 +36,7 @@ class Py2CLIOnlyBuild(build_py):
 
 setup(
     name="koji-containerbuild",
-    version="0.13.0",
+    version="1.0.dev0",
     author="Pavol Babincak",
     author_email="pbabinca@redhat.com",
     description="Container build support for Koji buildsystem",

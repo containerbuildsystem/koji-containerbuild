@@ -49,10 +49,6 @@ from koji.tasks import BaseTaskHandler
 import osbs
 from osbs.api import OSBS
 from osbs.conf import Configuration
-try:
-    from osbs.exceptions import OsbsOrchestratorNotEnabled
-except ImportError:
-    from osbs.exceptions import OsbsValidationException as OsbsOrchestratorNotEnabled
 from osbs.exceptions import OsbsValidationException
 from osbs.utils import UserWarningsStore
 
@@ -96,9 +92,12 @@ LABEL_NAME_MAP = {
 }
 
 
-METADATA_TAG = "_metadata_"
+METADATA_TAG = "platform:_metadata_"
 
 ANNOTATIONS_FILENAME = 'build_annotations.json'
+
+DEFAULT_CONF_BINARY_SECTION = "default_binary"
+DEFAULT_CONF_SOURCE_SECTION = "default_source"
 
 
 def create_task_response(osbs_result):
@@ -306,19 +305,20 @@ class BaseContainerTask(BaseTaskHandler):
         # pylint: disable=redefined-builtin
         BaseTaskHandler.__init__(self, id, method, params, session, options, workdir)
         self._osbs = None
-        self.demux = None
         self._log_handler_added = False
-        self.incremental_log_basename = 'openshift-incremental.log'
+        self.incremental_log_basename = 'osbs_build.log'
 
     def osbs(self):
         """Handler of OSBS object"""
         if not self._osbs:
-            os_conf = Configuration()
-            build_conf = Configuration()
-            if self.opts.get('scratch'):
-                os_conf = Configuration(conf_section='scratch')
-                build_conf = Configuration(conf_section='scratch')
-            self._osbs = OSBS(os_conf, build_conf)
+            conf_section = None
+            if self.method in BuildContainerTask.Methods:
+                conf_section = DEFAULT_CONF_BINARY_SECTION
+            elif self.method in BuildSourceContainerTask.Methods:
+                conf_section = DEFAULT_CONF_SOURCE_SECTION
+
+            os_conf = Configuration(conf_section=conf_section)
+            self._osbs = OSBS(os_conf)
             if not self._osbs:
                 msg = 'Could not successfully instantiate `osbs`'
                 raise ContainerError(msg)
@@ -376,59 +376,36 @@ class BaseContainerTask(BaseTaskHandler):
         finally:
             watcher.clean()
 
-    def _write_combined_log(self, build_id, logs_dir):
+    def _write_logs(self, build_id, logs_dir):
         log_filename = os.path.join(logs_dir, self.incremental_log_basename)
-
         self.logger.info("Will write follow log: %s", self.incremental_log_basename)
         try:
-            log = self.osbs().get_build_logs(build_id, follow=True)
+            logs = self.osbs().get_build_logs(build_id, follow=True, wait=True)
         except Exception as error:
             msg = "Exception while waiting for build logs: %s" % error
             raise ContainerError(msg)
+
+        user_warnings = UserWarningsStore()
+
         with open(log_filename, 'wb') as outfile:
-            try:
-                for line in log:
+            for line in logs:
+                if METADATA_TAG in line:
+                    _, meta_file = line.rsplit(' ', 1)
+                    source_file = os.path.join(koji.pathinfo.work(), meta_file)
+                    uploadpath = os.path.join(logs_dir, os.path.basename(meta_file))
+                    shutil.copy(source_file, uploadpath)
+                    continue
+
+                if user_warnings.is_user_warning(line):
+                    user_warnings.store(line)
+                    continue
+
+                try:
                     outfile.write(("%s\n" % line).encode('utf-8'))
                     outfile.flush()
-            except Exception as error:
-                msg = "Exception (%s) while writing build logs: %s" % (type(error),
-                                                                       error)
-                raise ContainerError(msg)
-
-        self.logger.info("%s written", self.incremental_log_basename)
-
-    def _write_demultiplexed_logs(self, build_id, logs_dir):
-        self.logger.info("Will write demuxed logs in: %s/", logs_dir)
-        try:
-            logs = self.osbs().get_orchestrator_build_logs(build_id=build_id, follow=True)
-        except Exception as error:
-            msg = "Exception while waiting for orchestrator build logs: %s" % error
-            raise ContainerError(msg)
-        platform_logs = {}
-        user_warnings = UserWarningsStore()
-        for entry in logs:
-            platform, line = entry.platform, entry.line
-            if platform == METADATA_TAG:
-                meta_file = line
-                source_file = os.path.join(koji.pathinfo.work(), meta_file)
-                uploadpath = os.path.join(logs_dir, os.path.basename(meta_file))
-                shutil.copy(source_file, uploadpath)
-                continue
-
-            if user_warnings.is_user_warning(line):
-                user_warnings.store(line)
-                continue
-
-            if platform not in platform_logs:
-                prefix = 'orchestrator' if platform is None else platform
-                log_filename = os.path.join(logs_dir, "%s.log" % prefix)
-                platform_logs[platform] = open(log_filename, 'wb')
-            try:
-                platform_logs[platform].write((line + '\n').encode('utf-8'))
-                platform_logs[platform].flush()
-            except Exception as error:
-                msg = "Exception ({}) while writing build logs: {}".format(type(error), error)
-                raise ContainerError(msg)
+                except Exception as error:
+                    msg = "Exception (%s) while writing build logs: %s" % (type(error), error)
+                    raise ContainerError(msg)
 
         if user_warnings:
             try:
@@ -441,20 +418,14 @@ class BaseContainerTask(BaseTaskHandler):
                 msg = "Exception ({}) while writing user warnings: {}".format(type(error), error)
                 raise ContainerError(msg)
 
-        for logfile in platform_logs.values():
-            logfile.close()
-            self.logger.info("%s written", logfile.name)
+        self.logger.info("%s written", self.incremental_log_basename)
 
     def _write_incremental_logs(self, build_id, logs_dir):
-        if self.demux and hasattr(self.osbs(), 'get_orchestrator_build_logs'):
-            self._write_demultiplexed_logs(build_id, logs_dir)
-        else:
-            self._write_combined_log(build_id, logs_dir)
+        self._write_logs(build_id, logs_dir)
 
-        build_response = self.osbs().get_build(build_id)
-        if (build_response.is_running() or build_response.is_pending()):
+        if self.osbs().build_not_finished(build_id):
             raise ContainerError("Build log finished but build still has not "
-                                 "finished: %s." % build_response.status)
+                                 "finished: %s." % self.osbs().get_build_reason(build_id))
 
     def _read_user_warnings(self, logs_dir):
         log_filename = os.path.join(logs_dir, "user_warnings.log")
@@ -468,36 +439,19 @@ class BaseContainerTask(BaseTaskHandler):
                 msg = "Exception ({}) while reading user warnings: {}".format(type(error), error)
                 raise ContainerError(msg)
 
-    def _get_repositories(self, response):
+    def _get_repositories(self, annotations):
         repositories = []
-        try:
-            repo_dict = response.get_repositories()
-            if repo_dict:
-                for repos in repo_dict.values():
-                    repositories.extend(repos)
-        except Exception as error:
-            self.logger.error("Failed to get available repositories from: %r. "
-                              "Reason(%s): %s",
-                              repo_dict, type(error), error)
+        repo_dict = annotations.get('repositories')
+        if repo_dict:
+            for repos in repo_dict.values():
+                repositories.extend(repos)
+
         return repositories
 
-    def _get_koji_build_id(self, response):
-        koji_build_id = None
-        if hasattr(response, "get_koji_build_id"):
-            koji_build_id = response.get_koji_build_id()
-        else:
-            self.logger.info("Koji content generator build ID not available.")
+    def _get_koji_build_id(self, labels):
+        koji_build_id = labels.get('koji-build-id')
 
         return koji_build_id
-
-    def _get_error_message(self, response):
-        error_message = None
-        if hasattr(response, "get_error_message"):
-            error_message = response.get_error_message()
-        else:
-            self.logger.info("Error message is not available")
-
-        return error_message
 
     def check_whitelist(self, name, target_info):
         """Check if container name is whitelisted in destination tag
@@ -515,8 +469,7 @@ class BaseContainerTask(BaseTaskHandler):
             raise koji.BuildError("package (container)  %s is blocked for tag %s" %
                                   (name, target_info['dest_tag_name']))
 
-    def upload_build_annotations(self, build_response):
-        annotations = build_response.get_annotations() or {}
+    def upload_build_annotations(self, annotations):
         whitelist_str = annotations.get('koji_task_annotations_whitelist', "[]")
         whitelist = json.loads(whitelist_str)
         task_annotations = {k: v for k, v in annotations.items() if k in whitelist}
@@ -527,8 +480,7 @@ class BaseContainerTask(BaseTaskHandler):
             incremental_upload(self.session, ANNOTATIONS_FILENAME, f, self.getUploadPath(),
                                logger=self.logger)
 
-    def handle_build_response(self, build_response, arch=None):
-        build_id = build_response.get_build_name()
+    def handle_build_response(self, build_id):
         self.logger.debug("OSBS build id: %r", build_id)
 
         # When builds are cancelled the builder plugin process gets SIGINT and SIGKILL
@@ -541,12 +493,6 @@ class BaseContainerTask(BaseTaskHandler):
             self.osbs().cancel_build(build_id)
 
         signal.signal(signal.SIGINT, sigint_handler)
-
-        self.logger.debug("Waiting for osbs build_id: %s to be scheduled.",
-                          build_id)
-        # we need to wait for kubelet to schedule the build, otherwise it's 500
-        self.osbs().wait_for_build_to_get_scheduled(build_id)
-        self.logger.debug("Build was scheduled")
 
         osbs_logs_dir = self.resultdir()
         koji.ensuredir(osbs_logs_dir)
@@ -570,22 +516,25 @@ class BaseContainerTask(BaseTaskHandler):
         # so we have to collect them back when the process ends
         user_warnings = self._read_user_warnings(osbs_logs_dir)
 
-        response = self.osbs().wait_for_build_to_finish(build_id)
-        if response.is_succeeded():
-            self.upload_build_annotations(response)
+        has_succeeded = self.osbs().build_has_succeeded(build_id)
+        annotations = self.osbs().get_build_annotations(build_id)
+        labels = self.osbs().get_build_labels(build_id)
+
+        if has_succeeded:
+            self.upload_build_annotations(annotations)
 
         self.logger.debug("OSBS build finished with status: %s. Build "
-                          "response: %s.", response.status,
-                          response.json)
+                          "response: %s.", self.osbs().get_build_reason(build_id),
+                          self.osbs().get_build(build_id))
 
-        self.logger.info("Response status: %r", response.is_succeeded())
+        self.logger.info("Response status: %r", has_succeeded)
 
-        if response.is_cancelled():
+        if self.osbs().build_was_cancelled(build_id):
             self.session.cancelTask(self.id)
             raise ContainerCancelled('Image build was cancelled by OSBS.')
 
-        elif response.is_failed():
-            error_message = self._get_error_message(response)
+        elif not has_succeeded:
+            error_message = self.osbs().get_build_error_message(build_id)
             if error_message:
                 raise ContainerError('Image build failed. %s. OSBS build id: %s' %
                                      (error_message, build_id))
@@ -594,15 +543,15 @@ class BaseContainerTask(BaseTaskHandler):
                                      build_id)
 
         repositories = []
-        if response.is_succeeded():
-            repositories = self._get_repositories(response)
+        if has_succeeded:
+            repositories = self._get_repositories(annotations)
 
         self.logger.info("Image available in the following repositories: %r",
                          repositories)
 
         koji_build_id = None
-        if response.is_succeeded():
-            koji_build_id = self._get_koji_build_id(response)
+        if has_succeeded:
+            koji_build_id = self._get_koji_build_id(labels)
 
         self.logger.info("Koji content generator build ID: %s", koji_build_id)
 
@@ -616,9 +565,6 @@ class BaseContainerTask(BaseTaskHandler):
 
         if user_warnings:
             containerdata['user_warnings'] = user_warnings
-
-        if arch:
-            containerdata['arch'] = arch
 
         return containerdata
 
@@ -681,9 +627,6 @@ class BuildContainerTask(BaseContainerTask):
                                        "this to determine which BuildConfig "
                                        "to update."
                     },
-                    "push_url": {
-                        "type": ["string", "null"]
-                    },
                     "koji_parent_build": {
                         "type": ["string", "null"],
                         "description": "Overwrite parent image with image from koji build."
@@ -714,15 +657,6 @@ class BuildContainerTask(BaseContainerTask):
                         "possible names, see REACTOR_CONFIG in "
                         "orchestrator.log."
                     },
-                    "skip_build": {
-                        "type": "boolean",
-                        "description": "Skip build, just update buildconfig for autorebuild "
-                                       "and don't start build"
-                    },
-                    "triggered_after_koji_task": {
-                        "type": "integer",
-                        "description": "Koji task for which autorebuild runs"
-                    },
                     "userdata": {
                         "type": "object",
                         "description": "User defined dictionary containing custom metadata",
@@ -738,18 +672,16 @@ class BuildContainerTask(BaseContainerTask):
         "minItems": 3
     }
 
-    def __init__(self, id, method, params, session, options, workdir=None, demux=True):
+    def __init__(self, id, method, params, session, options, workdir=None):
         # pylint: disable=redefined-builtin
         BaseContainerTask.__init__(self, id, method, params, session, options,
                                    workdir)
-        self.demux = demux
         self.event_id = None
 
     def createContainer(self, src=None, target_info=None, arches=None,
                         scratch=None, isolated=None, yum_repourls=None,
-                        branch=None, push_url=None, koji_parent_build=None,
-                        release=None, flatpak=False, signing_intent=None,
-                        compose_ids=None, skip_build=False, triggered_after_koji_task=None,
+                        branch=None, koji_parent_build=None, release=None,
+                        flatpak=False, signing_intent=None, compose_ids=None,
                         dependency_replacements=None, operator_csv_modifications_url=None):
         if not yum_repourls:
             yum_repourls = []
@@ -763,7 +695,6 @@ class BuildContainerTask(BaseContainerTask):
         scm.assert_allowed(self.options.allowed_scms)
         git_uri = scm.get_git_uri()
         component = scm.get_component()
-        arch = None
 
         if not arches:
             raise koji.BuildError("arches aren't specified")
@@ -781,62 +712,36 @@ class BuildContainerTask(BaseContainerTask):
             'yum_repourls': yum_repourls,
             'scratch': scratch,
             'koji_task_id': self.id,
-            'architecture': arch,
+            'platforms': arches,
         }
         if branch:
             create_build_args['git_branch'] = branch
-        if push_url:
-            create_build_args['git_push_url'] = push_url
         if flatpak:
             create_build_args['flatpak'] = True
-        if skip_build:
-            create_build_args['skip_build'] = True
-        if triggered_after_koji_task is not None:
-            create_build_args['triggered_after_koji_task'] = triggered_after_koji_task
         if operator_csv_modifications_url:
             create_build_args['operator_csv_modifications_url'] = operator_csv_modifications_url
-
-        orchestrator_create_build_args = create_build_args.copy()
-        orchestrator_create_build_args['platforms'] = arches
         if signing_intent:
-            orchestrator_create_build_args['signing_intent'] = signing_intent
+            create_build_args['signing_intent'] = signing_intent
         if compose_ids:
-            orchestrator_create_build_args['compose_ids'] = compose_ids
+            create_build_args['compose_ids'] = compose_ids
         if koji_parent_build:
-            orchestrator_create_build_args['koji_parent_build'] = koji_parent_build
+            create_build_args['koji_parent_build'] = koji_parent_build
         if isolated:
-            orchestrator_create_build_args['isolated'] = isolated
+            create_build_args['isolated'] = isolated
         if release:
-            orchestrator_create_build_args['release'] = release
+            create_build_args['release'] = release
 
         try:
-            create_method = self.osbs().create_orchestrator_build
+            create_method = self.osbs().create_binary_container_build
             self.logger.debug("Starting %s with params: '%s",
-                              create_method, orchestrator_create_build_args)
-            build_response = create_method(**orchestrator_create_build_args)
-        except (AttributeError, OsbsOrchestratorNotEnabled):
-            # Older osbs-client, or else orchestration not enabled
-            create_build_args['architecture'] = arch = arches[0]
-            create_build_args.pop('skip_build', None)
-            create_method = self.osbs().create_build
-            self.logger.debug("Starting %s with params: '%s'",
                               create_method, create_build_args)
             build_response = create_method(**create_build_args)
+        except AttributeError:
+            raise koji.BuildError("method %s doesn't exists in osbs" % create_method)
         except OsbsValidationException as exc:
             raise ContainerError('OSBS validation exception: {0}'.format(exc))
-        if build_response is None:
-            self.logger.debug("Build was skipped")
 
-            osbs_logs_dir = self.resultdir()
-            koji.ensuredir(osbs_logs_dir)
-            try:
-                self._incremental_upload_logs()
-            except koji.ActionNotAllowed:
-                pass
-
-            return
-
-        return self.handle_build_response(build_response, arch=arch)
+        return self.handle_build_response(self.osbs().get_build_name(build_response))
 
     def getArchList(self, build_tag, extra=None):
         """Copied from build task"""
@@ -980,15 +885,6 @@ class BuildContainerTask(BaseContainerTask):
         if not SCM.is_scm_url(src):
             raise koji.BuildError('Invalid source specification: %s' % src)
 
-        # don't check build nvr for autorebuild (has triggered_after_koji_task)
-        # as they might be using add_timestamp_to_release
-        # and don't check it for skipped build, which might be enabling/disabling
-        # autorebuilds which use add_timestamp_to_release
-        triggered_after_koji_task = opts.get('triggered_after_koji_task', None)
-        skip_build = opts.get('skip_build', False)
-        if triggered_after_koji_task or skip_build:
-            expected_nvr = None
-
         # Scratch and auto release builds shouldn't be checked for nvr
         if not self.opts.get('scratch') and expected_nvr:
             try:
@@ -1014,15 +910,12 @@ class BuildContainerTask(BaseContainerTask):
             dependency_replacements=opts.get('dependency_replacements', None),
             yum_repourls=opts.get('yum_repourls', None),
             branch=opts.get('git_branch', None),
-            push_url=opts.get('push_url', None),
             arches=archlist,
             koji_parent_build=opts.get('koji_parent_build'),
             release=release_overwrite,
             flatpak=flatpak,
             signing_intent=opts.get('signing_intent', None),
             compose_ids=opts.get('compose_ids', None),
-            skip_build=skip_build,
-            triggered_after_koji_task=triggered_after_koji_task,
             operator_csv_modifications_url=opts.get('operator_csv_modifications_url'),
         )
 
@@ -1100,12 +993,10 @@ class BuildSourceContainerTask(BaseContainerTask):
         "minItems": 2
     }
 
-    def __init__(self, id, method, params, session, options, workdir=None, demux=False):
+    def __init__(self, id, method, params, session, options, workdir=None):
         # pylint: disable=redefined-builtin
         BaseContainerTask.__init__(self, id, method, params, session, options, workdir)
-        self.demux = demux
         self.event_id = None
-        self.incremental_log_basename = 'orchestrator.log'
 
     def createSourceContainer(self, target_info=None, scratch=None, component=None,
                               koji_build_id=None, koji_build_nvr=None, signing_intent=None):
@@ -1134,8 +1025,10 @@ class BuildSourceContainerTask(BaseContainerTask):
             build_response = create_method(**create_build_args)
         except AttributeError:
             raise koji.BuildError("method %s doesn't exists in osbs" % create_method)
+        except OsbsValidationException as exc:
+            raise ContainerError('OSBS validation exception: {0}'.format(exc))
 
-        return self.handle_build_response(build_response)
+        return self.handle_build_response(self.osbs().get_build_name(build_response))
 
     def get_source_build_info(self, build_id, build_nvr):
         build_identifier = build_nvr or build_id

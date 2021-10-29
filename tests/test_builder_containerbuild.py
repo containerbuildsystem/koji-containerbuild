@@ -21,7 +21,6 @@ from copy import deepcopy
 import os
 import os.path
 import signal
-from collections import namedtuple
 from textwrap import dedent
 
 import json
@@ -31,11 +30,6 @@ import pytest
 from flexmock import flexmock
 
 import osbs
-try:
-    from osbs.exceptions import OsbsOrchestratorNotEnabled
-except ImportError:
-    from osbs.exceptions import OsbsValidationException as OsbsOrchestratorNotEnabled
-
 from osbs.exceptions import OsbsValidationException
 from osbs.utils import UserWarningsStore
 
@@ -48,13 +42,19 @@ def mock_incremental_upload(session, fname, fd, uploadpath, logger=None):
     pass
 
 
+class mock_time():
+    def sleep(self, *args):
+        return
+
+
 builder_containerbuild.incremental_upload = mock_incremental_upload
+builder_containerbuild.time = mock_time
 
 
-LogEntry = namedtuple('LogEntry', ['platform', 'line'])
-logs = [LogEntry(None, 'orchestrator'),
-        LogEntry('x86_64', u'Hurray for bacon: \u2017'),
-        LogEntry('x86_64', 'line 2')]
+logs = ['normal log entry',
+        u'Hurray for bacon: \u2017',
+        'line 2',
+        'another log entry']
 
 
 class TestBuilder(object):
@@ -87,15 +87,16 @@ class TestBuilder(object):
         cct.opts['scratch'] = scratch
         osbs_obj = cct.osbs()
 
-        expected_conf_section = 'scratch' if scratch else 'default'
+        if method == 'buildContainer':
+            expected_conf_section = 'default_binary'
+        if method == 'buildSourceContainer':
+            expected_conf_section = 'default_source'
 
         assert isinstance(osbs_obj, osbs.api.OSBS)
         assert osbs_obj.os_conf.conf_section == expected_conf_section
-        assert osbs_obj.build_conf.conf_section == expected_conf_section
 
     @pytest.mark.parametrize("repos", [{'repo1': 'test1'}, {'repo2': 'test2'}])
     def test_get_repositories(self, repos):
-        response = flexmock(get_repositories=lambda: repos)
         cct = builder_containerbuild.BuildContainerTask(id=1,
                                                         method='buildContainer',
                                                         params='params',
@@ -105,9 +106,10 @@ class TestBuilder(object):
         repositories = []
         for repo in repos.values():
             repositories.extend(repo)
-        assert set(cct._get_repositories(response)) ^ set(repositories) == set([])
 
-    def _check_orchestrator_logs(self, log_entries, logs_dir):
+        assert set(cct._get_repositories({'repositories': repos})) == set(repositories)
+
+    def _check_logfiles(self, log_entries, logs_dir):
         def check_meta_entry(filename):
             source_file = os.path.join(koji.pathinfo.work(), filename)
             target_file = os.path.join(logs_dir, filename)
@@ -117,108 +119,78 @@ class TestBuilder(object):
 
         user_warnings = UserWarningsStore()
         log_contents = {}
-        for entry in log_entries:
-            platform = entry.platform or 'orchestrator'
+        log_name = 'osbs_build'
+        for line in log_entries:
 
-            if platform == builder_containerbuild.METADATA_TAG:
-                check_meta_entry(entry.line)
-            elif user_warnings.is_user_warning(entry.line):
-                user_warnings.store(entry.line)
+            if builder_containerbuild.METADATA_TAG in line:
+                _, meta_file = line.rsplit(' ', 1)
+                check_meta_entry(meta_file)
+            elif user_warnings.is_user_warning(line):
+                user_warnings.store(line)
             else:
-                log_contents[platform] = '{old}{new}\n'.format(
-                    old=log_contents.get(platform, ''),
-                    new=entry.line
+                log_contents[log_name] = '{old}{new}\n'.format(
+                    old=log_contents.get(log_name, ''),
+                    new=line
                 )
 
         if user_warnings:
             log_contents['user_warnings'] = str(user_warnings)
 
-        for platform, logs_content in log_contents.items():
-            logfile_path = os.path.join(logs_dir, platform + '.log')
+        for log_name, logs_content in log_contents.items():
+            logfile_path = os.path.join(logs_dir, log_name + '.log')
             with open(logfile_path) as log_file:
                 assert log_file.read() == logs_content
 
-    def _check_non_orchestrator_logs(self, log_entries, logs_dir, source):
-        logs_content = ''.join(line + '\n' for line in log_entries)
-        if source:
-            logfile_path = os.path.join(logs_dir, 'orchestrator.log')
-        else:
-            logfile_path = os.path.join(logs_dir, 'openshift-incremental.log')
-        with open(logfile_path) as log_file:
-            assert log_file.read() == logs_content
-
-    def _check_logfiles(self, log_entries, logs_dir, orchestrator, source=False):
-        # check that all the log entries for a build are where they are supposed to be
-        if orchestrator:
-            self._check_orchestrator_logs(log_entries, logs_dir)
-        else:
-            self._check_non_orchestrator_logs(log_entries, logs_dir, source=source)
-
-    @pytest.mark.parametrize('orchestrator', [False, True])
     @pytest.mark.parametrize('get_logs_exc', [None, Exception('error')])
     @pytest.mark.parametrize('build_not_finished', [False, True])
-    def test_write_logs(self, tmpdir, orchestrator, get_logs_exc, build_not_finished):
+    def test_write_logs(self, tmpdir, get_logs_exc, build_not_finished):
         cct = builder_containerbuild.BuildContainerTask(id=1,
                                                         method='buildContainer',
                                                         params='params',
                                                         session='session',
                                                         options='options',
-                                                        workdir='workdir',
-                                                        demux=orchestrator)
-        if orchestrator:
-            get_logs_fname = 'get_orchestrator_build_logs'
-            log_entries = [
-                LogEntry(None, 'line 1'),
-                LogEntry(None, 'line 2'),
-                LogEntry(None, 'log - USER_WARNING - {"message": "message"}'),
-                LogEntry('x86_64', 'line 1'),
-                LogEntry('x86_64', 'line 2'),
-                LogEntry('x86_64', 'log - USER_WARNING - {"message": "message"}'),
-                LogEntry('x86_64', 'log - USER_WARNING - {"message": "another_message"}'),
-                LogEntry(builder_containerbuild.METADATA_TAG, 'x.log')
-            ]
+                                                        workdir='workdir')
 
-            koji_tmpdir = tmpdir.mkdir('koji')
-            koji_tmpdir.join('x.log').write('line 1\n'
-                                            'line 2\n')
+        log_entries = [
+            'line 1',
+            'line 2',
+            'log - USER_WARNING - {"message": "message"}',
+            'x86_64 line 1',
+            'x86_64 line 2',
+            'x86_64 log - USER_WARNING - {"message": "message"}',
+            'x86_64 log - USER_WARNING - {"message": "another_message"}',
+            builder_containerbuild.METADATA_TAG + ' x.log'
+        ]
 
-            (flexmock(koji.pathinfo)
-                .should_receive('work')
-                .and_return(str(koji_tmpdir)))
-        else:
-            get_logs_fname = 'get_build_logs'
-            log_entries = ['line 1',
-                           'line 2']
+        koji_tmpdir = tmpdir.mkdir('koji')
+        koji_tmpdir.join('x.log').write('line 1\n'
+                                        'line 2\n')
 
-        build_response = flexmock(status=42)
-        (build_response
-            .should_receive('is_running')
-            .and_return(build_not_finished))
-        (build_response
-            .should_receive('is_pending')
-            .and_return(build_not_finished))
+        (flexmock(koji.pathinfo)
+            .should_receive('work')
+            .and_return(str(koji_tmpdir)))
 
-        cct._osbs = flexmock()
-        (cct._osbs
-            .should_receive('get_build')
-            .and_return(build_response))
+        (flexmock(osbs.api.OSBS)
+            .should_receive('build_not_finished').and_return(build_not_finished))
+        if build_not_finished:
+            (flexmock(osbs.api.OSBS)
+                .should_receive('get_build_reason').and_return('Failed'))
 
-        should_receive = cct._osbs.should_receive(get_logs_fname)
         if get_logs_exc:
-            should_receive.and_raise(get_logs_exc)
+            (flexmock(osbs.api.OSBS)
+                .should_receive('get_build_logs')
+                .and_raise(get_logs_exc))
         else:
-            should_receive.and_return(log_entries)
+            (flexmock(osbs.api.OSBS)
+                .should_receive('get_build_logs')
+                .and_return(log_entries))
 
         if get_logs_exc:
             exc_type = builder_containerbuild.ContainerError
-            exc_msg = 'Exception while waiting for {what}: {why}'.format(
-                what='orchestrator build logs' if orchestrator else 'build logs',
-                why=get_logs_exc
-            )
+            exc_msg = f'Exception while waiting for build logs: {get_logs_exc}'
         elif build_not_finished:
             exc_type = builder_containerbuild.ContainerError
-            exc_msg = ('Build log finished but build still has not finished: {}.'
-                       .format(build_response.status))
+            exc_msg = 'Build log finished but build still has not finished: Failed.'
         else:
             exc_type = exc_msg = None
 
@@ -230,7 +202,7 @@ class TestBuilder(object):
             cct._write_incremental_logs('id', str(tmpdir))
 
         if get_logs_exc is None:
-            self._check_logfiles(log_entries, str(tmpdir), orchestrator)
+            self._check_logfiles(log_entries, str(tmpdir))
 
     @pytest.mark.parametrize('get_logs_exc', [None, Exception('error')])
     @pytest.mark.parametrize('build_not_finished', [False, True])
@@ -241,28 +213,23 @@ class TestBuilder(object):
                                                               session='session',
                                                               options='options',
                                                               workdir='workdir')
-        get_logs_fname = 'get_build_logs'
         log_entries = ['line 1',
                        'line 2']
 
-        build_response = flexmock(status=42)
-        (build_response
-            .should_receive('is_running')
-            .and_return(build_not_finished))
-        (build_response
-            .should_receive('is_pending')
-            .and_return(build_not_finished))
+        (flexmock(osbs.api.OSBS)
+            .should_receive('build_not_finished').and_return(build_not_finished))
+        if build_not_finished:
+            (flexmock(osbs.api.OSBS)
+                .should_receive('get_build_reason').and_return('Failed'))
 
-        cct._osbs = flexmock()
-        (cct._osbs
-            .should_receive('get_build')
-            .and_return(build_response))
-
-        should_receive = cct._osbs.should_receive(get_logs_fname)
         if get_logs_exc:
-            should_receive.and_raise(get_logs_exc)
+            (flexmock(osbs.api.OSBS)
+                .should_receive('get_build_logs')
+                .and_raise(get_logs_exc))
         else:
-            should_receive.and_return(log_entries)
+            (flexmock(osbs.api.OSBS)
+                .should_receive('get_build_logs')
+                .and_return(log_entries))
 
         if get_logs_exc:
             exc_type = builder_containerbuild.ContainerError
@@ -272,8 +239,7 @@ class TestBuilder(object):
             )
         elif build_not_finished:
             exc_type = builder_containerbuild.ContainerError
-            exc_msg = ('Build log finished but build still has not finished: {}.'
-                       .format(build_response.status))
+            exc_msg = 'Build log finished but build still has not finished: Failed.'
         else:
             exc_type = exc_msg = None
 
@@ -285,7 +251,7 @@ class TestBuilder(object):
             cct._write_incremental_logs('id', str(tmpdir))
 
         if get_logs_exc is None:
-            self._check_logfiles(log_entries, str(tmpdir), False, source=True)
+            self._check_logfiles(log_entries, str(tmpdir))
 
     def _mock_session(self, last_event_id, koji_task_id, pkg_info=USE_DEFAULT_PKG_INFO):
         if pkg_info == USE_DEFAULT_PKG_INFO:
@@ -318,7 +284,7 @@ class TestBuilder(object):
 
         return session
 
-    def _mock_osbs(self, koji_build_id, src, koji_task_id, orchestrator=False, source=False,
+    def _mock_osbs(self, koji_build_id, src, koji_task_id, source=False,
                    build_not_started=False, create_build_args=None,
                    with_osbsvalidationexception=False):
         create_build_args = create_build_args or {}
@@ -333,7 +299,6 @@ class TestBuilder(object):
             create_build_args.setdefault('dependency_replacements', None)
             create_build_args.setdefault('yum_repourls', [])
             create_build_args.setdefault('platforms', ['x86_64'])
-            create_build_args.setdefault('architecture', None)
             create_build_args.pop('arch_override', None)
         else:
             create_build_args.setdefault('component', 'source_package-source')
@@ -359,105 +324,46 @@ class TestBuilder(object):
         if not create_build_args.get('signing_intent'):
             create_build_args.pop('signing_intent', None)
 
-        skip_build = True
-        if not create_build_args.get('skip_build'):
-            create_build_args.pop('skip_build', None)
-            skip_build = False
-
-        if skip_build and orchestrator:
-            build_response = None
-        else:
-            build_response = flexmock()
-            (build_response
-                .should_receive('get_build_name')
-                .and_return('os-build-id'))
-            (build_response
-                .should_receive('get_annotations')
+        if source:
+            (flexmock(osbs.api.OSBS)
+                .should_receive('create_source_container_build')
+                .with_args(koji_task_id=koji_task_id, **create_build_args)
+                .times(0 if build_not_started else 1)
                 .and_return({}))
-
-        build_finished_response = flexmock(status='200', json={})
-        (build_finished_response
-            .should_receive('is_succeeded')
-            .and_return(True))
-        (build_finished_response
-            .should_receive('is_failed')
-            .and_return(False))
-        (build_finished_response
-            .should_receive('is_cancelled')
-            .and_return(False))
-        (build_finished_response
-            .should_receive('get_koji_build_id')
-            .and_return(koji_build_id))
-        (build_finished_response
-            .should_receive('get_repositories')
-            .and_return({'unique': ['unique-repo'], 'primary': ['primary-repo']}))
-        (build_finished_response
-            .should_receive('get_annotations')
-            .and_return({}))
-
-        osbs = flexmock()
-
-        if orchestrator:
+        else:
             if with_osbsvalidationexception:
-                (osbs
-                    .should_receive('create_orchestrator_build')
+                (flexmock(osbs.api.OSBS)
+                    .should_receive('create_binary_container_build')
                     .with_args(koji_task_id=koji_task_id, **create_build_args)
                     .times(1)
                     .and_raise(OsbsValidationException))
             else:
-                (osbs
-                    .should_receive('create_orchestrator_build')
+                (flexmock(osbs.api.OSBS)
+                    .should_receive('create_binary_container_build')
                     .with_args(koji_task_id=koji_task_id, **create_build_args)
                     .times(0 if build_not_started else 1)
-                    .and_return(build_response))
-        elif source:
-            (osbs
-                .should_receive('create_source_container_build')
-                .with_args(koji_task_id=koji_task_id, **create_build_args)
-                .times(0 if build_not_started else 1)
-                .and_return(build_response))
-        else:
-            (osbs
-                .should_receive('create_orchestrator_build')
-                .with_args(koji_task_id=koji_task_id, **create_build_args)
-                .times(0 if build_not_started else 1)
-                .and_raise(OsbsOrchestratorNotEnabled))
+                    .and_return({}))
 
-            legacy_args = create_build_args.copy()
-            legacy_args.pop('skip_build', None)
-            legacy_args.pop('platforms', None)
-            legacy_args.pop('koji_parent_build', None)
-            legacy_args.pop('isolated', None)
-            legacy_args.pop('release', None)
-            legacy_args.pop('compose_ids', None)
-            legacy_args.pop('signing_intent', None)
-            legacy_args['architecture'] = 'x86_64'
-            (osbs
-                .should_receive('create_build')
-                .with_args(koji_task_id=koji_task_id, **legacy_args)
-                .times(0 if build_not_started else 1)
-                .and_return(build_response))
-
-        (osbs
-            .should_receive('wait_for_build_to_get_scheduled')
-            .with_args('os-build-id'))
-        (osbs.should_receive('cancel_build').never)  # pylint: disable=expression-not-assigned
-        if orchestrator:
-            (osbs
-                .should_receive('get_orchestrator_build_logs')
-                .with_args(build_id='os-build-id', follow=True)
-                .and_return(logs))
-        else:
-            (osbs
-                .should_receive('get_build_logs')
-                .with_args(build_id='os-build-id', follow=True)
-                .and_return(logs))
-        (osbs
-            .should_receive('wait_for_build_to_finish')
-            .with_args('os-build-id')
-            .and_return(build_finished_response))
-
-        return osbs
+        (flexmock(osbs.api.OSBS)
+            .should_receive('get_build_logs')
+            .with_args('os-build-id', follow=True, wait=True)
+            .and_return(logs))
+        (flexmock(osbs.api.OSBS).should_receive('get_build_name').and_return('os-build-id'))
+        (flexmock(osbs.api.OSBS).should_receive('get_build').and_return({}))
+        (flexmock(osbs.api.OSBS).should_receive('get_build_reason').and_return('Succeeded'))
+        (flexmock(osbs.api.OSBS).should_receive('build_has_succeeded').and_return(True))
+        (flexmock(osbs.api.OSBS).should_receive('build_was_cancelled').and_return(False))
+        (flexmock(osbs.api.OSBS)
+            .should_receive('get_build_annotations')
+            .and_return({'repositories': {'unique': ['unique-repo'], 'primary': ['primary-repo']}}))
+        (flexmock(osbs.api.OSBS)
+            .should_receive('get_build_labels')
+            .and_return({'koji-build-id': koji_build_id}))
+        (flexmock(osbs.api.OSBS).should_receive('build_not_finished').and_return(False))
+        (flexmock(osbs.api.OSBS).should_receive('cancel_build').never())
+        (flexmock(osbs.api.OSBS)
+            .should_receive('get_build_error_message')
+            .and_return("build error"))
 
     def _mock_folders(self, tmpdir, dockerfile_content=None, additional_tags_content=None):
         if dockerfile_content is None:
@@ -602,8 +508,7 @@ class TestBuilder(object):
         ({'blocked': True}, 'is blocked for'),
         ({'blocked': False}, None),
     ))
-    @pytest.mark.parametrize('orchestrator', (True, False))
-    def test_osbs_build(self, tmpdir, pkg_info, failure, orchestrator):
+    def test_osbs_build(self, tmpdir, pkg_info, failure):
         koji_task_id = 123
         last_event_id = 456
         koji_build_id = 999
@@ -618,8 +523,7 @@ class TestBuilder(object):
                                                          params='params',
                                                          session=session,
                                                          options=options,
-                                                         workdir='workdir',
-                                                         demux=orchestrator)
+                                                         workdir='workdir')
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
@@ -627,21 +531,15 @@ class TestBuilder(object):
             .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
-        if orchestrator:
-            (flexmock(task)
-                .should_receive('_write_demultiplexed_logs'))
-        else:
-            (flexmock(task)
-                .should_receive('_write_combined_log'))
+        (flexmock(task)
+            .should_receive('_write_logs'))
 
         build_args = {'git_branch': 'working'}
-        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
-                                     src=src,
-                                     koji_task_id=koji_task_id,
-                                     orchestrator=orchestrator,
-                                     build_not_started=bool(failure),
-                                     create_build_args=deepcopy(build_args),
-                                     )
+        self._mock_osbs(koji_build_id=koji_build_id,
+                        src=src,
+                        koji_task_id=koji_task_id,
+                        build_not_started=bool(failure),
+                        create_build_args=deepcopy(build_args))
 
         if failure:
             with pytest.raises(koji.BuildError) as exc:
@@ -690,14 +588,14 @@ class TestBuilder(object):
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
         (flexmock(task)
-            .should_receive('_write_combined_log'))
+            .should_receive('_write_logs'))
 
-        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
-                                     src=None,
-                                     koji_task_id=koji_task_id,
-                                     source=True,
-                                     create_build_args=create_args.copy(),
-                                     build_not_started=bool(failure))
+        self._mock_osbs(koji_build_id=koji_build_id,
+                        src=None,
+                        koji_task_id=koji_task_id,
+                        source=True,
+                        create_build_args=create_args.copy(),
+                        build_not_started=bool(failure))
 
         if failure:
             with pytest.raises(koji.BuildError) as exc:
@@ -714,7 +612,8 @@ class TestBuilder(object):
             }
 
     @pytest.mark.parametrize('reason, expected_exc_type', [
-        ('canceled', builder_containerbuild.ContainerCancelled),
+        ('signal_cancelled', builder_containerbuild.ContainerCancelled),
+        ('build_cancelled', builder_containerbuild.ContainerCancelled),
         ('failed', builder_containerbuild.ContainerError),
     ])
     def test_createContainer_failure(self, tmpdir, reason, expected_exc_type):
@@ -739,44 +638,33 @@ class TestBuilder(object):
             .with_args(src['src'], 'build-tag')
             .and_return(folders_info['dockerfile_path']))
 
-        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
-                                     src=src,
-                                     koji_task_id=koji_task_id,
-                                     create_build_args={'git_branch': 'working'})
+        self._mock_osbs(koji_build_id=koji_build_id,
+                        src=src,
+                        koji_task_id=koji_task_id,
+                        create_build_args={'git_branch': 'working'})
 
-        build_finished_response = flexmock(status=500, json={})
-        (build_finished_response
-            .should_receive('is_succeeded')
-            .and_return(False))
-        (build_finished_response
-            .should_receive('is_cancelled')
-            .and_return(reason == 'canceled'))
-        (build_finished_response
-            .should_receive('is_failed')
-            .and_return(reason == 'failed'))
+        (flexmock(osbs.api.OSBS).should_receive('build_has_succeeded').and_return(False))
+        (flexmock(osbs.api.OSBS)
+            .should_receive('build_was_cancelled')
+            .and_return(reason == 'build_cancelled' or reason == 'signal_cancelled'))
 
-        (task._osbs
-            .should_receive('wait_for_build_to_finish')
-            .and_return(build_finished_response))
+        if reason == 'signal_cancelled':
+            task._incremental_upload_logs = \
+                lambda pid: os.kill(os.getpid(), signal.SIGINT)
+            (flexmock(osbs.api.OSBS).should_receive('cancel_build').once())
 
-        if reason == 'canceled':
-            task._osbs.wait_for_build_to_get_scheduled = \
-                lambda build_id: os.kill(os.getpid(), signal.SIGINT)
-            (task._osbs
-                .should_receive('cancel_build')
-                .once())
-            (session
-                .should_receive('cancelTask')
-                .once())
+        if reason == 'signal_cancelled' or reason == 'build_cancelled':
+            (session.should_receive('cancelTask').once())
 
         with pytest.raises(expected_exc_type):
             task.handler(src['src'], 'target', {'git_branch': 'working'})
 
     @pytest.mark.parametrize('reason, expected_exc_type', [
-        ('canceled', builder_containerbuild.ContainerCancelled),
+        ('signal_cancelled', builder_containerbuild.ContainerCancelled),
+        ('build_cancelled', builder_containerbuild.ContainerCancelled),
         ('failed', builder_containerbuild.ContainerError),
     ])
-    def test_createSourceContainer_failure_source(self, tmpdir, reason, expected_exc_type):
+    def test_createSourceContainer_failure_source(self, reason, expected_exc_type):
         koji_task_id = 123
         last_event_id = 456
         koji_build_id = 999
@@ -785,9 +673,7 @@ class TestBuilder(object):
         session = self._mock_session(last_event_id, koji_task_id)
         build_json = {'build_id': 12345, 'nvr': 'build_nvr', 'name': 'source_package',
                       'extra': {'image': {}, 'operator-manifests': {}}}
-        (session
-            .should_receive('getBuild')
-            .and_return(build_json))
+        (session.should_receive('getBuild').and_return(build_json))
         (session
             .should_receive('getPackageConfig')
             .with_args('dest-tag', 'source_package-source')
@@ -801,36 +687,24 @@ class TestBuilder(object):
                                                                options=options,
                                                                workdir='workdir')
 
-        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
-                                     src=None,
-                                     koji_task_id=koji_task_id,
-                                     source=True,
-                                     create_build_args=create_args.copy())
+        self._mock_osbs(koji_build_id=koji_build_id,
+                        src=None,
+                        koji_task_id=koji_task_id,
+                        source=True,
+                        create_build_args=create_args.copy())
 
-        build_finished_response = flexmock(status=500, json={})
-        (build_finished_response
-            .should_receive('is_succeeded')
-            .and_return(False))
-        (build_finished_response
-            .should_receive('is_cancelled')
-            .and_return(reason == 'canceled'))
-        (build_finished_response
-            .should_receive('is_failed')
-            .and_return(reason == 'failed'))
+        (flexmock(osbs.api.OSBS).should_receive('build_has_succeeded').and_return(False))
+        (flexmock(osbs.api.OSBS)
+            .should_receive('build_was_cancelled')
+            .and_return(reason == 'build_cancelled' or reason == 'signal_cancelled'))
 
-        (task._osbs
-            .should_receive('wait_for_build_to_finish')
-            .and_return(build_finished_response))
+        if reason == 'signal_cancelled':
+            task._incremental_upload_logs = \
+                lambda pid: os.kill(os.getpid(), signal.SIGINT)
+            (flexmock(osbs.api.OSBS).should_receive('cancel_build').once())
 
-        if reason == 'canceled':
-            task._osbs.wait_for_build_to_get_scheduled = \
-                lambda build_id: os.kill(os.getpid(), signal.SIGINT)
-            (task._osbs
-                .should_receive('cancel_build')
-                .once())
-            (session
-                .should_receive('cancelTask')
-                .once())
+        if reason == 'signal_cancelled' or reason == 'build_cancelled':
+            (session.should_receive('cancelTask').once())
 
         with pytest.raises(expected_exc_type):
             task.handler('target', create_args)
@@ -852,8 +726,7 @@ class TestBuilder(object):
                                                          params='params',
                                                          session=session,
                                                          options={},
-                                                         workdir=str(tmpdir),
-                                                         demux=True)
+                                                         workdir=str(tmpdir))
         with pytest.raises(koji.BuildError) as exc:
             task.handler(src['src'], 'target', opts={'git_branch': 'working'})
         assert "Target `target` not found" in str(exc.value)
@@ -869,8 +742,7 @@ class TestBuilder(object):
                                                          params='params',
                                                          session=session,
                                                          options={},
-                                                         workdir=str(tmpdir),
-                                                         demux=True)
+                                                         workdir=str(tmpdir))
         with pytest.raises(koji.BuildError) as exc:
             task.handler(src['src'], 'target', opts={})
         assert "Git branch must be specified" in str(exc.value)
@@ -886,8 +758,7 @@ class TestBuilder(object):
                                                          params='params',
                                                          session=session,
                                                          options={},
-                                                         workdir=str(tmpdir),
-                                                         demux=True)
+                                                         workdir=str(tmpdir))
         with pytest.raises(koji.BuildError) as exc:
             task.handler(src['src'], 'target', opts={'scratch': True, 'isolated': True,
                                                      'git_branch': 'working'})
@@ -957,8 +828,7 @@ class TestBuilder(object):
                                                          params='params',
                                                          session=session,
                                                          options=options,
-                                                         workdir=str(tmpdir),
-                                                         demux=True)
+                                                         workdir=str(tmpdir))
         (flexmock(task)
             .should_receive('getUploadDir')
             .and_return(str(tmpdir)))
@@ -975,7 +845,6 @@ class TestBuilder(object):
         task.fetchDockerfile(source, 'build_tag')
 
     @pytest.mark.parametrize('log_upload_raises', (True, False))
-    @pytest.mark.parametrize('orchestrator', (True, False))
     @pytest.mark.parametrize('additional_args', (
         {'koji_parent_build': 'fedora-26-99'},
         {'scratch': True},
@@ -983,12 +852,8 @@ class TestBuilder(object):
         {'isolated': True},
         {'isolated': False},
         {'release': '13'},
-        {'skip_build': True},
-        {'skip_build': False},
-        {'triggered_after_koji_task': 12345},
-        {'triggered_after_koji_task': 0},
     ))
-    def test_additional_args(self, tmpdir, log_upload_raises, orchestrator, additional_args):
+    def test_additional_args(self, tmpdir, log_upload_raises, additional_args):
         koji_task_id = 123
         last_event_id = 456
         koji_build_id = 999
@@ -1003,8 +868,7 @@ class TestBuilder(object):
                                                          params='params',
                                                          session=session,
                                                          options=options,
-                                                         workdir='workdir',
-                                                         demux=orchestrator)
+                                                         workdir='workdir')
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
@@ -1012,12 +876,8 @@ class TestBuilder(object):
             .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
-        if orchestrator:
-            (flexmock(task)
-                .should_receive('_write_demultiplexed_logs'))
-        else:
-            (flexmock(task)
-                .should_receive('_write_combined_log'))
+        (flexmock(task)
+            .should_receive('_write_logs'))
 
         if log_upload_raises:
             (flexmock(task)
@@ -1029,25 +889,17 @@ class TestBuilder(object):
 
         build_args = deepcopy(additional_args)
         build_args['git_branch'] = 'working'
-        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
-                                     src=src,
-                                     koji_task_id=koji_task_id,
-                                     orchestrator=orchestrator,
-                                     create_build_args=deepcopy(build_args))
+        self._mock_osbs(koji_build_id=koji_build_id,
+                        src=src,
+                        koji_task_id=koji_task_id,
+                        create_build_args=deepcopy(build_args))
 
         task_response = task.handler(src['src'], 'target', opts=build_args)
 
-        if orchestrator and build_args.get('skip_build', None):
-            assert task_response == {
-                'repositories': [],
-                'koji_builds': [],
-                'build': 'skipped'
-            }
-        else:
-            assert task_response == {
-                'repositories': ['unique-repo', 'primary-repo'],
-                'koji_builds': [koji_build_id]
-            }
+        assert task_response == {
+            'repositories': ['unique-repo', 'primary-repo'],
+            'koji_builds': [koji_build_id]
+        }
 
     @pytest.mark.parametrize('log_upload_raises', (True, False))
     @pytest.mark.parametrize('additional_args', (
@@ -1089,7 +941,7 @@ class TestBuilder(object):
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
         (flexmock(task)
-            .should_receive('_write_combined_log'))
+            .should_receive('_write_logs'))
 
         if log_upload_raises:
             (flexmock(task)
@@ -1099,11 +951,11 @@ class TestBuilder(object):
             (flexmock(task)
                 .should_call('_incremental_upload_logs'))
 
-        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
-                                     src=None,
-                                     koji_task_id=koji_task_id,
-                                     source=True,
-                                     create_build_args=additional_args.copy())
+        self._mock_osbs(koji_build_id=koji_build_id,
+                        src=None,
+                        koji_task_id=koji_task_id,
+                        source=True,
+                        create_build_args=additional_args.copy())
 
         task_response = task.handler('target', opts=additional_args)
 
@@ -1141,19 +993,18 @@ class TestBuilder(object):
             'git_branch': 'working',
         }
 
-        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
-                                     src=src,
-                                     koji_task_id=task_id,
-                                     orchestrator=True,
-                                     create_build_args=deepcopy(additional_args),
-                                     build_not_started=False)
+        self._mock_osbs(koji_build_id=koji_build_id,
+                        src=src,
+                        koji_task_id=task_id,
+                        create_build_args=deepcopy(additional_args),
+                        build_not_started=False)
+
         task_response = task.handler(src['src'], 'target', opts=additional_args)
         assert task_response == {
             'repositories': ['unique-repo', 'primary-repo'],
             'koji_builds': [koji_build_id]
         }
 
-    @pytest.mark.parametrize('orchestrator', (True, False))
     @pytest.mark.parametrize(('tag', 'release', 'is_oversized'), (
         ('t', None, False),
         ('t'*128, None, False),
@@ -1162,7 +1013,7 @@ class TestBuilder(object):
         (None, '1'*125, False),  # Assumes '25-' prefix for {version}-{release} tag
         (None, '1'*126, True),  # Assumes '25-' prefix for {version}-{release} tag
     ))
-    def test_oversized_tags(self, tmpdir, orchestrator, tag, release, is_oversized):
+    def test_oversized_tags(self, tmpdir, tag, release, is_oversized):
         koji_task_id = 123
         last_event_id = 456
         koji_build_id = 999
@@ -1177,8 +1028,7 @@ class TestBuilder(object):
                                                          params='params',
                                                          session=session,
                                                          options=options,
-                                                         workdir='workdir',
-                                                         demux=orchestrator)
+                                                         workdir='workdir')
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
@@ -1186,22 +1036,17 @@ class TestBuilder(object):
             .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
-        if orchestrator:
-            (flexmock(task)
-                .should_receive('_write_demultiplexed_logs'))
-        else:
-            (flexmock(task)
-                .should_receive('_write_combined_log'))
+        (flexmock(task)
+            .should_receive('_write_logs'))
 
         additional_args = {'git_branch': 'working'}
         if release:
             additional_args['release'] = release
-        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
-                                     src=src,
-                                     koji_task_id=koji_task_id,
-                                     orchestrator=orchestrator,
-                                     create_build_args=additional_args.copy(),
-                                     build_not_started=is_oversized)
+        self._mock_osbs(koji_build_id=koji_build_id,
+                        src=src,
+                        koji_task_id=koji_task_id,
+                        create_build_args=additional_args.copy(),
+                        build_not_started=is_oversized)
 
         if is_oversized:
             with pytest.raises(koji.BuildError) as exc_info:
@@ -1216,46 +1061,28 @@ class TestBuilder(object):
                 'koji_builds': [koji_build_id]
             }
 
-    @pytest.mark.parametrize('orchestrator', (True, False))
-    @pytest.mark.parametrize(('build_state', 'triggered_after_koji_task',
-                              'skip_build', 'build_fails'), (
-        ('COMPLETE', True, True, False),
-        ('COMPLETE', True, False, False),
-        ('COMPLETE', False, True, False),
-        ('COMPLETE', False, False, True),
-
-        ('FAILED', True, True, False),
-        ('FAILED', True, False, False),
-        ('FAILED', False, True, False),
-        ('FAILED', False, False, False),
-
-        ('CANCELED', True, True, False),
-        ('CANCELED', True, False, False),
-        ('CANCELED', False, True, False),
-        ('CANCELED', False, False, False),
+    @pytest.mark.parametrize(('build_state', 'build_fails'), (
+        ('COMPLETE', True),
+        ('FAILED', False),
+        ('CANCELED', False),
     ))
     @pytest.mark.parametrize(('df_release', 'param_release', 'expected'), (
         ('10', '11', '11'),
         (None, '11', '11'),
         ('10', None, '10'),
     ))
-    def test_build_nvr_exists(self, tmpdir, orchestrator, build_state, triggered_after_koji_task,
-                              skip_build, build_fails, df_release, param_release, expected):
+    def test_build_nvr_exists(self, tmpdir, build_state, build_fails, df_release,
+                              param_release, expected):
         koji_task_id = 123
         last_event_id = 456
         koji_build_id = 999
 
         session = self._mock_session(last_event_id, koji_task_id)
 
-        if triggered_after_koji_task or skip_build:
-            (session
-                .should_receive('getBuild')
-                .never())
-        else:
-            (session
-                .should_receive('getBuild')
-                .with_args('fedora-docker-25-%s' % expected)
-                .and_return({'id': last_event_id, 'state': koji.BUILD_STATES[build_state]}))
+        (session
+            .should_receive('getBuild')
+            .with_args('fedora-docker-25-%s' % expected)
+            .and_return({'id': last_event_id, 'state': koji.BUILD_STATES[build_state]}))
 
         dockerfile_content = dedent("""\
             FROM fedora
@@ -1276,8 +1103,7 @@ class TestBuilder(object):
                                                          params='params',
                                                          session=session,
                                                          options=options,
-                                                         workdir='workdir',
-                                                         demux=orchestrator)
+                                                         workdir='workdir')
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
@@ -1285,27 +1111,18 @@ class TestBuilder(object):
             .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
-        if orchestrator:
-            (flexmock(task)
-                .should_receive('_write_demultiplexed_logs'))
-        else:
-            (flexmock(task)
-                .should_receive('_write_combined_log'))
+        (flexmock(task)
+            .should_receive('_write_logs'))
 
         additional_args = {'git_branch': 'working'}
         if param_release:
             additional_args['release'] = param_release
-        if triggered_after_koji_task:
-            additional_args['triggered_after_koji_task'] = 12345
-        if skip_build:
-            additional_args['skip_build'] = True
 
-        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
-                                     src=src,
-                                     koji_task_id=koji_task_id,
-                                     orchestrator=orchestrator,
-                                     create_build_args=additional_args.copy(),
-                                     build_not_started=build_fails)
+        self._mock_osbs(koji_build_id=koji_build_id,
+                        src=src,
+                        koji_task_id=koji_task_id,
+                        create_build_args=additional_args.copy(),
+                        build_not_started=build_fails)
 
         if build_fails:
             with pytest.raises(koji.BuildError) as exc_info:
@@ -1390,14 +1207,14 @@ class TestBuilder(object):
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
         (flexmock(task)
-            .should_receive('_write_combined_log'))
+            .should_receive('_write_logs'))
 
-        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
-                                     src=None,
-                                     koji_task_id=koji_task_id,
-                                     source=True,
-                                     create_build_args=create_args.copy(),
-                                     build_not_started=True)
+        self._mock_osbs(koji_build_id=koji_build_id,
+                        src=None,
+                        koji_task_id=koji_task_id,
+                        source=True,
+                        create_build_args=create_args.copy(),
+                        build_not_started=True)
 
         with pytest.raises(koji.BuildError) as exc_info:
             task.handler('target', opts=create_args)
@@ -1425,8 +1242,7 @@ class TestBuilder(object):
                                                          params='params',
                                                          session=session,
                                                          options=options,
-                                                         workdir='workdir',
-                                                         demux=True)
+                                                         workdir='workdir')
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
@@ -1435,16 +1251,15 @@ class TestBuilder(object):
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
         (flexmock(task)
-            .should_receive('_write_demultiplexed_logs'))
+            .should_receive('_write_logs'))
 
         build_args = deepcopy(additional_args)
         build_args['git_branch'] = 'working'
-        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
-                                     src=src,
-                                     koji_task_id=koji_task_id,
-                                     orchestrator=True,
-                                     build_not_started=raises,
-                                     create_build_args=deepcopy(build_args))
+        self._mock_osbs(koji_build_id=koji_build_id,
+                        src=src,
+                        koji_task_id=koji_task_id,
+                        build_not_started=raises,
+                        create_build_args=deepcopy(build_args))
 
         if raises:
             with pytest.raises(koji.BuildError):
@@ -1457,7 +1272,6 @@ class TestBuilder(object):
                 'koji_builds': [koji_build_id]
             }
 
-    @pytest.mark.parametrize('orchestrator', (True, False))
     @pytest.mark.parametrize(('additional_args', 'raises'), (
         ({'scratch': True, 'arch_override': 'x86_64'}, False),
         ({'scratch': True, 'arch_override': ''}, False),
@@ -1476,7 +1290,7 @@ class TestBuilder(object):
         ({'scratch': False, 'isolated': False, 'arch_override': 'x86_64'}, True),
         ({'scratch': False, 'isolated': False, 'arch_override': ''}, False),
     ))
-    def test_arch_override(self, tmpdir, orchestrator, additional_args, raises):
+    def test_arch_override(self, tmpdir, additional_args, raises):
         koji_task_id = 123
         last_event_id = 456
         koji_build_id = 999
@@ -1491,8 +1305,7 @@ class TestBuilder(object):
                                                          params='params',
                                                          session=session,
                                                          options=options,
-                                                         workdir='workdir',
-                                                         demux=orchestrator)
+                                                         workdir='workdir')
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
@@ -1500,21 +1313,16 @@ class TestBuilder(object):
             .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
-        if orchestrator:
-            (flexmock(task)
-                .should_receive('_write_demultiplexed_logs'))
-        else:
-            (flexmock(task)
-                .should_receive('_write_combined_log'))
+        (flexmock(task)
+            .should_receive('_write_logs'))
 
         build_args = deepcopy(additional_args)
         build_args['git_branch'] = 'working'
-        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
-                                     src=src,
-                                     koji_task_id=koji_task_id,
-                                     orchestrator=orchestrator,
-                                     build_not_started=raises,
-                                     create_build_args=deepcopy(build_args))
+        self._mock_osbs(koji_build_id=koji_build_id,
+                        src=src,
+                        koji_task_id=koji_task_id,
+                        build_not_started=raises,
+                        create_build_args=deepcopy(build_args))
 
         if raises:
             with pytest.raises(koji.BuildError):
@@ -1603,7 +1411,6 @@ class TestBuilder(object):
         ('yum_repourls', ['some.url', 1], ['string']),
 
         ('git_branch', 123, ['string', 'null']),
-        ('push_url', 123, ['string', 'null']),
         ('koji_parent_build', 123, ['string', 'null']),
         ('release', 123, ['string', 'null']),
 
@@ -1683,7 +1490,6 @@ class TestBuilder(object):
           'dependency_replacements': None,
           'yum_repourls': None,
           'git_branch': 'working',
-          'push_url': None,
           'koji_parent_build': None,
           'release': None,
           'flatpak': False,
@@ -1696,7 +1502,6 @@ class TestBuilder(object):
           'dependency_replacements': ['gomod:foo/bar:1', 'gomod:foo/baz:2'],
           'yum_repourls': ['url.1', 'url.2'],
           'git_branch': 'working',
-          'push_url': 'here.please',
           'koji_parent_build': 'some-or-other',
           'release': 'v8',
           'flatpak': False,
@@ -1806,9 +1611,7 @@ class TestBuilder(object):
                                                         options='options')
         flexmock(cct).should_receive('getUploadPath').and_return(tmpdir.strpath)
 
-        build_result = flexmock()
-        build_result.should_receive('get_annotations').and_return(annotations)
-        cct.upload_build_annotations(build_result)
+        cct.upload_build_annotations(annotations)
         whitelist = annotations.get('koji_task_annotations_whitelist')
         if whitelist:
             whitelist = json.loads(whitelist)
@@ -1835,7 +1638,6 @@ class TestBuilder(object):
                   name="osbs-test/reject-hyphen-in-version-label" \
                   version="reject-hyphen.in.version.label"
         """
-        orchestrator = True
         folder_info = self._mock_folders(str(tmpdir),
                                          dockerfile_content=df_content)
         koji_task_id = 123
@@ -1853,8 +1655,7 @@ class TestBuilder(object):
                                                          params='params',
                                                          session=session,
                                                          options=options,
-                                                         workdir='workdir',
-                                                         demux=orchestrator)
+                                                         workdir='workdir')
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
@@ -1862,30 +1663,25 @@ class TestBuilder(object):
             .and_return(folder_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
-        if orchestrator:
-            (flexmock(task)
-                .should_receive('_write_demultiplexed_logs'))
-        else:
-            (flexmock(task)
-                .should_receive('_write_combined_log'))
+        (flexmock(task)
+            .should_receive('_write_logs'))
 
         build_args = {'git_branch': 'working'}
-        task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
-                                     src=src,
-                                     koji_task_id=koji_task_id,
-                                     orchestrator=orchestrator,
-                                     create_build_args=deepcopy(build_args),
-                                     with_osbsvalidationexception=True
-                                     )
+        self._mock_osbs(koji_build_id=koji_build_id,
+                        src=src,
+                        koji_task_id=koji_task_id,
+                        create_build_args=deepcopy(build_args),
+                        with_osbsvalidationexception=True)
         with pytest.raises(builder_containerbuild.ContainerError):
             task.handler(src['src'], 'target', opts=build_args)
 
     def test_user_warnings(self, tmpdir):
         log_entries = [
-            LogEntry(None, 'orchestrator'),
-            LogEntry(None, 'log - USER_WARNING - {"message": "message"}'),
-            LogEntry('x86_64', 'log - USER_WARNING - {"message": "message"}'),
-            LogEntry('x86_64', 'log - USER_WARNING - {"message": "another_message"}')
+            'normal log',
+            'log - USER_WARNING - {"message": "message"}',
+            'log - USER_WARNING - {"message": "message"}',
+            'log - USER_WARNING - {"message": "another_message"}',
+            'another log',
         ]
 
         koji_task_id = 123
@@ -1904,8 +1700,7 @@ class TestBuilder(object):
                                                          params='params',
                                                          session=session,
                                                          options=options,
-                                                         workdir=str(tmpdir),
-                                                         demux=True)
+                                                         workdir=str(tmpdir))
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
@@ -1913,20 +1708,14 @@ class TestBuilder(object):
             .and_return(folders_info['dockerfile_path']))
 
         build_args = {'git_branch': 'working'}
-        osbs = self._mock_osbs(koji_build_id=koji_build_id,
-                               src=src,
-                               koji_task_id=koji_task_id,
-                               orchestrator=True,
-                               create_build_args=deepcopy(build_args),
-                               )
-        task.osbs = osbs
+        self._mock_osbs(koji_build_id=koji_build_id,
+                        src=src,
+                        koji_task_id=koji_task_id,
+                        create_build_args=deepcopy(build_args))
 
-        (flexmock(task)
-            .should_receive('osbs')
-            .and_return(osbs))
-        (osbs
-            .should_receive('get_orchestrator_build_logs')
-            .with_args(build_id='os-build-id', follow=True)
+        (flexmock(osbs.api.OSBS)
+            .should_receive('get_build_logs')
+            .with_args('os-build-id', follow=True, wait=True)
             .and_return(log_entries))
 
         task_response = task.handler(src['src'], 'target', opts=build_args)
@@ -1937,10 +1726,11 @@ class TestBuilder(object):
 
     def test_user_warnings_source(self, tmpdir):
         log_entries = [
-            LogEntry(None, 'orchestrator'),
-            LogEntry(None, 'log - USER_WARNING - {"message": "message"}'),
-            LogEntry('x86_64', 'log - USER_WARNING - {"message": "message"}'),
-            LogEntry('x86_64', 'log - USER_WARNING - {"message": "another_message"}')
+            'normal log',
+            'log - USER_WARNING - {"message": "message"}',
+            'log - USER_WARNING - {"message": "message"}',
+            'log - USER_WARNING - {"message": "another_message"}',
+            'another log',
         ]
 
         koji_task_id = 123
@@ -1965,23 +1755,18 @@ class TestBuilder(object):
                                                                params='params',
                                                                session=session,
                                                                options=options,
-                                                               workdir=str(tmpdir),
-                                                               demux=True)
+                                                               workdir=str(tmpdir))
 
-        osbs = self._mock_osbs(koji_build_id=koji_build_id,
-                               src=None,
-                               koji_task_id=koji_task_id,
-                               source=True,
-                               create_build_args=create_args.copy(),
-                               build_not_started=False)
-        task.osbs = osbs
+        self._mock_osbs(koji_build_id=koji_build_id,
+                        src=None,
+                        koji_task_id=koji_task_id,
+                        source=True,
+                        create_build_args=create_args.copy(),
+                        build_not_started=False)
 
-        (flexmock(task)
-            .should_receive('osbs')
-            .and_return(osbs))
-        (osbs
-            .should_receive('get_orchestrator_build_logs')
-            .with_args(build_id='os-build-id', follow=True)
+        (flexmock(osbs.api.OSBS)
+            .should_receive('get_build_logs')
+            .with_args('os-build-id', follow=True, wait=True)
             .and_return(log_entries))
 
         task_response = task.handler('target', opts=create_args)

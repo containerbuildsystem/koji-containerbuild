@@ -441,7 +441,9 @@ class BaseContainerTask(BaseTaskHandler):
 
     def _get_repositories(self, annotations):
         repositories = []
-        repo_dict = annotations.get('repositories')
+        repo_str = annotations.get('repositories', '{}')
+        repo_dict = json.loads(repo_str)
+
         if repo_dict:
             for repos in repo_dict.values():
                 repositories.extend(repos)

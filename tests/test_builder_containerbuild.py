@@ -107,7 +107,7 @@ class TestBuilder(object):
         for repo in repos.values():
             repositories.extend(repo)
 
-        assert set(cct._get_repositories({'repositories': repos})) == set(repositories)
+        assert set(cct._get_repositories({'repositories': json.dumps(repos)})) == set(repositories)
 
     def _check_logfiles(self, log_entries, logs_dir):
         def check_meta_entry(filename):
@@ -353,9 +353,10 @@ class TestBuilder(object):
         (flexmock(osbs.api.OSBS).should_receive('get_build_reason').and_return('Succeeded'))
         (flexmock(osbs.api.OSBS).should_receive('build_has_succeeded').and_return(True))
         (flexmock(osbs.api.OSBS).should_receive('build_was_cancelled').and_return(False))
+        repos_str = '{"unique": ["unique-repo"], "primary": ["primary-repo"]}'
         (flexmock(osbs.api.OSBS)
             .should_receive('get_build_annotations')
-            .and_return({'repositories': {'unique': ['unique-repo'], 'primary': ['primary-repo']}}))
+            .and_return({'repositories': repos_str}))
         (flexmock(osbs.api.OSBS)
             .should_receive('get_build_labels')
             .and_return({'koji-build-id': koji_build_id}))

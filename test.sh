@@ -72,7 +72,7 @@ function setup_kojic() {
   # from specified git source (default: upstream master)
   $RUN rm -rf /tmp/osbs-client
   $RUN git clone --depth 1 --single-branch \
-       https://github.com/projectatomic/osbs-client --branch master /tmp/osbs-client
+       https://github.com/projectatomic/osbs-client --branch osbs_ocp3 /tmp/osbs-client
   # RPM install build dependencies for osbs-client
   $RUN "${BUILDDEP[@]}" --define "with_python3 ${WITH_PY3}" -y /tmp/osbs-client/osbs-client.spec
 
@@ -87,7 +87,7 @@ function setup_kojic() {
   # This will also ensure all the deps are specified in the spec
   # Pip install osbs-client from git master
   $RUN "${PIP_INST[@]}" --upgrade --no-deps --force-reinstall \
-      git+https://github.com/projectatomic/osbs-client
+      git+https://github.com/projectatomic/osbs-client.git@osbs_ocp3
   # Pip install dockerfile-parse from git master
   $RUN "${PIP_INST[@]}" --upgrade --force-reinstall \
       git+https://github.com/containerbuildsystem/dockerfile-parse

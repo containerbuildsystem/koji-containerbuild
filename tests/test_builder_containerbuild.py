@@ -359,6 +359,9 @@ class TestBuilder(object):
         if not create_build_args.get('signing_intent'):
             create_build_args.pop('signing_intent', None)
 
+        if not create_build_args.get('userdata'):
+            create_build_args.pop('userdata', None)
+
         skip_build = True
         if not create_build_args.get('skip_build'):
             create_build_args.pop('skip_build', None)
@@ -987,6 +990,8 @@ class TestBuilder(object):
         {'skip_build': False},
         {'triggered_after_koji_task': 12345},
         {'triggered_after_koji_task': 0},
+        {'userdata': {'custom': 'userdata'}},
+        {'userdata': {}},
     ))
     def test_additional_args(self, tmpdir, log_upload_raises, orchestrator, additional_args):
         koji_task_id = 123
@@ -1059,6 +1064,8 @@ class TestBuilder(object):
         {'signing_intent': 'some intent', 'koji_build_nvr': 'build_nvr'},
         {'signing_intent': 'some intent', 'koji_build_nvr': 'build_nvr', 'koji_build_id': 12345},
         {'koji_build_nvr': 'build_nvr', 'koji_build_id': 12345},
+        {'userdata': {'custom': 'userdata'}, 'koji_build_id': 12345},
+        {'userdata': {}, 'koji_build_id': 12345},
     ))
     def test_additional_args_source(self, log_upload_raises, additional_args):
         koji_task_id = 123

@@ -314,8 +314,9 @@ class TestCLI(object):
         (None, 12345, 'build_nvr'),
         (True, 12345, 'build_nvr'),
     ))
+    @pytest.mark.parametrize('userdata', [None, {'custom': 'userdata'}])
     def test_cli_source_args(self, wait, quiet, channel_override,
-                             signing_intent, scratch, koji_build_id, koji_build_nvr):
+                             signing_intent, scratch, koji_build_id, koji_build_nvr, userdata):
         options = flexmock(allowed_scms='pkgs.example.com:/*:no')
         options.quiet = False
         test_args = ['test']
@@ -352,6 +353,11 @@ class TestCLI(object):
             test_args.append('--signing-intent')
             test_args.append(signing_intent)
             expected_opts['signing_intent'] = signing_intent
+
+        if userdata:
+            test_args.append('--userdata')
+            test_args.append(json.dumps(userdata))
+            expected_opts['userdata'] = userdata
 
         build_opts, parsed_args, opts, _ = parse_source_arguments(options, test_args)
         expected_quiet = quiet or options.quiet

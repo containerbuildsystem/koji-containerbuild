@@ -211,6 +211,8 @@ def parse_source_arguments(options, args):
     parser.add_option("--koji-build-nvr",
                       help=_("Koji build nvr for sources, "
                              "is required or koji-build-id is provided"))
+    parser.add_option("--userdata",
+                      help=_("JSON dictionary of user defined custom metadata"))
 
     build_opts, args = parser.parse_args(args)
 
@@ -221,12 +223,14 @@ def parse_source_arguments(options, args):
         parser.error(_("at least one of --koji-build-id and --koji-build-nvr has to be specified"))
 
     opts = {}
-    keys = ('scratch', 'signing_intent', 'koji_build_id', 'koji_build_nvr')
+    keys = ('scratch', 'signing_intent', 'koji_build_id', 'koji_build_nvr', 'userdata')
 
     for key in keys:
         val = getattr(build_opts, key)
         if val is not None:
             opts[key] = val
+            if key == 'userdata':
+                opts[key] = json.loads(val)
     # create the parser in this function and return it to
     # simplify the unit test cases
     return build_opts, args, opts, parser

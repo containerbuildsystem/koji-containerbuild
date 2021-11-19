@@ -684,7 +684,8 @@ class BuildContainerTask(BaseContainerTask):
                         scratch=None, isolated=None, yum_repourls=None,
                         branch=None, koji_parent_build=None, release=None,
                         flatpak=False, signing_intent=None, compose_ids=None,
-                        dependency_replacements=None, operator_csv_modifications_url=None):
+                        dependency_replacements=None, operator_csv_modifications_url=None,
+                        userdata=None):
         if not yum_repourls:
             yum_repourls = []
 
@@ -722,6 +723,8 @@ class BuildContainerTask(BaseContainerTask):
             create_build_args['flatpak'] = True
         if operator_csv_modifications_url:
             create_build_args['operator_csv_modifications_url'] = operator_csv_modifications_url
+        if userdata:
+            create_build_args['userdata'] = userdata
         if signing_intent:
             create_build_args['signing_intent'] = signing_intent
         if compose_ids:
@@ -919,6 +922,7 @@ class BuildContainerTask(BaseContainerTask):
             signing_intent=opts.get('signing_intent', None),
             compose_ids=opts.get('compose_ids', None),
             operator_csv_modifications_url=opts.get('operator_csv_modifications_url'),
+            userdata=opts.get('userdata', None),
         )
 
         result = self.createContainer(**kwargs)
@@ -984,6 +988,10 @@ class BuildSourceContainerTask(BaseContainerTask):
                         "possible names, see REACTOR_CONFIG in "
                         "orchestrator.log."
                     },
+                    "userdata": {
+                        "type": "object",
+                        "description": "User defined dictionary containing custom metadata",
+                    },
                 },
                 "anyOf": [
                     {"required": ["koji_build_nvr"]},
@@ -1001,7 +1009,8 @@ class BuildSourceContainerTask(BaseContainerTask):
         self.event_id = None
 
     def createSourceContainer(self, target_info=None, scratch=None, component=None,
-                              koji_build_id=None, koji_build_nvr=None, signing_intent=None):
+                              koji_build_id=None, koji_build_nvr=None, signing_intent=None,
+                              userdata=None):
         this_task = self.session.getTaskInfo(self.id)
         self.logger.debug("This task: %r", this_task)
         owner_info = self.session.getUser(this_task['owner'])
@@ -1019,6 +1028,8 @@ class BuildSourceContainerTask(BaseContainerTask):
 
         if signing_intent:
             create_build_args['signing_intent'] = signing_intent
+        if userdata:
+            create_build_args['userdata'] = userdata
 
         try:
             create_method = self.osbs().create_source_container_build
@@ -1090,6 +1101,7 @@ class BuildSourceContainerTask(BaseContainerTask):
             koji_build_id=build_id,
             koji_build_nvr=build_nvr,
             signing_intent=opts.get('signing_intent', None),
+            userdata=opts.get('userdata', None),
         )
 
         result = self.createSourceContainer(**kwargs)

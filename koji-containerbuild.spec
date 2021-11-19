@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.14.0
+Version:        0.15.0
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -161,6 +161,10 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Fri Nov 19 2021 Robert Cerven <rcerven@redhat.com> 0.15.0-1
+- pass userdata to osbs-client and also add it for source builds
+  (rcerven@redhat.com)
+
 * Tue Nov 16 2021 Robert Cerven <rcerven@redhat.com> 0.14.0-1
 - test should use osbs_ocp3 branch for osbs-client (rcerven@redhat.com)
 - RPM: Fix py3 dependency (rcerven@redhat.com)

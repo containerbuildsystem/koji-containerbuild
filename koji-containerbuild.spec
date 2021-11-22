@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        0.15.0
+Version:        0.16.0
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -161,6 +161,9 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Mon Nov 22 2021 Robert Cerven <rcerven@redhat.com> 0.16.0-1
+- allow isolated flatpak (rcerven@redhat.com)
+
 * Fri Nov 19 2021 Robert Cerven <rcerven@redhat.com> 0.15.0-1
 - pass userdata to osbs-client and also add it for source builds
   (rcerven@redhat.com)

@@ -865,24 +865,23 @@ class BuildContainerTask(BaseContainerTask):
         archlist = self.getArchList(build_tag)
 
         flatpak = opts.get('flatpak', False)
+        release_overwrite = opts.get('release')
+
         if flatpak:
             if not osbs_flatpak_support:
                 raise koji.BuildError("osbs-client on koji builder doesn't have Flatpak support")
-            release_overwrite = None
+
+            expected_nvr = None
         else:
             label_overwrites = {}
-            release_overwrite = opts.get('release')
             if release_overwrite:
                 label_overwrites = {LABEL_NAME_MAP['RELEASE'][0]: release_overwrite}
             component, expected_nvr = self.checkLabels(src, label_overwrites=label_overwrites,
                                                        build_tag=build_tag)
 
-        # scratch builds do not get imported, and consequently not tagged
-        if not self.opts.get('scratch') and not flatpak:
-            self.check_whitelist(component, target_info)
-
-        if flatpak:
-            expected_nvr = None
+            # scratch builds do not get imported, and consequently not tagged
+            if not self.opts.get('scratch'):
+                self.check_whitelist(component, target_info)
 
         if not SCM.is_scm_url(src):
             raise koji.BuildError('Invalid source specification: %s' % src)

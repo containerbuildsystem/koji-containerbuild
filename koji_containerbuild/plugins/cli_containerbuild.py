@@ -72,9 +72,8 @@ def parse_arguments(options, args, flatpak):
     parser = OptionParser(usage=usage)
     parser.add_option("--scratch", action="store_true",
                       help=_("Perform a scratch build"))
-    if not flatpak:
-        parser.add_option("--isolated", action="store_true",
-                          help=_("Perform an isolated build"))
+    parser.add_option("--isolated", action="store_true",
+                      help=_("Perform an isolated build"))
     parser.add_option("--arch-override",
                       help=_("Requires --scratch or --isolated. Limit a build to "
                              "the specified arches. Comma or space separated."))
@@ -114,12 +113,10 @@ def parse_arguments(options, args, flatpak):
                       action='store', default=None,
                       dest='operator_csv_modifications_url', metavar='URL',
                       )
-
-    if not flatpak:
-        parser.add_option("--release",
-                          help=_("Set release value"))
-        parser.add_option("--koji-parent-build",
-                          help=_("Overwrite parent image with image from koji build"))
+    parser.add_option("--release",
+                      help=_("Set release value"))
+    parser.add_option("--koji-parent-build",
+                      help=_("Overwrite parent image with image from koji build"))
     build_opts, args = parser.parse_args(args)
     if len(args) != 2:
         parser.error(_("Exactly two arguments (a build target and a SCM URL) "
@@ -152,15 +149,14 @@ def parse_arguments(options, args, flatpak):
         parser.error(_("git-branch must be specified"))
 
     keys = ('scratch', 'yum_repourls', 'git_branch', 'signing_intent', 'compose_ids',
-            'userdata', 'dependency_replacements', 'operator_csv_modifications_url')
+            'userdata', 'dependency_replacements', 'operator_csv_modifications_url', 'release',
+            'isolated', 'koji_parent_build')
 
     if flatpak:
         opts['flatpak'] = True
-    else:
-        if build_opts.isolated and build_opts.scratch:
-            parser.error(_("Build cannot be both isolated and scratch"))
 
-        keys += ('release', 'isolated', 'koji_parent_build')
+    if build_opts.isolated and build_opts.scratch:
+        parser.error(_("Build cannot be both isolated and scratch"))
 
     if build_opts.arch_override:
         opts['arch_override'] = parse_arches(build_opts.arch_override)

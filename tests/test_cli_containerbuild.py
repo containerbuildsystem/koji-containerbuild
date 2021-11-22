@@ -188,6 +188,8 @@ class TestCLI(object):
         (None, True, None, None, None),
         (None, True, None, 'test-release', None),
         (None, True, 'parent_build', None, None),
+        (None, True, 'parent_build', 'test-release', None),
+        (None, True, 'parent_build', 'test-release', True),
         (None, False, None, None, True),
         (True, False, None, None, True),
         (True, None, None, None, None),
@@ -285,8 +287,7 @@ class TestCLI(object):
         assert build_opts.yum_repourls == repo_url
         assert build_opts.git_branch == git_branch
         assert build_opts.channel_override == expected_channel
-        if not flatpak:
-            assert build_opts.release == release
+        assert build_opts.release == release
         assert build_opts.compose_ids == compose_ids
         assert build_opts.signing_intent == signing_intent
 

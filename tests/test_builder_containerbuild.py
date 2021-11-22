@@ -972,7 +972,13 @@ class TestBuilder(object):
             'koji_builds': [koji_build_id]
         }
 
-    def test_flatpak_build(self, tmpdir):
+    @pytest.mark.parametrize(('isolated', 'release', 'koji_parent_build'), (
+        (None, None, None),
+        (False, None, None),
+        (False, 'test-release', None),
+        (True, 'test-relese', 'parent-build'),
+    ))
+    def test_flatpak_build(self, tmpdir, isolated, release, koji_parent_build):
         task_id = 123
         last_event_id = 456
         koji_build_id = 999
@@ -1000,6 +1006,12 @@ class TestBuilder(object):
             'flatpak': True,
             'git_branch': 'working',
         }
+        if isolated is not None:
+            additional_args['isolated'] = isolated
+        if release is not None:
+            additional_args['release'] = release
+        if koji_parent_build is not None:
+            additional_args['koji_parent_build'] = koji_parent_build
 
         self._mock_osbs(koji_build_id=koji_build_id,
                         src=src,

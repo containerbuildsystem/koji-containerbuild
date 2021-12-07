@@ -537,6 +537,14 @@ class BaseContainerTask(BaseTaskHandler):
 
         elif not has_succeeded:
             error_message = self.osbs().get_build_error_message(build_id)
+
+            if self.osbs().build_not_finished(build_id):
+                try:
+                    self.osbs().cancel_build(build_id)
+                except Exception as ex:
+                    self.logger.error("Error during canceling pipeline run %s: %s",
+                                      build_id, repr(ex))
+
             if error_message:
                 raise ContainerError('Image build failed. %s. OSBS build id: %s' %
                                      (error_message, build_id))

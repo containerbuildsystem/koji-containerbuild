@@ -615,12 +615,13 @@ class TestBuilder(object):
                 'koji_builds': [koji_build_id]
             }
 
-    @pytest.mark.parametrize('reason, expected_exc_type', [
-        ('signal_cancelled', builder_containerbuild.ContainerCancelled),
-        ('build_cancelled', builder_containerbuild.ContainerCancelled),
-        ('failed', builder_containerbuild.ContainerError),
+    @pytest.mark.parametrize('reason, expected_exc_type, build_finished', [
+        ('signal_cancelled', builder_containerbuild.ContainerCancelled, True),
+        ('build_cancelled', builder_containerbuild.ContainerCancelled, True),
+        ('failed', builder_containerbuild.ContainerError, True),
+        ('failed', builder_containerbuild.ContainerError, False),
     ])
-    def test_createContainer_failure(self, tmpdir, reason, expected_exc_type):
+    def test_createContainer_failure(self, tmpdir, reason, expected_exc_type, build_finished):
         koji_task_id = 123
         last_event_id = 456
         koji_build_id = 999
@@ -651,6 +652,9 @@ class TestBuilder(object):
         (flexmock(osbs.api.OSBS)
             .should_receive('build_was_cancelled')
             .and_return(reason == 'build_cancelled' or reason == 'signal_cancelled'))
+        (flexmock(osbs.api.OSBS)
+            .should_receive('build_not_finished')
+            .and_return(not build_finished))
 
         if reason == 'signal_cancelled':
             task._incremental_upload_logs = \
@@ -659,6 +663,12 @@ class TestBuilder(object):
 
         if reason == 'signal_cancelled' or reason == 'build_cancelled':
             (session.should_receive('cancelTask').once())
+
+        if reason == 'failed':
+            if build_finished:
+                (flexmock(osbs.api.OSBS).should_receive('cancel_build').never())
+            else:
+                (flexmock(osbs.api.OSBS).should_receive('cancel_build').once())
 
         with pytest.raises(expected_exc_type):
             task.handler(src['src'], 'target', {'git_branch': 'working'})

@@ -514,6 +514,7 @@ class BaseContainerTask(BaseTaskHandler):
                 os._exit(1)
             os._exit(0)
 
+        build_info = self.osbs().get_build(build_id)
         # User warnings are being processed in a child process,
         # so we have to collect them back when the process ends
         user_warnings = self._read_user_warnings(osbs_logs_dir)
@@ -526,8 +527,7 @@ class BaseContainerTask(BaseTaskHandler):
             self.upload_build_annotations(annotations)
 
         self.logger.debug("OSBS build finished with status: %s. Build "
-                          "response: %s.", self.osbs().get_build_reason(build_id),
-                          self.osbs().get_build(build_id))
+                          "response: %s.", self.osbs().get_build_reason(build_id), build_info)
 
         self.logger.info("Response status: %r", has_succeeded)
 
@@ -546,11 +546,11 @@ class BaseContainerTask(BaseTaskHandler):
                                       build_id, repr(ex))
 
             if error_message:
-                raise ContainerError('Image build failed. %s. OSBS build id: %s' %
-                                     (error_message, build_id))
+                raise ContainerError('Image build failed.\n%s\nOSBS build id: %s\nbuild info:\n%s' %
+                                     (error_message, build_id, build_info))
             else:
-                raise ContainerError('Image build failed. OSBS build id: %s' %
-                                     build_id)
+                raise ContainerError('Image build failed.\nOSBS build id: %s\nbuild info:\n%s' %
+                                     build_id, build_info)
 
         repositories = []
         if has_succeeded:

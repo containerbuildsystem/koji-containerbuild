@@ -547,7 +547,7 @@ class BaseContainerTask(BaseTaskHandler):
 
             if error_message:
                 raise ContainerError('Image build failed. %s. OSBS build id: %s' %
-                                     (error_message, build_id))
+                                     (' '.join(error_message.split('\n')), build_id))
             else:
                 raise ContainerError('Image build failed. OSBS build id: %s' %
                                      build_id)

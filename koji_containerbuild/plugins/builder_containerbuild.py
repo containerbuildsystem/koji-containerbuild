@@ -306,7 +306,7 @@ class BaseContainerTask(BaseTaskHandler):
         BaseTaskHandler.__init__(self, id, method, params, session, options, workdir)
         self._osbs = None
         self._log_handler_added = False
-        self.incremental_log_basename = 'osbs_build.log'
+        self.incremental_log_basename = 'osbs-build.log'
 
     def osbs(self):
         """Handler of OSBS object"""

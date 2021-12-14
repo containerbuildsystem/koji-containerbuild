@@ -119,7 +119,7 @@ class TestBuilder(object):
 
         user_warnings = UserWarningsStore()
         log_contents = {}
-        log_name = 'osbs_build'
+        log_name = 'osbs-build'
         for line in log_entries:
 
             if builder_containerbuild.METADATA_TAG in line:

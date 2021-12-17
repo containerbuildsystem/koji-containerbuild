@@ -659,6 +659,7 @@ class TestBuilder(object):
         if reason == 'signal_cancelled':
             task._incremental_upload_logs = \
                 lambda pid: os.kill(os.getpid(), signal.SIGINT)
+            flexmock(task).should_receive('_upload_logs_once').once().and_return(None)
             (flexmock(osbs.api.OSBS).should_receive('cancel_build').once())
 
         if reason == 'signal_cancelled' or reason == 'build_cancelled':
@@ -715,6 +716,7 @@ class TestBuilder(object):
         if reason == 'signal_cancelled':
             task._incremental_upload_logs = \
                 lambda pid: os.kill(os.getpid(), signal.SIGINT)
+            flexmock(task).should_receive('_upload_logs_once').once().and_return(None)
             (flexmock(osbs.api.OSBS).should_receive('cancel_build').once())
 
         if reason == 'signal_cancelled' or reason == 'build_cancelled':

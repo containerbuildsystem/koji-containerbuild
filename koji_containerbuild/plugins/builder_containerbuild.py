@@ -339,6 +339,8 @@ class BaseContainerTask(BaseTaskHandler):
                 '%(asctime)s - %(process)d - %(name)s - %(levelname)s - %(message)s')
             handler.setFormatter(formatter)
             osbs_logger.addHandler(handler)
+            # let's log also koji-containerbuild log messages into osbs-client log
+            self.logger.addHandler(handler)
 
             self._log_handler_added = True
 
@@ -375,6 +377,13 @@ class BaseContainerTask(BaseTaskHandler):
                     incremental_upload(self.session, fname, fd, uploadpath, logger=self.logger)
         finally:
             watcher.clean()
+
+    def _upload_logs_once(self):
+        """Upload log updates without waiting for anything"""
+        try:
+            self._incremental_upload_logs()
+        except koji.ActionNotAllowed:
+            pass
 
     def _write_logs(self, build_id, logs_dir):
         log_filename = os.path.join(logs_dir, self.incremental_log_basename)
@@ -533,10 +542,15 @@ class BaseContainerTask(BaseTaskHandler):
 
         if self.osbs().build_was_cancelled(build_id):
             self.session.cancelTask(self.id)
+            self._upload_logs_once()
             raise ContainerCancelled('Image build was cancelled by OSBS.')
 
         elif not has_succeeded:
-            error_message = self.osbs().get_build_error_message(build_id)
+            error_message = None
+            try:
+                error_message = self.osbs().get_build_error_message(build_id)
+            except Exception:
+                self.logger.exception("Error during getting error message")
 
             if self.osbs().build_not_finished(build_id):
                 try:
@@ -545,6 +559,7 @@ class BaseContainerTask(BaseTaskHandler):
                     self.logger.error("Error during canceling pipeline run %s: %s",
                                       build_id, repr(ex))
 
+            self._upload_logs_once()
             if error_message:
                 raise ContainerError('Image build failed. %s. OSBS build id: %s' %
                                      (' '.join(error_message.split('\n')), build_id))
@@ -576,6 +591,7 @@ class BaseContainerTask(BaseTaskHandler):
         if user_warnings:
             containerdata['user_warnings'] = user_warnings
 
+        self._upload_logs_once()
         return containerdata
 
 

@@ -527,6 +527,9 @@ class BaseContainerTask(BaseTaskHandler):
         # so we have to collect them back when the process ends
         user_warnings = self._read_user_warnings(osbs_logs_dir)
 
+        # there is race between all pods finished and pipeline run changing status
+        self.osbs().wait_for_build_to_finish(build_id)
+
         has_succeeded = self.osbs().build_has_succeeded(build_id)
         annotations = self.osbs().get_build_annotations(build_id)
         labels = self.osbs().get_build_labels(build_id)

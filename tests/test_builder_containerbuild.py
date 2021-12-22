@@ -368,6 +368,7 @@ class TestBuilder(object):
         (flexmock(osbs.api.OSBS)
             .should_receive('get_build_error_message')
             .and_return("build error"))
+        (flexmock(osbs.api.OSBS).should_receive('wait_for_build_to_finish').and_return(None))
 
     def _mock_folders(self, tmpdir, dockerfile_content=None, additional_tags_content=None):
         if dockerfile_content is None:

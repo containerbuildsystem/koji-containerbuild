@@ -1,5 +1,5 @@
 """
-Copyright (C) 2019  Red Hat, Inc.
+Copyright (C) 2019-2022  Red Hat, Inc.
 
 This library is free software; you can redistribute it and/or
 modify it under the terms of the GNU Lesser General Public
@@ -95,7 +95,7 @@ class TestBuilder(object):
         assert isinstance(osbs_obj, osbs.api.OSBS)
         assert osbs_obj.os_conf.conf_section == expected_conf_section
 
-    def _check_logfiles(self, log_entries, logs_dir):
+    def _check_logfiles(self, log_entries, logs_dir, platforms: list = None):
         def check_meta_entry(filename):
             source_file = os.path.join(koji.pathinfo.work(), filename)
             target_file = os.path.join(logs_dir, filename)
@@ -106,7 +106,16 @@ class TestBuilder(object):
         user_warnings = UserWarningsStore()
         log_contents = {}
         log_name = 'osbs-build'
-        for line in log_entries:
+        for task_run_name, line in log_entries:
+
+            if platforms:
+                task_platform = next(
+                    (platform for platform in platforms if
+                     platform.replace('_', '-') in task_run_name),
+                    'noarch'
+                )
+            else:
+                task_platform = 'noarch'
 
             if builder_containerbuild.METADATA_TAG in line:
                 _, meta_file = line.rsplit(' ', 1)
@@ -114,8 +123,12 @@ class TestBuilder(object):
             elif user_warnings.is_user_warning(line):
                 user_warnings.store(line)
             else:
-                log_contents[log_name] = '{old}{new}\n'.format(
-                    old=log_contents.get(log_name, ''),
+                if task_platform != 'noarch':
+                    log_filename = f'{task_platform}'
+                else:
+                    log_filename = log_name
+                log_contents[log_filename] = '{old}{new}\n'.format(
+                    old=log_contents.get(log_filename, ''),
                     new=line
                 )
 
@@ -138,14 +151,26 @@ class TestBuilder(object):
                                                         workdir='workdir')
 
         log_entries = [
-            'line 1',
-            'line 2',
-            'log - USER_WARNING - {"message": "message"}',
-            'x86_64 line 1',
-            'x86_64 line 2',
-            'x86_64 log - USER_WARNING - {"message": "message"}',
-            'x86_64 log - USER_WARNING - {"message": "another_message"}',
-            builder_containerbuild.METADATA_TAG + ' x.log'
+            ('task_run', 'line 1'),
+            ('task_run', 'line 2'),
+            ('task_run', 'log - USER_WARNING - {"message": "message"}'),
+            ('task_run_x86-64', 'x86_64 line 1'),
+            ('task_run_x86-64', 'x86_64 line 2'),
+            ('task_run_x86-64', 'x86_64 log - USER_WARNING - {"message": "message"}'),
+            ('task_run_x86-64', 'x86_64 log - USER_WARNING - {"message": "another_message"}'),
+            ('task_run_s390x', 's390x line 1'),
+            ('task_run_s390x', 's390x line 2'),
+            ('task_run_s390x', 's390x log - USER_WARNING - {"message": "message"}'),
+            ('task_run_s390x', 's390x log - USER_WARNING - {"message": "another_message"}'),
+            ('task_run_ppc64le', 'ppc64le line 1'),
+            ('task_run_ppc64le', 'ppc64le line 2'),
+            ('task_run_ppc64le', 'ppc64le log - USER_WARNING - {"message": "message"}'),
+            ('task_run_ppc64le', 'ppc64le log - USER_WARNING - {"message": "another_message"}'),
+            ('task_run_aarch64', 'aarch64 line 1'),
+            ('task_run_aarch64', 'aarch64 line 2'),
+            ('task_run_aarch64', 'aarch64 log - USER_WARNING - {"message": "message"}'),
+            ('task_run_aarch64', 'aarch64 log - USER_WARNING - {"message": "another_message"}'),
+            ('task_run', builder_containerbuild.METADATA_TAG + ' x.log')
         ]
 
         koji_tmpdir = tmpdir.mkdir('koji')
@@ -180,15 +205,16 @@ class TestBuilder(object):
         else:
             exc_type = exc_msg = None
 
+        platforms = ['x86_64', 's390x', 'ppc64le', 'aarch64']
         if exc_type is not None:
             with pytest.raises(exc_type) as exc_info:
-                cct._write_incremental_logs('id', str(tmpdir))
+                cct._write_incremental_logs('id', str(tmpdir), platforms=platforms)
             assert str(exc_info.value) == exc_msg
         else:
-            cct._write_incremental_logs('id', str(tmpdir))
+            cct._write_incremental_logs('id', str(tmpdir), platforms=platforms)
 
         if get_logs_exc is None:
-            self._check_logfiles(log_entries, str(tmpdir))
+            self._check_logfiles(log_entries, str(tmpdir), platforms=platforms)
 
     @pytest.mark.parametrize('get_logs_exc', [None, Exception('error')])
     @pytest.mark.parametrize('build_not_finished', [False, True])
@@ -199,8 +225,8 @@ class TestBuilder(object):
                                                               session='session',
                                                               options='options',
                                                               workdir='workdir')
-        log_entries = ['line 1',
-                       'line 2']
+        log_entries = [('task_run', 'line 1'),
+                       ('task_run', 'line 2')]
 
         (flexmock(osbs.api.OSBS)
             .should_receive('build_not_finished').and_return(build_not_finished))
@@ -1680,11 +1706,11 @@ class TestBuilder(object):
 
     def test_user_warnings(self, tmpdir):
         log_entries = [
-            'normal log',
-            'log - USER_WARNING - {"message": "message"}',
-            'log - USER_WARNING - {"message": "message"}',
-            'log - USER_WARNING - {"message": "another_message"}',
-            'another log',
+            ('task_run', 'normal log'),
+            ('task_run', 'log - USER_WARNING - {"message": "message"}'),
+            ('task_run', 'log - USER_WARNING - {"message": "message"}'),
+            ('task_run', 'log - USER_WARNING - {"message": "another_message"}'),
+            ('task_run', 'another log'),
         ]
 
         koji_task_id = 123
@@ -1729,11 +1755,11 @@ class TestBuilder(object):
 
     def test_user_warnings_source(self, tmpdir):
         log_entries = [
-            'normal log',
-            'log - USER_WARNING - {"message": "message"}',
-            'log - USER_WARNING - {"message": "message"}',
-            'log - USER_WARNING - {"message": "another_message"}',
-            'another log',
+            ('task_run', 'normal log'),
+            ('task_run', 'log - USER_WARNING - {"message": "message"}'),
+            ('task_run', 'log - USER_WARNING - {"message": "message"}'),
+            ('task_run', 'log - USER_WARNING - {"message": "another_message"}'),
+            ('task_run', 'another log'),
         ]
 
         koji_task_id = 123

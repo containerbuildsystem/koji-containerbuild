@@ -3,7 +3,7 @@
 Acts as a wrapper between Koji and OpenShift builsystem via osbs for building
 containers."""
 
-# Copyright (C) 2015  Red Hat, Inc.
+# Copyright (C) 2015-2022  Red Hat, Inc.
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -390,8 +390,9 @@ class BaseContainerTask(BaseTaskHandler):
         except koji.ActionNotAllowed:
             pass
 
-    def _write_logs(self, build_id, logs_dir):
-        log_filename = os.path.join(logs_dir, self.incremental_log_basename)
+    def _write_logs(self, build_id, logs_dir, platforms: list = None):
+        logfiles = {'noarch': open(os.path.join(logs_dir, self.incremental_log_basename),
+                                   'wb')}
         self.logger.info("Will write follow log: %s", self.incremental_log_basename)
         try:
             logs = self.osbs().get_build_logs(build_id, follow=True, wait=True)
@@ -401,25 +402,43 @@ class BaseContainerTask(BaseTaskHandler):
 
         user_warnings = UserWarningsStore()
 
-        with open(log_filename, 'wb') as outfile:
-            for line in logs:
-                if METADATA_TAG in line:
-                    _, meta_file = line.rsplit(' ', 1)
-                    source_file = os.path.join(koji.pathinfo.work(), meta_file)
-                    uploadpath = os.path.join(logs_dir, os.path.basename(meta_file))
-                    shutil.copy(source_file, uploadpath)
-                    continue
+        for task_run_name, line in logs:
+            if METADATA_TAG in line:
+                _, meta_file = line.rsplit(' ', 1)
+                source_file = os.path.join(koji.pathinfo.work(), meta_file)
+                uploadpath = os.path.join(logs_dir, os.path.basename(meta_file))
+                shutil.copy(source_file, uploadpath)
+                continue
 
-                if user_warnings.is_user_warning(line):
-                    user_warnings.store(line)
-                    continue
+            if user_warnings.is_user_warning(line):
+                user_warnings.store(line)
+                continue
 
-                try:
-                    outfile.write(("%s\n" % line).encode('utf-8'))
-                    outfile.flush()
-                except Exception as error:
-                    msg = "Exception (%s) while writing build logs: %s" % (type(error), error)
-                    raise ContainerError(msg)
+            if platforms:
+                task_platform = next(
+                    (platform for platform in platforms if
+                     platform.replace('_', '-') in task_run_name),
+                    'noarch'
+                )
+            else:
+                task_platform = 'noarch'
+
+            if task_platform not in logfiles:
+                log_filename = f'{task_platform}.log'
+                logfiles[task_platform] = open(os.path.join(logs_dir, log_filename),
+                                               'wb')
+
+            outfile = logfiles[task_platform]
+
+            try:
+                outfile.write(("%s\n" % line).encode('utf-8'))
+                outfile.flush()
+            except Exception as error:
+                msg = "Exception (%s) while writing build logs: %s" % (type(error), error)
+                raise ContainerError(msg)
+
+        for logfile in logfiles.values():
+            logfile.close()
 
         if user_warnings:
             try:
@@ -434,8 +453,8 @@ class BaseContainerTask(BaseTaskHandler):
 
         self.logger.info("%s written", self.incremental_log_basename)
 
-    def _write_incremental_logs(self, build_id, logs_dir):
-        self._write_logs(build_id, logs_dir)
+    def _write_incremental_logs(self, build_id, logs_dir, platforms: list = None):
+        self._write_logs(build_id, logs_dir, platforms=platforms)
 
         if self.osbs().build_not_finished(build_id):
             raise ContainerError("Build log finished but build still has not "
@@ -483,7 +502,7 @@ class BaseContainerTask(BaseTaskHandler):
             incremental_upload(self.session, ANNOTATIONS_FILENAME, f, self.getUploadPath(),
                                logger=self.logger)
 
-    def handle_build_response(self, build_id):
+    def handle_build_response(self, build_id, platforms: list = None):
         self.logger.debug("OSBS build id: %r", build_id)
 
         # When builds are cancelled the builder plugin process gets SIGINT and SIGKILL
@@ -509,7 +528,7 @@ class BaseContainerTask(BaseTaskHandler):
             self._osbs = None
 
             try:
-                self._write_incremental_logs(build_id, osbs_logs_dir)
+                self._write_incremental_logs(build_id, osbs_logs_dir, platforms=platforms)
             except Exception as error:
                 self.logger.info("Error while saving incremental logs: %s", error)
                 os._exit(1)
@@ -765,7 +784,8 @@ class BuildContainerTask(BaseContainerTask):
         except OsbsValidationException as exc:
             raise ContainerError('OSBS validation exception: {0}'.format(exc))
 
-        return self.handle_build_response(self.osbs().get_build_name(build_response))
+        return self.handle_build_response(self.osbs().get_build_name(build_response),
+                                          platforms=arches)
 
     def getArchList(self, build_tag, extra=None):
         """Copied from build task"""

@@ -95,6 +95,7 @@ LABEL_NAME_MAP = {
 METADATA_TAG = "platform:_metadata_"
 
 ANNOTATIONS_FILENAME = 'build_annotations.json'
+ANNOTATIONS_FROM_BUILD_RESULTS = ['remote_sources']
 
 DEFAULT_CONF_BINARY_SECTION = "default_binary"
 DEFAULT_CONF_SOURCE_SECTION = "default_source"
@@ -468,10 +469,13 @@ class BaseContainerTask(BaseTaskHandler):
             raise koji.BuildError("package (container)  %s is blocked for tag %s" %
                                   (name, target_info['dest_tag_name']))
 
-    def upload_build_annotations(self, annotations):
-        whitelist_str = annotations.get('koji_task_annotations_whitelist', "[]")
-        whitelist = json.loads(whitelist_str)
-        task_annotations = {k: v for k, v in annotations.items() if k in whitelist}
+    def upload_build_results_as_annotations(self, build_results):
+        task_annotations = {
+            # For backward compatibility reasons, the values should be JSON-encoded
+            name: json.dumps(build_results[name])
+            for name in ANNOTATIONS_FROM_BUILD_RESULTS
+            if name in build_results
+        }
         if task_annotations:
             f = StringIO()
             json.dump(task_annotations, f, sort_keys=True, indent=4)
@@ -519,11 +523,10 @@ class BaseContainerTask(BaseTaskHandler):
         self.osbs().wait_for_build_to_finish(build_id)
 
         has_succeeded = self.osbs().build_has_succeeded(build_id)
-        annotations = self.osbs().get_build_annotations(build_id)
         build_results = self.osbs().get_build_results(build_id)
 
         if has_succeeded:
-            self.upload_build_annotations(annotations)
+            self.upload_build_results_as_annotations(build_results)
 
         self.logger.debug("OSBS build finished with status: %s. Build "
                           "response: %s.", self.osbs().get_build_reason(build_id),

@@ -342,7 +342,6 @@ class TestBuilder(object):
         (flexmock(osbs.api.OSBS).should_receive('get_build_reason').and_return('Succeeded'))
         (flexmock(osbs.api.OSBS).should_receive('build_has_succeeded').and_return(True))
         (flexmock(osbs.api.OSBS).should_receive('build_was_cancelled').and_return(False))
-        (flexmock(osbs.api.OSBS).should_receive('get_build_annotations').and_return({}))
         repos = {"unique": ["unique-repo"], "primary": ["primary-repo"]}
         (flexmock(osbs.api.OSBS)
             .should_receive('get_build_results')
@@ -1600,18 +1599,15 @@ class TestBuilder(object):
 
         task.handler('target', build_opts)
 
-    @pytest.mark.parametrize('annotations', (
+    @pytest.mark.parametrize('build_results', (
         {},
-        {'koji_task_annotations_whitelist': '[]'},
-        {'koji_task_annotations_whitelist': '[]', 'remote_source_url': 'stub_url'},
-        {'koji_task_annotations_whitelist': '["remote_source_url"]',
-         'remote_source_url': 'stub_url'},
-        {'remote_source_url': 'stub_url'},
-        {'a': '1', 'b': '2'},
-        {'koji_task_annotations_whitelist': '["a", "b"]', 'a': '1', 'b': '2', 'c': '3'},
-        {'koji_task_annotations_whitelist': '["a", "b"]', 'a': '1', 'c': '3'}
-        ))
-    def test_upload_annotations(self, tmpdir, annotations):
+        {
+            'remote_sources': [{'name': None, 'url': 'stub_url'}],
+            'repositories': {'unique': [], 'primary': [], 'floating': []},
+            'koji-build-id': 1,
+        },
+    ))
+    def test_upload_build_results_as_annotations(self, tmpdir, build_results):
         def mock_incremental_upload(session, fname, fd, uploadpath, logger=None):
             with open(os.path.join(uploadpath, fname), 'w') as f:
                 data = fd.read()
@@ -1628,25 +1624,15 @@ class TestBuilder(object):
                                                         options='options')
         flexmock(cct).should_receive('getUploadPath').and_return(tmpdir.strpath)
 
-        cct.upload_build_annotations(annotations)
-        whitelist = annotations.get('koji_task_annotations_whitelist')
-        if whitelist:
-            whitelist = json.loads(whitelist)
+        cct.upload_build_results_as_annotations(build_results)
 
-        if not whitelist or len(annotations) < 2:
+        if not build_results:
             assert not os.path.exists(annotations_file)
         else:
             assert os.path.exists(annotations_file)
             with open(annotations_file) as f:
                 build_annotations = json.load(f)
-            for key, value in build_annotations.items():
-                assert key in whitelist
-                assert value == annotations[key]
-            for item in whitelist:
-                if item in annotations:
-                    assert item in build_annotations
-                else:
-                    assert item not in build_annotations
+            assert build_annotations == {'remote_sources': '[{"name": null, "url": "stub_url"}]'}
 
     def test_raise_OsbsValidationException(self, tmpdir):
         df_content = """\

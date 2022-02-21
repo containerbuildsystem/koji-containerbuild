@@ -100,6 +100,10 @@ DEFAULT_CONF_BINARY_SECTION = "default_binary"
 DEFAULT_CONF_SOURCE_SECTION = "default_source"
 
 
+def _concat(iterables):
+    return [x for iterable in iterables for x in iterable]
+
+
 def create_task_response(osbs_result):
     """Create task response from an OSBS result"""
     repositories = osbs_result.get('repositories', [])
@@ -448,22 +452,6 @@ class BaseContainerTask(BaseTaskHandler):
                 msg = "Exception ({}) while reading user warnings: {}".format(type(error), error)
                 raise ContainerError(msg)
 
-    def _get_repositories(self, annotations):
-        repositories = []
-        repo_str = annotations.get('repositories', '{}')
-        repo_dict = json.loads(repo_str)
-
-        if repo_dict:
-            for repos in repo_dict.values():
-                repositories.extend(repos)
-
-        return repositories
-
-    def _get_koji_build_id(self, labels):
-        koji_build_id = labels.get('koji-build-id')
-
-        return koji_build_id
-
     def check_whitelist(self, name, target_info):
         """Check if container name is whitelisted in destination tag
 
@@ -532,7 +520,7 @@ class BaseContainerTask(BaseTaskHandler):
 
         has_succeeded = self.osbs().build_has_succeeded(build_id)
         annotations = self.osbs().get_build_annotations(build_id)
-        labels = self.osbs().get_build_labels(build_id)
+        build_results = self.osbs().get_build_results(build_id)
 
         if has_succeeded:
             self.upload_build_annotations(annotations)
@@ -572,14 +560,15 @@ class BaseContainerTask(BaseTaskHandler):
 
         repositories = []
         if has_succeeded:
-            repositories = self._get_repositories(annotations)
+            repositories = _concat(build_results['repositories'].values())
 
         self.logger.info("Image available in the following repositories: %r",
                          repositories)
 
         koji_build_id = None
         if has_succeeded:
-            koji_build_id = self._get_koji_build_id(labels)
+            # For backward compatibility reasons, koji_build_id has to be a string
+            koji_build_id = str(build_results['koji-build-id'])
 
         self.logger.info("Koji content generator build ID: %s", koji_build_id)
 

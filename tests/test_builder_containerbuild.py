@@ -95,20 +95,6 @@ class TestBuilder(object):
         assert isinstance(osbs_obj, osbs.api.OSBS)
         assert osbs_obj.os_conf.conf_section == expected_conf_section
 
-    @pytest.mark.parametrize("repos", [{'repo1': 'test1'}, {'repo2': 'test2'}])
-    def test_get_repositories(self, repos):
-        cct = builder_containerbuild.BuildContainerTask(id=1,
-                                                        method='buildContainer',
-                                                        params='params',
-                                                        session='session',
-                                                        options='options',
-                                                        workdir='workdir')
-        repositories = []
-        for repo in repos.values():
-            repositories.extend(repo)
-
-        assert set(cct._get_repositories({'repositories': json.dumps(repos)})) == set(repositories)
-
     def _check_logfiles(self, log_entries, logs_dir):
         def check_meta_entry(filename):
             source_file = os.path.join(koji.pathinfo.work(), filename)
@@ -356,13 +342,11 @@ class TestBuilder(object):
         (flexmock(osbs.api.OSBS).should_receive('get_build_reason').and_return('Succeeded'))
         (flexmock(osbs.api.OSBS).should_receive('build_has_succeeded').and_return(True))
         (flexmock(osbs.api.OSBS).should_receive('build_was_cancelled').and_return(False))
-        repos_str = '{"unique": ["unique-repo"], "primary": ["primary-repo"]}'
+        (flexmock(osbs.api.OSBS).should_receive('get_build_annotations').and_return({}))
+        repos = {"unique": ["unique-repo"], "primary": ["primary-repo"]}
         (flexmock(osbs.api.OSBS)
-            .should_receive('get_build_annotations')
-            .and_return({'repositories': repos_str}))
-        (flexmock(osbs.api.OSBS)
-            .should_receive('get_build_labels')
-            .and_return({'koji-build-id': koji_build_id}))
+            .should_receive('get_build_results')
+            .and_return({'repositories': repos, 'koji-build-id': koji_build_id}))
         (flexmock(osbs.api.OSBS).should_receive('build_not_finished').and_return(False))
         (flexmock(osbs.api.OSBS).should_receive('cancel_build').never())
         (flexmock(osbs.api.OSBS)
@@ -557,7 +541,7 @@ class TestBuilder(object):
 
             assert task_response == {
                 'repositories': ['unique-repo', 'primary-repo'],
-                'koji_builds': [koji_build_id]
+                'koji_builds': [str(koji_build_id)]
             }
 
     @pytest.mark.parametrize(('pkg_info', 'failure'), (
@@ -613,7 +597,7 @@ class TestBuilder(object):
 
             assert task_response == {
                 'repositories': ['unique-repo', 'primary-repo'],
-                'koji_builds': [koji_build_id]
+                'koji_builds': [str(koji_build_id)]
             }
 
     @pytest.mark.parametrize('reason, expected_exc_type, build_finished', [
@@ -917,7 +901,7 @@ class TestBuilder(object):
 
         assert task_response == {
             'repositories': ['unique-repo', 'primary-repo'],
-            'koji_builds': [koji_build_id]
+            'koji_builds': [str(koji_build_id)]
         }
 
     @pytest.mark.parametrize('log_upload_raises', (True, False))
@@ -982,7 +966,7 @@ class TestBuilder(object):
 
         assert task_response == {
             'repositories': ['unique-repo', 'primary-repo'],
-            'koji_builds': [koji_build_id]
+            'koji_builds': [str(koji_build_id)]
         }
 
     @pytest.mark.parametrize(('isolated', 'release', 'koji_parent_build'), (
@@ -1035,7 +1019,7 @@ class TestBuilder(object):
         task_response = task.handler(src['src'], 'target', opts=additional_args)
         assert task_response == {
             'repositories': ['unique-repo', 'primary-repo'],
-            'koji_builds': [koji_build_id]
+            'koji_builds': [str(koji_build_id)]
         }
 
     @pytest.mark.parametrize(('tag', 'release', 'is_oversized'), (
@@ -1091,7 +1075,7 @@ class TestBuilder(object):
 
             assert task_response == {
                 'repositories': ['unique-repo', 'primary-repo'],
-                'koji_builds': [koji_build_id]
+                'koji_builds': [str(koji_build_id)]
             }
 
     @pytest.mark.parametrize(('build_state', 'build_fails'), (
@@ -1302,7 +1286,7 @@ class TestBuilder(object):
 
             assert task_response == {
                 'repositories': ['unique-repo', 'primary-repo'],
-                'koji_builds': [koji_build_id]
+                'koji_builds': [str(koji_build_id)]
             }
 
     @pytest.mark.parametrize(('additional_args', 'raises'), (
@@ -1365,7 +1349,7 @@ class TestBuilder(object):
 
             assert task_response == {
                 'repositories': ['unique-repo', 'primary-repo'],
-                'koji_builds': [koji_build_id]
+                'koji_builds': [str(koji_build_id)]
             }
 
     @pytest.mark.parametrize('arg_name, arg_value, expected_types', [

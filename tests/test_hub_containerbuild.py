@@ -62,6 +62,8 @@ def mocked_kojihub_for_task(src, target, opts,
     :return: A mock object to replace hub_containerbuild.kojihub with.
     """
     task_opts = {}
+    if build_type == 'buildSourceContainer':
+        channel = 'container-source'
     if channel:
         task_opts['channel'] = channel
     if priority:

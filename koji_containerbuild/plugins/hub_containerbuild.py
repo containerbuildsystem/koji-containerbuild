@@ -77,8 +77,7 @@ def buildContainer(src, target, opts=None, priority=None, channel='container'):
                          priority so that Koji processes this ahead of other
                          tasks. Only Koji admins may specify a negative
                          priority.
-    :param str channel: the channel to allocate the task to (defaults to the
-                        "container" channel)
+    :param str channel: the channel to allocate the task to
     :returns: the task ID (integer)
     """
     new_opts, taskOpts = _get_task_opts_and_opts(opts, priority, channel)
@@ -86,7 +85,7 @@ def buildContainer(src, target, opts=None, priority=None, channel='container'):
 
 
 @export
-def buildSourceContainer(target, opts=None, priority=None, channel='container'):
+def buildSourceContainer(target, opts=None, priority=None, channel='container-source'):
     """Create a source container build task
 
     :param str target: The build target for this container.
@@ -97,8 +96,7 @@ def buildSourceContainer(target, opts=None, priority=None, channel='container'):
                          priority, relative to the default priority; higher
                          values mean lower priority; only admins have the
                          right to specify a negative priority here
-    :param str channel: the channel to allocate the task to (defaults to the
-                        "container" channel)
+    :param str channel: the channel to allocate the task to
     :returns: the task ID (integer)
     """
     new_opts, taskOpts = _get_task_opts_and_opts(opts, priority, channel)

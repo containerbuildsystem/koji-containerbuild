@@ -588,7 +588,8 @@ class BaseContainerTask(BaseTaskHandler):
                          repositories)
 
         koji_build_id = None
-        if has_succeeded:
+        if has_succeeded and not self.opts.get('scratch'):
+            # Only successful, non-scratch tasks create Koji builds
             # For backward compatibility reasons, koji_build_id has to be a string
             koji_build_id = str(build_results['koji-build-id'])
 

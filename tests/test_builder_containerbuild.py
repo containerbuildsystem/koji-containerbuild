@@ -368,10 +368,17 @@ class TestBuilder(object):
         (flexmock(osbs.api.OSBS).should_receive('get_build_reason').and_return('Succeeded'))
         (flexmock(osbs.api.OSBS).should_receive('build_has_succeeded').and_return(True))
         (flexmock(osbs.api.OSBS).should_receive('build_was_cancelled').and_return(False))
-        repos = {"unique": ["unique-repo"], "primary": ["primary-repo"]}
+
+        build_results = {
+            'repositories': {'unique': ['unique-repo'], 'primary': ['primary-repo']}
+        }
+        if not create_build_args.get('scratch'):
+            # only non-scratch tasks create Koji builds
+            build_results['koji-build-id'] = koji_build_id
         (flexmock(osbs.api.OSBS)
             .should_receive('get_build_results')
-            .and_return({'repositories': repos, 'koji-build-id': koji_build_id}))
+            .and_return(build_results))
+
         (flexmock(osbs.api.OSBS).should_receive('build_not_finished').and_return(False))
         (flexmock(osbs.api.OSBS).should_receive('cancel_build').never())
         (flexmock(osbs.api.OSBS)
@@ -926,7 +933,7 @@ class TestBuilder(object):
 
         assert task_response == {
             'repositories': ['unique-repo', 'primary-repo'],
-            'koji_builds': [str(koji_build_id)]
+            'koji_builds': [str(koji_build_id)] if not additional_args.get('scratch') else []
         }
 
     @pytest.mark.parametrize('log_upload_raises', (True, False))
@@ -991,7 +998,7 @@ class TestBuilder(object):
 
         assert task_response == {
             'repositories': ['unique-repo', 'primary-repo'],
-            'koji_builds': [str(koji_build_id)]
+            'koji_builds': [str(koji_build_id)] if not additional_args.get('scratch') else []
         }
 
     @pytest.mark.parametrize(('isolated', 'release', 'koji_parent_build'), (
@@ -1374,7 +1381,7 @@ class TestBuilder(object):
 
             assert task_response == {
                 'repositories': ['unique-repo', 'primary-repo'],
-                'koji_builds': [str(koji_build_id)]
+                'koji_builds': [str(koji_build_id)] if not additional_args.get('scratch') else []
             }
 
     @pytest.mark.parametrize('arg_name, arg_value, expected_types', [

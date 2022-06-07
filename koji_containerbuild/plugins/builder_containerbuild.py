@@ -503,6 +503,12 @@ class BaseContainerTask(BaseTaskHandler):
                                logger=self.logger)
 
     def handle_build_response(self, build_id, platforms: list = None):
+        try:
+            return self._handle_build_response(build_id, platforms)
+        finally:
+            self.osbs().remove_build(build_id)
+
+    def _handle_build_response(self, build_id, platforms: list = None):
         self.logger.debug("OSBS build id: %r", build_id)
 
         # When builds are cancelled the builder plugin process gets SIGINT and SIGKILL

@@ -304,6 +304,9 @@ class TestBuilder(object):
         create_build_args.setdefault('target', 'target-name')
         create_build_args.setdefault('scratch', False)
 
+        # validation exception => the build did not start
+        build_not_started = build_not_started or with_osbsvalidationexception
+
         if not source:
             create_build_args.setdefault('component', 'fedora-docker')
             create_build_args.setdefault('git_uri', src['git_uri'])
@@ -385,6 +388,10 @@ class TestBuilder(object):
             .should_receive('get_build_error_message')
             .and_return("build error"))
         (flexmock(osbs.api.OSBS).should_receive('wait_for_build_to_finish').and_return(None))
+        (flexmock(osbs.api.OSBS)
+            .should_receive('remove_build')
+            .times(0 if build_not_started else 1)
+            .and_return({'kind': 'Status', 'apiVersion': 'v1', 'status': 'Success'}))
 
     def _mock_folders(self, tmpdir, dockerfile_content=None, additional_tags_content=None):
         if dockerfile_content is None:

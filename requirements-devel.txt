@@ -1,2 +1,2 @@
 git+https://github.com/projectatomic/osbs-client
-koji
+koji>=1.26

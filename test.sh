@@ -31,14 +31,14 @@ function setup_kojic() {
     PIP_PKG="$PYTHON-pip"
     PIP="pip"
     PKG="yum"
-    PKG_EXTRA=(yum-utils git-core koji koji-hub)
+    PKG_EXTRA=(yum-utils git-core koji koji-hub python-gssapi)
     BUILDDEP="yum-builddep"
   else
     PYTHON="python$PYTHON_VERSION"
     PIP_PKG="$PYTHON-pip"
     PIP="pip$PYTHON_VERSION"
     PKG="dnf"
-    PKG_EXTRA=(dnf-plugins-core git-core "$PYTHON"-koji "$PYTHON"-koji-hub)
+    PKG_EXTRA=(dnf-plugins-core git-core "$PYTHON"-koji "$PYTHON"-koji-hub "$PYTHON"-gssapi)
     BUILDDEP=(dnf builddep)
   fi
 

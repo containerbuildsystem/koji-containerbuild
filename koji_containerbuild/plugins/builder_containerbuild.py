@@ -733,8 +733,19 @@ class BuildContainerTask(BaseContainerTask):
         owner_info = self.session.getUser(this_task['owner'])
         self.logger.debug("Started by %s", owner_info['name'])
 
-        scm = My_SCM(src)
-        scm.assert_allowed(self.options.allowed_scms)
+        scm = My_SCM(src, allow_password=self.options.allow_password_in_scm_url)
+        scm_policy_opts = {
+            'user_id': self.taskinfo['owner'],
+            'channel': self.session.getChannel(self.taskinfo['channel_id'],
+                                               strict=True)['name'],
+            'scratch': bool(scratch),
+        }
+        scm.assert_allowed(
+                allowed=self.options.allowed_scms,
+                session=self.session,
+                by_config=self.options.allowed_scms_use_config,
+                by_policy=self.options.allowed_scms_use_policy,
+                policy_data=scm_policy_opts)
         git_uri = scm.get_git_uri()
         component = scm.get_component()
 

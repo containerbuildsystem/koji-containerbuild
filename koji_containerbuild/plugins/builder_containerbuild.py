@@ -761,7 +761,19 @@ class BuildContainerTask(BaseContainerTask):
         self.logger.debug("Started by %s", owner_info['name'])
 
         scm = My_SCM(src)
-        scm.assert_allowed(self.options.allowed_scms)
+        scm_policy_opts = {
+            'user_id': this_task['owner'],
+            'channel': self.session.getChannel(this_task['channel_id'],
+                                               strict=True)['name'],
+            'scratch': bool(scratch),
+        }
+        scm.assert_allowed(
+                allowed=self.options.allowed_scms,
+                session=self.session,
+                by_config=self.options.allowed_scms_use_config,
+                by_policy=self.options.allowed_scms_use_policy,
+                policy_data=scm_policy_opts)
+
         git_uri = scm.get_git_uri()
         component = scm.get_component()
         arch = None
@@ -878,7 +890,6 @@ class BuildContainerTask(BaseContainerTask):
         Gets Dockerfile. Roughly corresponds to getSRPM method of build task
         """
         scm = SCM(src)
-        scm.assert_allowed(self.options.allowed_scms)
         scmdir = os.path.join(self.workdir, 'sources')
 
         koji.ensuredir(scmdir)

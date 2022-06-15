@@ -52,7 +52,7 @@ Hub plugin that extend Koji to support building layered container images
 License:    LGPLv2
 Summary:    Builder plugin that extend Koji to build layered container images
 Group:      Applications/System
-Requires:   koji-builder
+Requires:   koji-builder >= 1.26
 Requires:   koji-containerbuild
 Requires:   osbs-client
 %if 0%{with python3}

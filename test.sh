@@ -31,14 +31,14 @@ function setup_kojic() {
     PIP_PKG="$PYTHON-pip"
     PIP="pip"
     PKG="yum"
-    PKG_EXTRA=(yum-utils git-core koji koji-hub)
+    PKG_EXTRA=(yum-utils git-core koji koji-hub python-gssapi)
     BUILDDEP="yum-builddep"
   else
     PYTHON="python$PYTHON_VERSION"
     PIP_PKG="$PYTHON-pip"
     PIP="pip$PYTHON_VERSION"
     PKG="dnf"
-    PKG_EXTRA=(dnf-plugins-core git-core "$PYTHON"-koji "$PYTHON"-koji-hub)
+    PKG_EXTRA=(dnf-plugins-core git-core "$PYTHON"-koji "$PYTHON"-koji-hub "$PYTHON"-gssapi)
     BUILDDEP=(dnf builddep)
   fi
 
@@ -136,6 +136,10 @@ case ${ACTION} in
   setup_kojic
   # This can run only at fedora because pylint is not packaged in centos
   # use distro pylint to not get too new pylint version
+  if [[ ${PYTHON_VERSION} == "2" ]]; then
+    $RUN $PKG remove -y python2-koji
+  fi
+
   $RUN $PKG install -y "${PYTHON}-pylint"
   PACKAGES='koji_containerbuild tests'
   TEST_CMD="${PYTHON} -m pylint ${PACKAGES}"

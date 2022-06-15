@@ -48,7 +48,21 @@ def mock_incremental_upload(session, fname, fd, uploadpath, logger=None):
     pass
 
 
+def mock_options_and_assert_allowed():
+    flexmock(koji.daemon.SCM).should_receive('assert_allowed').and_return(True)
+
+    return flexmock(allowed_scms='pkgs.example.com:/*:no',
+                    allowed_scms_use_config=True,
+                    allowed_scms_use_policy=True)
+
+
+class mock_time(object):
+    def sleep(self, *args):
+        return
+
+
 builder_containerbuild.incremental_upload = mock_incremental_upload
+builder_containerbuild.time = mock_time()
 
 
 LogEntry = namedtuple('LogEntry', ['platform', 'line'])
@@ -306,11 +320,14 @@ class TestBuilder(object):
         (session
             .should_receive('getTaskInfo')
             .with_args(koji_task_id)
-            .and_return({'owner': 'owner'}))
+            .and_return({'owner': 'owner', 'channel_id': 1}))
         (session
             .should_receive('getUser')
             .with_args('owner')
             .and_return({'name': 'owner-name'}))
+        (session
+            .should_receive('getChannel')
+            .and_return({'name': 'default_channel'}))
         (session
             .should_receive('getPackageConfig')
             .with_args('dest-tag', 'fedora-docker')
@@ -614,7 +631,7 @@ class TestBuilder(object):
         session = self._mock_session(last_event_id, koji_task_id, pkg_info)
         folders_info = self._mock_folders(str(tmpdir))
         src = self._mock_git_source()
-        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options = mock_options_and_assert_allowed()
 
         task = builder_containerbuild.BuildContainerTask(id=koji_task_id,
                                                          method='buildContainer',
@@ -681,7 +698,7 @@ class TestBuilder(object):
             .should_receive('getPackageConfig')
             .with_args('dest-tag', 'source_package-source')
             .and_return(pkg_info))
-        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options = mock_options_and_assert_allowed()
 
         task = builder_containerbuild.BuildSourceContainerTask(id=koji_task_id,
                                                                method='buildSourceContainer',
@@ -728,7 +745,7 @@ class TestBuilder(object):
         session = self._mock_session(last_event_id, koji_task_id)
         folders_info = self._mock_folders(str(tmpdir))
         src = self._mock_git_source()
-        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options = mock_options_and_assert_allowed()
 
         task = builder_containerbuild.BuildContainerTask(id=koji_task_id,
                                                          method='buildContainer',
@@ -795,7 +812,7 @@ class TestBuilder(object):
             .should_receive('getPackageConfig')
             .with_args('dest-tag', 'source_package-source')
             .and_return({'blocked': False}))
-        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options = mock_options_and_assert_allowed()
 
         task = builder_containerbuild.BuildSourceContainerTask(id=koji_task_id,
                                                                method='buildSourceContainer',
@@ -925,7 +942,7 @@ class TestBuilder(object):
         koji_task_id = 123
         last_event_id = 456
 
-        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options = mock_options_and_assert_allowed()
         folders_info = self._mock_folders(str(tmpdir))
 
         pkg_info = {'blocked': False}
@@ -1001,7 +1018,7 @@ class TestBuilder(object):
         session = self._mock_session(last_event_id, koji_task_id)
         folders_info = self._mock_folders(str(tmpdir))
         src = self._mock_git_source()
-        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options = mock_options_and_assert_allowed()
 
         task = builder_containerbuild.BuildContainerTask(id=koji_task_id,
                                                          method='buildContainer',
@@ -1079,7 +1096,7 @@ class TestBuilder(object):
             .with_args('dest-tag', 'source_package-source')
             .and_return({'blocked': False}))
 
-        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options = mock_options_and_assert_allowed()
 
         task = builder_containerbuild.BuildSourceContainerTask(id=koji_task_id,
                                                                method='buildSourceContainer',
@@ -1133,7 +1150,7 @@ class TestBuilder(object):
         session = self._mock_session(last_event_id, task_id, {'blocked': False})
         folders_info = self._mock_folders(str(tmpdir))
         src = self._mock_git_source()
-        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options = mock_options_and_assert_allowed()
 
         task = builder_containerbuild.BuildContainerTask(id=task_id,
                                                          method='buildContainer',
@@ -1189,7 +1206,7 @@ class TestBuilder(object):
         session = self._mock_session(last_event_id, koji_task_id)
         folders_info = self._mock_folders(str(tmpdir), additional_tags_content=tag)
         src = self._mock_git_source()
-        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options = mock_options_and_assert_allowed()
 
         task = builder_containerbuild.BuildContainerTask(id=koji_task_id,
                                                          method='buildContainer',
@@ -1288,7 +1305,7 @@ class TestBuilder(object):
 
         folders_info = self._mock_folders(str(tmpdir), dockerfile_content=dockerfile_content)
         src = self._mock_git_source()
-        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options = mock_options_and_assert_allowed()
 
         task = builder_containerbuild.BuildContainerTask(id=koji_task_id,
                                                          method='buildContainer',
@@ -1398,7 +1415,7 @@ class TestBuilder(object):
             log_message = ('koji build {} is source container build, source container can not '
                            'use source container build image'.format(provided_nvr))
 
-        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options = mock_options_and_assert_allowed()
 
         task = builder_containerbuild.BuildSourceContainerTask(id=koji_task_id,
                                                                method='buildSourceContainer',
@@ -1437,7 +1454,7 @@ class TestBuilder(object):
         session = self._mock_session(last_event_id, koji_task_id)
         folders_info = self._mock_folders(str(tmpdir))
         src = self._mock_git_source()
-        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options = mock_options_and_assert_allowed()
 
         task = builder_containerbuild.BuildContainerTask(id=koji_task_id,
                                                          method='buildContainer',
@@ -1503,7 +1520,7 @@ class TestBuilder(object):
         session = self._mock_session(last_event_id, koji_task_id)
         folders_info = self._mock_folders(str(tmpdir))
         src = self._mock_git_source()
-        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options = mock_options_and_assert_allowed()
 
         task = builder_containerbuild.BuildContainerTask(id=koji_task_id,
                                                          method='buildContainer',
@@ -1863,7 +1880,7 @@ class TestBuilder(object):
 
         session = self._mock_session(last_event_id, koji_task_id)
         src = self._mock_git_source()
-        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options = mock_options_and_assert_allowed()
 
         builder_containerbuild.incremental_upload = mock_incremental_upload
 
@@ -1914,7 +1931,7 @@ class TestBuilder(object):
         session = self._mock_session(last_event_id, koji_task_id)
         folders_info = self._mock_folders(str(tmpdir))
         src = self._mock_git_source()
-        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options = mock_options_and_assert_allowed()
 
         builder_containerbuild.incremental_upload = mock_incremental_upload
 
@@ -1977,7 +1994,7 @@ class TestBuilder(object):
             .should_receive('getPackageConfig')
             .with_args('dest-tag', 'source_package-source')
             .and_return({'blocked': False}))
-        options = flexmock(allowed_scms='pkgs.example.com:/*:no')
+        options = mock_options_and_assert_allowed()
 
         task = builder_containerbuild.BuildSourceContainerTask(id=koji_task_id,
                                                                method='buildSourceContainer',

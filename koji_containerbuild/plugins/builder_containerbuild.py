@@ -725,6 +725,23 @@ class BuildContainerTask(BaseContainerTask):
                                    workdir)
         self.event_id = None
 
+    def _get_scm(self, src, task_info, scratch):
+        scm = My_SCM(src)
+        scm_policy_opts = {
+            'user_id': task_info['owner'],
+            'channel': self.session.getChannel(task_info['channel_id'],
+                                               strict=True)['name'],
+            'scratch': bool(scratch),
+        }
+        scm.assert_allowed(
+                allowed=self.options.allowed_scms,
+                session=self.session,
+                by_config=self.options.allowed_scms_use_config,
+                by_policy=self.options.allowed_scms_use_policy,
+                policy_data=scm_policy_opts)
+
+        return scm
+
     def createContainer(self, src=None, target_info=None, arches=None,
                         scratch=None, isolated=None, yum_repourls=None,
                         branch=None, koji_parent_build=None, release=None,
@@ -739,19 +756,7 @@ class BuildContainerTask(BaseContainerTask):
         owner_info = self.session.getUser(this_task['owner'])
         self.logger.debug("Started by %s", owner_info['name'])
 
-        scm = My_SCM(src)
-        scm_policy_opts = {
-            'user_id': this_task['owner'],
-            'channel': self.session.getChannel(this_task['channel_id'],
-                                               strict=True)['name'],
-            'scratch': bool(scratch),
-        }
-        scm.assert_allowed(
-                allowed=self.options.allowed_scms,
-                session=self.session,
-                by_config=self.options.allowed_scms_use_config,
-                by_policy=self.options.allowed_scms_use_policy,
-                policy_data=scm_policy_opts)
+        scm = self._get_scm(src, this_task, scratch)
 
         git_uri = scm.get_git_uri()
         component = scm.get_component()
@@ -838,11 +843,13 @@ class BuildContainerTask(BaseContainerTask):
             raise koji.BuildError("No matching arches were found")
         return list(archdict.keys())
 
-    def fetchDockerfile(self, src, build_tag):
+    def fetchDockerfile(self, src, build_tag, scratch):
         """
         Gets Dockerfile. Roughly corresponds to getSRPM method of build task
         """
-        scm = SCM(src)
+        this_task = self.session.getTaskInfo(self.id)
+        scm = self._get_scm(src, this_task, scratch)
+
         scmdir = os.path.join(self.workdir, 'sources')
 
         koji.ensuredir(scmdir)
@@ -866,9 +873,9 @@ class BuildContainerTask(BaseContainerTask):
             raise koji.BuildError("Dockerfile file missing: %s" % fn)
         return fn
 
-    def checkLabels(self, src, build_tag, label_overwrites=None):
+    def checkLabels(self, src, build_tag, scratch, label_overwrites=None):
         label_overwrites = label_overwrites or {}
-        dockerfile_path = self.fetchDockerfile(src, build_tag)
+        dockerfile_path = self.fetchDockerfile(src, build_tag, scratch)
         labels_wrapper = LabelsWrapper(dockerfile_path,
                                        logger_name=self.logger.name,
                                        label_overwrites=label_overwrites)
@@ -937,7 +944,8 @@ class BuildContainerTask(BaseContainerTask):
             if release_overwrite:
                 label_overwrites = {LABEL_NAME_MAP['RELEASE'][0]: release_overwrite}
             component, expected_nvr = self.checkLabels(src, label_overwrites=label_overwrites,
-                                                       build_tag=build_tag)
+                                                       build_tag=build_tag,
+                                                       scratch=opts.get('scratch'))
 
             # scratch builds do not get imported, and consequently not tagged
             if not self.opts.get('scratch'):

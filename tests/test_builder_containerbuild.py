@@ -593,7 +593,8 @@ class TestBuilder(object):
          """,
          None, ('fedora-docker', 'fedora-docker-25-3')),
     ))
-    def test_checkLabels(self, tmpdir, df_content, missing_labels, return_val):
+    @pytest.mark.parametrize('scratch', (True, False, None))
+    def test_checkLabels(self, tmpdir, df_content, missing_labels, return_val, scratch):
         cct = builder_containerbuild.BuildContainerTask(id=1,
                                                         method='buildContainer',
                                                         params='params',
@@ -604,15 +605,16 @@ class TestBuilder(object):
                                          dockerfile_content=df_content)
         (flexmock(cct)
             .should_receive('fetchDockerfile')
+            .with_args('src', 'build-tag', scratch)
             .and_return(folder_info['dockerfile_path']))
 
         if not missing_labels:
-            check_return = cct.checkLabels('src', 'build-tag')
+            check_return = cct.checkLabels('src', 'build-tag', scratch)
             assert check_return == return_val
             return
 
         with pytest.raises(koji.BuildError) as exc_info:
-            cct.checkLabels('src', 'build-tag')
+            cct.checkLabels('src', 'build-tag', scratch)
 
         err_msg = str(exc_info.value)
         assert all(label in err_msg for label in missing_labels)
@@ -641,9 +643,11 @@ class TestBuilder(object):
                                                          workdir='workdir',
                                                          demux=orchestrator)
 
+        build_args = {'git_branch': 'working'}
+
         (flexmock(task)
             .should_receive('fetchDockerfile')
-            .with_args(src['src'], 'build-tag')
+            .with_args(src['src'], 'build-tag', build_args.get('scratch'))
             .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
@@ -654,7 +658,6 @@ class TestBuilder(object):
             (flexmock(task)
                 .should_receive('_write_combined_log'))
 
-        build_args = {'git_branch': 'working'}
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,
                                      koji_task_id=koji_task_id,
@@ -756,7 +759,7 @@ class TestBuilder(object):
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
-            .with_args(src['src'], 'build-tag')
+            .with_args(src['src'], 'build-tag', None)
             .and_return(folders_info['dockerfile_path']))
 
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
@@ -961,8 +964,11 @@ class TestBuilder(object):
             .and_return({'arches': 'x86_64'}))
         (session
             .should_receive('getTaskInfo')
-            .with_args(koji_task_id, request=True)
-            .and_return({'owner': 'owner'}))
+            .with_args(koji_task_id)
+            .and_return({'owner': 'owner', 'channel_id': 1}))
+        (session
+            .should_receive('getChannel')
+            .and_return({'name': 'default_channel'}))
         (session
             .should_receive('getUser')
             .with_args('owner')
@@ -992,7 +998,7 @@ class TestBuilder(object):
         (flexmock(os.path)
             .should_receive('exists')
             .and_return(True))
-        task.fetchDockerfile(source, 'build_tag')
+        task.fetchDockerfile(source, 'build_tag', False)
 
     @pytest.mark.parametrize('log_upload_raises', (True, False))
     @pytest.mark.parametrize('orchestrator', (True, False))
@@ -1029,10 +1035,6 @@ class TestBuilder(object):
                                                          demux=orchestrator)
 
         (flexmock(task)
-            .should_receive('fetchDockerfile')
-            .with_args(src['src'], 'build-tag')
-            .and_return(folders_info['dockerfile_path']))
-        (flexmock(task)
             .should_receive('_write_incremental_logs'))
         if orchestrator:
             (flexmock(task)
@@ -1051,6 +1053,12 @@ class TestBuilder(object):
 
         build_args = deepcopy(additional_args)
         build_args['git_branch'] = 'working'
+
+        (flexmock(task)
+            .should_receive('fetchDockerfile')
+            .with_args(src['src'], 'build-tag', build_args.get('scratch'))
+            .and_return(folders_info['dockerfile_path']))
+
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,
                                      koji_task_id=koji_task_id,
@@ -1160,10 +1168,6 @@ class TestBuilder(object):
                                                          workdir='workdir')
 
         (flexmock(task)
-            .should_receive('fetchDockerfile')
-            .with_args(src['src'], 'build-tag')
-            .and_return(folders_info['dockerfile_path']))
-        (flexmock(task)
             .should_receive('_write_incremental_logs'))
 
         additional_args = {
@@ -1183,6 +1187,12 @@ class TestBuilder(object):
                                      orchestrator=True,
                                      create_build_args=deepcopy(additional_args),
                                      build_not_started=False)
+
+        (flexmock(task)
+            .should_receive('fetchDockerfile')
+            .with_args(src['src'], 'build-tag', additional_args.get('scratch'))
+            .and_return(folders_info['dockerfile_path']))
+
         task_response = task.handler(src['src'], 'target', opts=additional_args)
         assert task_response == {
             'repositories': ['unique-repo', 'primary-repo'],
@@ -1217,10 +1227,6 @@ class TestBuilder(object):
                                                          demux=orchestrator)
 
         (flexmock(task)
-            .should_receive('fetchDockerfile')
-            .with_args(src['src'], 'build-tag')
-            .and_return(folders_info['dockerfile_path']))
-        (flexmock(task)
             .should_receive('_write_incremental_logs'))
         if orchestrator:
             (flexmock(task)
@@ -1238,6 +1244,11 @@ class TestBuilder(object):
                                      orchestrator=orchestrator,
                                      create_build_args=additional_args.copy(),
                                      build_not_started=is_oversized)
+
+        (flexmock(task)
+            .should_receive('fetchDockerfile')
+            .with_args(src['src'], 'build-tag', additional_args.get('scratch'))
+            .and_return(folders_info['dockerfile_path']))
 
         if is_oversized:
             with pytest.raises(koji.BuildError) as exc_info:
@@ -1316,10 +1327,6 @@ class TestBuilder(object):
                                                          demux=orchestrator)
 
         (flexmock(task)
-            .should_receive('fetchDockerfile')
-            .with_args(src['src'], 'build-tag')
-            .and_return(folders_info['dockerfile_path']))
-        (flexmock(task)
             .should_receive('_write_incremental_logs'))
         if orchestrator:
             (flexmock(task)
@@ -1335,6 +1342,11 @@ class TestBuilder(object):
             additional_args['triggered_after_koji_task'] = 12345
         if skip_build:
             additional_args['skip_build'] = True
+
+        (flexmock(task)
+            .should_receive('fetchDockerfile')
+            .with_args(src['src'], 'build-tag', additional_args.get('scratch'))
+            .and_return(folders_info['dockerfile_path']))
 
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,
@@ -1464,17 +1476,18 @@ class TestBuilder(object):
                                                          workdir='workdir',
                                                          demux=True)
 
+        build_args = deepcopy(additional_args)
+        build_args['git_branch'] = 'working'
+
         (flexmock(task)
             .should_receive('fetchDockerfile')
-            .with_args(src['src'], 'build-tag')
+            .with_args(src['src'], 'build-tag', build_args.get('scratch'))
             .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
         (flexmock(task)
             .should_receive('_write_demultiplexed_logs'))
 
-        build_args = deepcopy(additional_args)
-        build_args['git_branch'] = 'working'
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,
                                      koji_task_id=koji_task_id,
@@ -1530,9 +1543,12 @@ class TestBuilder(object):
                                                          workdir='workdir',
                                                          demux=orchestrator)
 
+        build_args = deepcopy(additional_args)
+        build_args['git_branch'] = 'working'
+
         (flexmock(task)
             .should_receive('fetchDockerfile')
-            .with_args(src['src'], 'build-tag')
+            .with_args(src['src'], 'build-tag', build_args.get('scratch'))
             .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
@@ -1543,8 +1559,6 @@ class TestBuilder(object):
             (flexmock(task)
                 .should_receive('_write_combined_log'))
 
-        build_args = deepcopy(additional_args)
-        build_args['git_branch'] = 'working'
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,
                                      koji_task_id=koji_task_id,
@@ -1762,7 +1776,7 @@ class TestBuilder(object):
 
         (flexmock(task)
             .should_receive('fetchDockerfile')
-            .with_args(src['src'], 'build-tag')
+            .with_args(src['src'], 'build-tag', build_opts.get('scratch'))
             .and_return(folders_info['dockerfile_path']))
 
         (flexmock(task)
@@ -1892,9 +1906,11 @@ class TestBuilder(object):
                                                          workdir='workdir',
                                                          demux=orchestrator)
 
+        build_args = {'git_branch': 'working'}
+
         (flexmock(task)
             .should_receive('fetchDockerfile')
-            .with_args(src['src'], 'build-tag')
+            .with_args(src['src'], 'build-tag', build_args.get('scratch'))
             .and_return(folder_info['dockerfile_path']))
         (flexmock(task)
             .should_receive('_write_incremental_logs'))
@@ -1905,7 +1921,6 @@ class TestBuilder(object):
             (flexmock(task)
                 .should_receive('_write_combined_log'))
 
-        build_args = {'git_branch': 'working'}
         task._osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                      src=src,
                                      koji_task_id=koji_task_id,
@@ -1943,12 +1958,13 @@ class TestBuilder(object):
                                                          workdir=str(tmpdir),
                                                          demux=True)
 
+        build_args = {'git_branch': 'working'}
+
         (flexmock(task)
             .should_receive('fetchDockerfile')
-            .with_args(src['src'], 'build-tag')
+            .with_args(src['src'], 'build-tag', build_args.get('scratch'))
             .and_return(folders_info['dockerfile_path']))
 
-        build_args = {'git_branch': 'working'}
         osbs = self._mock_osbs(koji_build_id=koji_build_id,
                                src=src,
                                koji_task_id=koji_task_id,

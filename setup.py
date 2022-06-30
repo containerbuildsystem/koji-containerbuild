@@ -10,7 +10,7 @@ class TitoDist(sdist):
         subprocess.call(["tito", "build", "--tgz", "-o", "."])
 
 
-def get_requirements(requirements_file='requirements.txt'):
+def _get_requirements(requirements_file='requirements.txt'):
     with open(requirements_file) as f:
         return [
             line.split('#')[0].rstrip()
@@ -18,6 +18,12 @@ def get_requirements(requirements_file='requirements.txt'):
             if not line.startswith('#')
             ]
 
+def _install_requirements():
+    if sys.version_info[0] >= 3:
+        requirements = _get_requirements('requirements.txt')
+    else:
+        requirements = _get_requirements('requirements-py2.txt')
+    return requirements
 
 class Py2CLIOnlyBuild(build_py):
 
@@ -46,7 +52,7 @@ setup(
         'koji_containerbuild',
         'koji_containerbuild.plugins',
     ],
-    install_requires=get_requirements(),
+    install_requires=_install_requirements(),
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Topic :: Internet",

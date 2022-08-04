@@ -17,7 +17,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 """
 from __future__ import absolute_import
 
-from copy import deepcopy
+from copy import copy, deepcopy
 import os
 import os.path
 import signal
@@ -544,15 +544,15 @@ class TestBuilder(object):
         err_msg = str(exc_info.value)
         assert all(label in err_msg for label in missing_labels)
 
-    @pytest.mark.parametrize(('pkg_info', 'failure'), (
-        (None, 'not in list for tag'),
-        ({'blocked': True}, 'is blocked for'),
-        ({'blocked': False}, None),
-    ))
-    def test_osbs_build(self, tmpdir, pkg_info, failure):
+    def _run_build_container_handler(
+            self, tmpdir, pkg_info, task_opts,
+            osbs_build_args=None,
+            failure=None, koji_build_id=999):
+
         koji_task_id = 123
         last_event_id = 456
-        koji_build_id = 999
+        if osbs_build_args is None:
+            osbs_build_args = task_opts
 
         session = self._mock_session(last_event_id, koji_task_id, pkg_info)
         folders_info = self._mock_folders(str(tmpdir))
@@ -566,31 +566,47 @@ class TestBuilder(object):
                                                          options=options,
                                                          workdir='workdir')
 
-        build_args = {'git_branch': 'working'}
-
         (flexmock(task)
-            .should_receive('fetchDockerfile')
-            .with_args(src['src'], 'build-tag', build_args.get('scratch'))
-            .and_return(folders_info['dockerfile_path']))
+         .should_receive('fetchDockerfile')
+         .with_args(src['src'], 'build-tag', osbs_build_args.get('scratch'))
+         .and_return(folders_info['dockerfile_path']))
         (flexmock(task)
-            .should_receive('_write_incremental_logs'))
+         .should_receive('_write_incremental_logs'))
         (flexmock(task)
-            .should_receive('_write_logs'))
+         .should_receive('_write_logs'))
 
         self._mock_osbs(koji_build_id=koji_build_id,
                         src=src,
                         koji_task_id=koji_task_id,
                         build_not_started=bool(failure),
-                        create_build_args=deepcopy(build_args))
+                        create_build_args=deepcopy(osbs_build_args))
 
         if failure:
             with pytest.raises(koji.BuildError) as exc:
-                task.handler(src['src'], 'target', opts=build_args)
+                task.handler(src['src'], 'target', opts=task_opts)
 
             assert failure in str(exc.value)
 
         else:
-            task_response = task.handler(src['src'], 'target', opts=build_args)
+            return task.handler(src['src'], 'target', opts=task_opts)
+
+    @pytest.mark.parametrize(('pkg_info', 'failure'), (
+        (None, 'not in list for tag'),
+        ({'blocked': True}, 'is blocked for'),
+        ({'blocked': False}, None),
+    ))
+    def test_osbs_build(self, tmpdir, pkg_info, failure):
+        koji_build_id = 999
+
+        task_opts = {'git_branch': 'working'}
+
+        if failure:
+            self._run_build_container_handler(
+                tmpdir, pkg_info, task_opts,
+                failure=failure)
+        else:
+            task_response = self._run_build_container_handler(
+                tmpdir, pkg_info, task_opts, koji_build_id=koji_build_id)
 
             assert task_response == {
                 'repositories': ['unique-repo', 'primary-repo'],
@@ -1574,7 +1590,9 @@ class TestBuilder(object):
           'release': None,
           'flatpak': False,
           'compose_ids': None,
-          'signing_intent': None},
+          'signing_intent': None,
+          'skip_build': False,  # keep for BW compatibility
+          },
          True),
 
         ({'scratch': False,
@@ -1843,3 +1861,27 @@ class TestBuilder(object):
         found_user_warnings = task_response['user_warnings']
 
         assert sorted(found_user_warnings) == sorted(expected_user_warnings)
+
+    @pytest.mark.parametrize("skip", [True, False])
+    def test_skip_build(self, tmpdir, caplog, skip):
+        """Test if an error is returned for deprecated skip build functionality
+
+        This option must be kept for BW compatibility but fail only when it's set to True
+        """
+        task_opts = {'git_branch': 'working', 'skip_build': skip}
+        osbs_build_args = copy(task_opts)
+        del osbs_build_args['skip_build']  # koji-c opt only
+
+        pkg_info = {'blocked': False}
+        if skip:
+            self._run_build_container_handler(
+                tmpdir, pkg_info, task_opts,
+                osbs_build_args=osbs_build_args,
+                failure="'skip_build' functionality has been removed",
+            )
+        else:
+            self._run_build_container_handler(
+                tmpdir, pkg_info, task_opts,
+                osbs_build_args=osbs_build_args,
+            )
+            assert "deprecated option 'skip_build' in build params" in caplog.text

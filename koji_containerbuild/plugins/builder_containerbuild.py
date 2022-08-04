@@ -704,6 +704,12 @@ class BuildContainerTask(BaseContainerTask):
                         "possible names, see REACTOR_CONFIG in "
                         "orchestrator.log."
                     },
+                    "skip_build": {
+                        "type": "boolean",
+                        "description": "[DEPRECATED] "
+                        "Skip build, just update buildconfig for autorebuild "
+                        "and don't start build"
+                    },
                     "userdata": {
                         "type": "object",
                         "description": "User defined dictionary containing custom metadata",
@@ -746,10 +752,17 @@ class BuildContainerTask(BaseContainerTask):
                         scratch=None, isolated=None, yum_repourls=None,
                         branch=None, koji_parent_build=None, release=None,
                         flatpak=False, signing_intent=None, compose_ids=None,
+                        skip_build=None,  # BW compatibility
                         dependency_replacements=None, operator_csv_modifications_url=None,
                         userdata=None):
         if not yum_repourls:
             yum_repourls = []
+
+        if skip_build is not None:
+            if skip_build:
+                raise koji.BuildError("'skip_build' functionality has been removed")
+            else:
+                self.logger.warning("deprecated option 'skip_build' in build params")
 
         this_task = self.session.getTaskInfo(self.id)
         self.logger.debug("This task: %r", this_task)
@@ -986,6 +999,7 @@ class BuildContainerTask(BaseContainerTask):
             signing_intent=opts.get('signing_intent', None),
             compose_ids=opts.get('compose_ids', None),
             operator_csv_modifications_url=opts.get('operator_csv_modifications_url'),
+            skip_build=opts.get('skip_build', None),
             userdata=opts.get('userdata', None),
         )
 

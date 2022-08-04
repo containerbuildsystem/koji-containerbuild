@@ -1,3 +1,4 @@
+attrs==21.4.*;python_version<"3"  # pytest-dep, pin to py2 supported version
 flexmock==0.10.4
 pytest>=4.1.0
 pytest-cov

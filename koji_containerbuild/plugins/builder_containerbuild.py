@@ -401,6 +401,7 @@ class BaseContainerTask(BaseTaskHandler):
             raise ContainerError(msg)
 
         user_warnings = UserWarningsStore()
+        final_platforms = []
 
         for task_run_name, line in logs:
             if METADATA_TAG in line:
@@ -424,6 +425,16 @@ class BaseContainerTask(BaseTaskHandler):
                 task_platform = 'noarch'
 
             if task_platform not in logfiles:
+                if task_platform != 'noarch' and not final_platforms:
+                    final_platforms = self.osbs().get_final_platforms(build_id)
+
+                    if not final_platforms:
+                        self.logger.info("Couldn't obtain final platforms from build")
+                        final_platforms = platforms
+
+                if (task_platform != 'noarch') and (task_platform not in final_platforms):
+                    continue
+
                 log_filename = f'{task_platform}.log'
                 logfiles[task_platform] = open(os.path.join(logs_dir, log_filename),
                                                'wb')

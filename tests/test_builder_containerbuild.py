@@ -150,7 +150,11 @@ class TestBuilder(object):
 
     @pytest.mark.parametrize('get_logs_exc', [None, Exception('error')])
     @pytest.mark.parametrize('build_not_finished', [False, True])
-    def test_write_logs(self, tmpdir, get_logs_exc, build_not_finished):
+    @pytest.mark.parametrize('final_platforms', [('x86_64', 's390x', 'ppc64le', 'aarch64'),
+                                                 ('x86_64', 'ppc64le'),
+                                                 ('s390x',),
+                                                 None])
+    def test_write_logs(self, tmpdir, get_logs_exc, build_not_finished, final_platforms):
         cct = builder_containerbuild.BuildContainerTask(id=1,
                                                         method='buildContainer',
                                                         params='params',
@@ -158,7 +162,7 @@ class TestBuilder(object):
                                                         options='options',
                                                         workdir='workdir')
 
-        log_entries = [
+        all_log_entries = [
             ('task_run', 'line 1'),
             ('task_run', 'line 2'),
             ('task_run', 'log - USER_WARNING - {"message": "message"}'),
@@ -181,6 +185,22 @@ class TestBuilder(object):
             ('task_run', builder_containerbuild.METADATA_TAG + ' x.log')
         ]
 
+        platforms = ['x86_64', 's390x', 'ppc64le', 'aarch64']
+
+        log_platforms = final_platforms
+        if not log_platforms:
+            log_platforms = platforms
+
+        log_entries = []
+        for log_entry in all_log_entries:
+            if log_entry[0] == 'task_run':
+                log_entries.append(log_entry)
+                continue
+
+            for plat in log_platforms:
+                if plat.replace('_', '-') in log_entry[0]:
+                    log_entries.append(log_entry)
+
         koji_tmpdir = tmpdir.mkdir('koji')
         koji_tmpdir.join('x.log').write('line 1\n'
                                         'line 2\n')
@@ -202,7 +222,9 @@ class TestBuilder(object):
         else:
             (flexmock(osbs.api.OSBS)
                 .should_receive('get_build_logs')
-                .and_return(log_entries))
+                .and_return(all_log_entries))
+            (flexmock(osbs.api.OSBS)
+                .should_receive('get_final_platforms').and_return(final_platforms))
 
         if get_logs_exc:
             exc_type = builder_containerbuild.ContainerError
@@ -213,7 +235,6 @@ class TestBuilder(object):
         else:
             exc_type = exc_msg = None
 
-        platforms = ['x86_64', 's390x', 'ppc64le', 'aarch64']
         if exc_type is not None:
             with pytest.raises(exc_type) as exc_info:
                 cct._write_incremental_logs('id', str(tmpdir), platforms=platforms)
@@ -222,7 +243,7 @@ class TestBuilder(object):
             cct._write_incremental_logs('id', str(tmpdir), platforms=platforms)
 
         if get_logs_exc is None:
-            self._check_logfiles(log_entries, str(tmpdir), platforms=platforms)
+            self._check_logfiles(log_entries, str(tmpdir), platforms=log_platforms)
 
     @pytest.mark.parametrize('get_logs_exc', [None, Exception('error')])
     @pytest.mark.parametrize('build_not_finished', [False, True])

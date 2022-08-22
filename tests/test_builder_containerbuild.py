@@ -133,6 +133,11 @@ class TestBuilder(object):
             else:
                 if task_platform != 'noarch':
                     log_filename = f'{task_platform}'
+                    if log_filename not in log_contents:
+                        log_contents[log_name] = '{old}{new}\n'.format(
+                            old=log_contents.get(log_name, ''),
+                            new=f'{task_platform} build has started. '
+                                'Check platform specific logs')
                 else:
                     log_filename = log_name
                 log_contents[log_filename] = '{old}{new}\n'.format(
@@ -203,7 +208,12 @@ class TestBuilder(object):
 
         koji_tmpdir = tmpdir.mkdir('koji')
         koji_tmpdir.join('x.log').write('line 1\n'
-                                        'line 2\n')
+                                        'line 2\n'
+                                        'x86_64 build has started. Check platform specific logs\n'
+                                        's390x build has started. Check platform specific logs\n'
+                                        'ppc64le build has started. Check platform specific logs\n'
+                                        'aarch64 build has started. Check platform specific logs\n'
+                                        )
 
         (flexmock(koji.pathinfo)
             .should_receive('work')

@@ -435,6 +435,10 @@ class BaseContainerTask(BaseTaskHandler):
                 if (task_platform != 'noarch') and (task_platform not in final_platforms):
                     continue
 
+                if task_platform != 'noarch':
+                    logfiles['noarch'].write(bytearray(f'{task_platform} build has started. '
+                                                       'Check platform specific logs\n', 'utf-8'))
+
                 log_filename = f'{task_platform}.log'
                 logfiles[task_platform] = open(os.path.join(logs_dir, log_filename),
                                                'wb')

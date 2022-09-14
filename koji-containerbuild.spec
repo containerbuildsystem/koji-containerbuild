@@ -16,7 +16,7 @@
 
 Name:           koji-containerbuild
 Version:        1.0.dev0
-Release:        9%{?dist}
+Release:        10%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
 

@@ -61,7 +61,7 @@ def _get_task_opts_and_opts(opts, priority, channel):
 
 
 @export
-def buildContainer(src, target, opts=None, priority=None, channel='container'):
+def buildContainer(src, target, opts=None, priority=None, channel='container-binary'):
     """Create a container build task
 
     :param str src: The source URI for this container.

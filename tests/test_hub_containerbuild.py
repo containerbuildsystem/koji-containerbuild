@@ -43,7 +43,7 @@ def mocked_koji_context(admin_perms=False):
 
 
 def mocked_kojihub_for_task(src, target, opts,
-                            priority=None, channel='container',
+                            priority=None, channel='container-binary',
                             should_receive_task=True, build_type='buildContainer'):
     """
     Mock koji-hub for testing hub_containerbuild (replace

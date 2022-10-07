@@ -28,9 +28,6 @@ from koji.plugin import export_cli
 from koji_cli.lib import _, activate_session, parse_arches, \
                          OptionParser, watch_tasks, _running_in_bg
 
-# matches hub's buildContainer parameter channel
-DEFAULT_CHANNEL = 'container'
-
 
 def print_value(value, level, indent, suffix=''):
     offset = ' ' * level * indent
@@ -96,8 +93,8 @@ def parse_arguments(options, args, flatpak):
     parser.add_option("--git-branch", metavar="GIT_BRANCH",
                       help=_("Git branch"))
     parser.add_option("--channel-override",
-                      help=_("Use a non-standard channel [default: %default]"),
-                      default=DEFAULT_CHANNEL)
+                      help=_("Use a non-standard channel"),
+                      default=None)
     parser.add_option("--signing-intent",
                       help=_("Signing intent of the ODCS composes [default: %default]."
                              " Cannot be used with --compose-id"),
@@ -192,8 +189,8 @@ def parse_source_arguments(options, args):
     parser.add_option("--background", action="store_true",
                       help=_("Run the build at a lower priority"))
     parser.add_option("--channel-override",
-                      help=_("Use a non-standard channel [default: %default]"),
-                      default=DEFAULT_CHANNEL)
+                      help=_("Use a non-standard channel"),
+                      default=None)
     parser.add_option("--signing-intent",
                       help=_("Signing intent of the ODCS composes [default: %default]."),
                       default=None, dest='signing_intent')
@@ -253,13 +250,17 @@ def handle_build(options, session, args, flatpak=False, sourcebuild=False):
         # relative to koji.PRIO_DEFAULT
         priority = 5
 
+    kwargs = {
+        'priority': priority,
+    }
+    if build_opts.channel_override:
+        kwargs['channel'] = build_opts.channel_override
+
     if sourcebuild:
-        task_id = session.buildSourceContainer(target, opts, priority=priority,
-                                               channel=build_opts.channel_override)
+        task_id = session.buildSourceContainer(target, opts, **kwargs)
     else:
         source = args[1]
-        task_id = session.buildContainer(source, target, opts, priority=priority,
-                                         channel=build_opts.channel_override)
+        task_id = session.buildContainer(source, target, opts, **kwargs)
 
     if not build_opts.quiet:
         print("Created task: %s" % task_id)

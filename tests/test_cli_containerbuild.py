@@ -36,7 +36,6 @@ def mock_session(target,
                  task_success=True,
                  task_result=None,
                  priority=None,
-                 channel=cli_containerbuild.DEFAULT_CHANNEL,
                  running_in_background=False):
     """
     Mock a session for the purposes of cli_containerbuild.handle_build()
@@ -79,12 +78,12 @@ def mock_session(target,
     (session
         .should_receive('buildContainer')
         .with_args(source, target, dict,
-                   priority=priority, channel=channel)
+                   priority=priority)
         .and_return(task_id))
     (session
         .should_receive('buildSourceContainer')
         .with_args(target, dict,
-                   priority=priority, channel=channel)
+                   priority=priority)
         .and_return(task_id))
     (session
         .should_receive('getTaskResult')
@@ -279,14 +278,13 @@ class TestCLI(object):
 
         build_opts, parsed_args, opts, _ = parse_arguments(options, test_args, flatpak=flatpak)
         expected_quiet = quiet or options.quiet
-        expected_channel = channel_override or 'container'
 
         assert build_opts.scratch == scratch
         assert build_opts.wait == wait
         assert build_opts.quiet == expected_quiet
         assert build_opts.yum_repourls == repo_url
         assert build_opts.git_branch == git_branch
-        assert build_opts.channel_override == expected_channel
+        assert build_opts.channel_override == channel_override
         assert build_opts.release == release
         assert build_opts.compose_ids == compose_ids
         assert build_opts.signing_intent == signing_intent
@@ -362,14 +360,13 @@ class TestCLI(object):
 
         build_opts, parsed_args, opts, _ = parse_source_arguments(options, test_args)
         expected_quiet = quiet or options.quiet
-        expected_channel = channel_override or 'container'
 
         assert build_opts.scratch == scratch
         assert build_opts.wait == wait
         assert build_opts.quiet == expected_quiet
         assert build_opts.koji_build_id == koji_build_id
         assert build_opts.koji_build_nvr == koji_build_nvr
-        assert build_opts.channel_override == expected_channel
+        assert build_opts.channel_override == channel_override
         assert build_opts.signing_intent == signing_intent
 
         assert parsed_args == expected_args

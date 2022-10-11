@@ -15,7 +15,7 @@
 %global module koji_containerbuild
 
 Name:           koji-containerbuild
-Version:        1.0.0
+Version:        1.0.1
 Release:        1%{?dist}
 Summary:        Koji support for building layered container images
 Group:          Applications/System
@@ -157,6 +157,9 @@ rm -rf $RPM_BUILD_ROOT
 
 
 %changelog
+* Tue Oct 11 2022 Martin Basti <mbasti@redhat.com> 1.0.1-1
+- new upstream release: 1.0.1
+
 * Thu Oct 06 2022 rcerven <rcerven@redhat.com> 1.0.0-1
 - new upstream release: 1.0.0
 

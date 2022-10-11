@@ -327,16 +327,17 @@ class BaseContainerTask(BaseTaskHandler):
             if not self._osbs:
                 msg = 'Could not successfully instantiate `osbs`'
                 raise ContainerError(msg)
-            self.setup_osbs_logging()
+            log_level = logging.DEBUG if os_conf.get_verbosity() else logging.INFO
+            self.setup_osbs_logging(level=log_level)
 
         return self._osbs
 
-    def setup_osbs_logging(self):
+    def setup_osbs_logging(self, level=logging.INFO):
         # Setting handler more than once will cause duplicated log lines.
         # Log handler will persist in child process.
         if not self._log_handler_added:
             osbs_logger = logging.getLogger(osbs.__name__)
-            osbs_logger.setLevel(logging.INFO)
+            osbs_logger.setLevel(level)
             log_file = os.path.join(self.resultdir(), 'osbs-client.log')
             handler = logging.FileHandler(filename=log_file)
             # process (PID) is useful because a buildContainer task forks main process

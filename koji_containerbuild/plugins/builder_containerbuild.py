@@ -522,7 +522,10 @@ class BaseContainerTask(BaseTaskHandler):
         try:
             return self._handle_build_response(build_id, platforms)
         finally:
-            self.osbs().remove_build(build_id)
+            try:
+                self.osbs().remove_build(build_id)
+            except Exception as error:
+                self.logger.warning("Failed to remove build %s : %s", build_id, error)
 
     def _handle_build_response(self, build_id, platforms: list = None):
         self.logger.debug("OSBS build id: %r", build_id)

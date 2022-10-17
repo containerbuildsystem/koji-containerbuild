@@ -54,7 +54,7 @@ Summary:    Builder plugin that extend Koji to build layered container images
 Group:      Applications/System
 Requires:   koji-builder >= 1.26
 Requires:   koji-containerbuild
-Requires:   osbs-client
+Requires:   osbs-client >= 2.0.0
 Requires:   python3-dockerfile-parse
 Requires:   python3-jsonschema
 Requires:   python3-six

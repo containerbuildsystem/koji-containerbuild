@@ -25,7 +25,7 @@ from __future__ import absolute_import, print_function
 import json
 
 from koji.plugin import export_cli
-from koji_cli.lib import _, activate_session, parse_arches, \
+from koji_cli.lib import activate_session, parse_arches, \
                          OptionParser, watch_tasks, _running_in_bg
 
 
@@ -60,90 +60,86 @@ def print_task_result(task_id, result, weburl):
 def parse_arguments(options, args, flatpak):
     "Build a container"
     if flatpak:
-        usage = _("usage: %prog flatpak-build [options] target <scm url>")
+        usage = "usage: %prog flatpak-build [options] target <scm url>"
     else:
-        usage = _("usage: %prog container-build [options] target <scm url or "
-                  "archive path>")
-    usage += _("\n(Specify the --help global option for a list of other help "
-               "options)")
+        usage = "usage: %prog container-build [options] target <scm url or archive path>"
+    usage += "\n(Specify the --help global option for a list of other help options)"
     parser = OptionParser(usage=usage)
     parser.add_option("--scratch", action="store_true",
-                      help=_("Perform a scratch build"))
+                      help="Perform a scratch build")
     parser.add_option("--isolated", action="store_true",
-                      help=_("Perform an isolated build"))
+                      help="Perform an isolated build")
     parser.add_option("--arch-override",
-                      help=_("Requires --scratch or --isolated. Limit a build to "
-                             "the specified arches. Comma or space separated."))
+                      help="Requires --scratch or --isolated. Limit a build to the specified "
+                           "arches. Comma or space separated.")
     parser.add_option("--wait", action="store_true",
-                      help=_("Wait on the build, even if running in the "
-                             "background"))
+                      help="Wait on the build, even if running in the background")
     parser.add_option("--nowait", action="store_false", dest="wait",
-                      help=_("Don't wait on build"))
+                      help="Don't wait on build")
     parser.add_option("--quiet", action="store_true",
-                      help=_("Do not print the task information"),
+                      help="Do not print the task information",
                       default=options.quiet)
     parser.add_option("--background", action="store_true",
-                      help=_("Run the build at a lower priority"))
+                      help="Run the build at a lower priority")
     parser.add_option("--replace-dependency", dest='dependency_replacements',
                       metavar="pkg_manager:name:version[:new_name]", action='append',
-                      help=_("Cachito dependency replacement. May be used multiple times."))
+                      help="Cachito dependency replacement. May be used multiple times.")
     parser.add_option("--repo-url", dest='yum_repourls', metavar="REPO_URL",
                       action='append',
-                      help=_("URL of yum repo file. May be used multiple times."))
+                      help="URL of yum repo file. May be used multiple times.")
     parser.add_option("--git-branch", metavar="GIT_BRANCH",
-                      help=_("Git branch"))
+                      help="Git branch")
     parser.add_option("--channel-override",
-                      help=_("Use a non-standard channel"),
+                      help="Use a non-standard channel",
                       default=None)
     parser.add_option("--signing-intent",
-                      help=_("Signing intent of the ODCS composes [default: %default]."
-                             " Cannot be used with --compose-id"),
+                      help="Signing intent of the ODCS composes [default: %default]. "
+                           "Cannot be used with --compose-id",
                       default=None, dest='signing_intent')
     parser.add_option("--compose-id",
-                      help=_("ODCS composes used. May be used multiple times. Cannot be"
-                             " used with --signing-intent"),
+                      help="ODCS composes used. May be used multiple times. Cannot be "
+                           "used with --signing-intent",
                       dest='compose_ids', action='append', metavar="COMPOSE_ID", type="int")
     parser.add_option("--userdata",
-                      help=_("JSON dictionary of user defined custom metadata"))
+                      help="JSON dictionary of user defined custom metadata")
     parser.add_option("--operator-csv-modifications-url",
-                      help=_("URL to JSON file with operator CSV modification"),
+                      help="URL to JSON file with operator CSV modification",
                       action='store', default=None,
                       dest='operator_csv_modifications_url', metavar='URL',
                       )
     parser.add_option("--release",
-                      help=_("Set release value"))
+                      help="Set release value")
     parser.add_option("--koji-parent-build",
-                      help=_("Overwrite parent image with image from koji build"))
+                      help="Overwrite parent image with image from koji build")
     build_opts, args = parser.parse_args(args)
     if len(args) != 2:
-        parser.error(_("Exactly two arguments (a build target and a SCM URL) "
-                       "are required"))
+        parser.error("Exactly two arguments (a build target and a SCM URL) are required")
 
     source = args[1]
     if '://' not in source:
-        parser.error(_("scm URL does not look like an URL to a source repository"))
+        parser.error("scm URL does not look like an URL to a source repository")
     if '#' not in source:
-        parser.error(_("scm URL must be of the form <url_to_repository>#<revision>)"))
+        parser.error("scm URL must be of the form <url_to_repository>#<revision>)")
 
     if build_opts.arch_override and not (build_opts.scratch or build_opts.isolated):
-        parser.error(_("--arch-override is only allowed for --scratch or --isolated builds"))
+        parser.error("--arch-override is only allowed for --scratch or --isolated builds")
 
     if build_opts.signing_intent and build_opts.compose_ids:
-        parser.error(_("--signing-intent cannot be used with --compose-id"))
+        parser.error("--signing-intent cannot be used with --compose-id")
 
     if build_opts.operator_csv_modifications_url and not build_opts.isolated:
-        parser.error(_("Only --isolated builds support option --operator-csv-modifications-url"))
+        parser.error("Only --isolated builds support option --operator-csv-modifications-url")
 
     if (
         build_opts.operator_csv_modifications_url and
         '://' not in build_opts.operator_csv_modifications_url
     ):
-        parser.error(_("Value provided to --operator-csv-modifications-url "
-                       "does not look like an URL"))
+        parser.error("Value provided to --operator-csv-modifications-url "
+                     "does not look like an URL")
 
     opts = {}
     if not build_opts.git_branch:
-        parser.error(_("git-branch must be specified"))
+        parser.error("git-branch must be specified")
 
     keys = ('scratch', 'yum_repourls', 'git_branch', 'signing_intent', 'compose_ids',
             'userdata', 'dependency_replacements', 'operator_csv_modifications_url', 'release',
@@ -153,7 +149,7 @@ def parse_arguments(options, args, flatpak):
         opts['flatpak'] = True
 
     if build_opts.isolated and build_opts.scratch:
-        parser.error(_("Build cannot be both isolated and scratch"))
+        parser.error("Build cannot be both isolated and scratch")
 
     if build_opts.arch_override:
         opts['arch_override'] = parse_arches(build_opts.arch_override)
@@ -172,45 +168,41 @@ def parse_arguments(options, args, flatpak):
 
 def parse_source_arguments(options, args):
     "Build a source container"
-    usage = _("usage: %prog source-container-build [options] target")
-    usage += _("\n(Specify the --help global option for a list of other help "
-               "options)")
+    usage = "usage: %prog source-container-build [options] target"
+    usage += "\n(Specify the --help global option for a list of other help options)"
     parser = OptionParser(usage=usage)
     parser.add_option("--scratch", action="store_true",
-                      help=_("Perform a scratch build"))
+                      help="Perform a scratch build")
     parser.add_option("--wait", action="store_true",
-                      help=_("Wait on the build, even if running in the "
-                             "background"))
+                      help="Wait on the build, even if running in the background")
     parser.add_option("--nowait", action="store_false", dest="wait",
-                      help=_("Don't wait on build"))
+                      help="Don't wait on build")
     parser.add_option("--quiet", action="store_true",
-                      help=_("Do not print the task information"),
+                      help="Do not print the task information",
                       default=options.quiet)
     parser.add_option("--background", action="store_true",
-                      help=_("Run the build at a lower priority"))
+                      help="Run the build at a lower priority")
     parser.add_option("--channel-override",
-                      help=_("Use a non-standard channel"),
+                      help="Use a non-standard channel",
                       default=None)
     parser.add_option("--signing-intent",
-                      help=_("Signing intent of the ODCS composes [default: %default]."),
+                      help="Signing intent of the ODCS composes [default: %default].",
                       default=None, dest='signing_intent')
     parser.add_option("--koji-build-id",
                       type="int",
-                      help=_("Koji build id for sources, "
-                             "is required or koji-build-nvr is provided"))
+                      help="Koji build id for sources, is required or koji-build-nvr is provided")
     parser.add_option("--koji-build-nvr",
-                      help=_("Koji build nvr for sources, "
-                             "is required or koji-build-id is provided"))
+                      help="Koji build nvr for sources, is required or koji-build-id is provided")
     parser.add_option("--userdata",
-                      help=_("JSON dictionary of user defined custom metadata"))
+                      help="JSON dictionary of user defined custom metadata")
 
     build_opts, args = parser.parse_args(args)
 
     if len(args) != 1:
-        parser.error(_("Exactly one argument (a build target) is required"))
+        parser.error("Exactly one argument (a build target) is required")
 
     if not (build_opts.koji_build_id or build_opts.koji_build_nvr):
-        parser.error(_("at least one of --koji-build-id and --koji-build-nvr has to be specified"))
+        parser.error("at least one of --koji-build-id and --koji-build-nvr has to be specified")
 
     opts = {}
     keys = ('scratch', 'signing_intent', 'koji_build_id', 'koji_build_nvr', 'userdata')
@@ -237,13 +229,12 @@ def handle_build(options, session, args, flatpak=False, sourcebuild=False):
     target = args[0]
     build_target = session.getBuildTarget(target)
     if not build_target:
-        parser.error(_("Unknown build target: %s" % target))
+        parser.error("Unknown build target: %s" % target)
     dest_tag = session.getTag(build_target['dest_tag'])
     if not dest_tag:
-        parser.error(_("Unknown destination tag: %s" %
-                       build_target['dest_tag_name']))
+        parser.error("Unknown destination tag: %s" % build_target['dest_tag_name'])
     if dest_tag['locked'] and not build_opts.scratch:
-        parser.error(_("Destination tag %s is locked" % dest_tag['name']))
+        parser.error("Destination tag %s is locked" % dest_tag['name'])
 
     priority = None
     if build_opts.background:

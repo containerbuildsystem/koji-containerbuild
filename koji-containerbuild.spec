@@ -63,7 +63,8 @@ Requires:   python3-six
 %description builder
 Builder plugin that extend Koji to communicate with OpenShift build system and
 build layered container images.
-%endif # with_python3
+# end with_python3
+%endif
 
 %package -n python2-%{name}-cli
 License:    LGPLv2

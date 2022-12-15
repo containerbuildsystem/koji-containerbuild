@@ -384,6 +384,10 @@ class TestBuilder(object):
         if not create_build_args.get('userdata'):
             create_build_args.pop('userdata', None)
 
+        if not source:
+            create_build_args['default_buildtime_limit'] = 10800
+            create_build_args['max_buildtime_limit'] = 21600
+
         if source:
             (flexmock(osbs.api.OSBS)
                 .should_receive('create_source_container_build')

@@ -830,6 +830,11 @@ class BuildContainerTask(BaseContainerTask):
         if release:
             create_build_args['release'] = release
 
+        create_build_args['default_buildtime_limit'] =\
+            self.osbs().os_conf.get_default_buildtime_limit()
+        create_build_args['max_buildtime_limit'] =\
+            self.osbs().os_conf.get_max_buildtime_limit()
+
         try:
             create_method = self.osbs().create_binary_container_build
             self.logger.debug("Starting %s with params: '%s",

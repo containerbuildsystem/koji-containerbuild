@@ -710,7 +710,13 @@ class BuildContainerTask(BaseContainerTask):
                         "items": {
                             "type": "integer"
                         },
-                        "description": "ODCS composes used."
+                        "description": "A list of ODCS composes to use "
+                        "during the build. If you do not set this parameter, "
+                        "OSBS will request its own ODCS composes based on "
+                        "the compose settings in container.yaml. If you set "
+                        "this parameter, OSBS will not request its own ODCS "
+                        "composes, and it will only use the exact ones you "
+                        "specify here."
                     },
                     "signing_intent": {
                         "type": ["string", "null"],

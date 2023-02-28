@@ -720,8 +720,8 @@ class BuildContainerTask(BaseContainerTask):
                         "value is null (the default), the server will use the "
                         "signing intent of the compose_ids you specify, or "
                         "default_signing_intent. To view the full list of "
-                        "possible names, see REACTOR_CONFIG in "
-                        "orchestrator.log."
+                        "possible names, see atomic_reactor.config in "
+                        "osbs-build.log."
                     },
                     "skip_build": {
                         "type": "boolean",
@@ -1087,8 +1087,8 @@ class BuildSourceContainerTask(BaseContainerTask):
                         "value is null (the default), the server will use the "
                         "signing intent of the compose_ids you specify, or "
                         "default_signing_intent. To view the full list of "
-                        "possible names, see REACTOR_CONFIG in "
-                        "orchestrator.log."
+                        "possible names, see atomic_reactor.config in "
+                        "osbs-build.log."
                     },
                     "userdata": {
                         "type": "object",

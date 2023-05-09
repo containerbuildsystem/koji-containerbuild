@@ -23,7 +23,6 @@ import os.path
 import signal
 from textwrap import dedent
 
-import json
 import jsonschema
 import koji
 import pytest
@@ -1715,41 +1714,6 @@ class TestBuilder(object):
             build_opts['signing_intent'] = signing_intent
 
         task.handler('target', build_opts)
-
-    @pytest.mark.parametrize('build_results', (
-        {},
-        {
-            'remote_sources': [{'name': None, 'url': 'stub_url'}],
-            'repositories': {'unique': [], 'primary': [], 'floating': []},
-            'koji-build-id': 1,
-        },
-    ))
-    def test_upload_build_results_as_annotations(self, tmpdir, build_results):
-        def mock_incremental_upload(session, fname, fd, uploadpath, logger=None):
-            with open(os.path.join(uploadpath, fname), 'w') as f:
-                data = fd.read()
-                f.write(data)
-
-        builder_containerbuild.incremental_upload = mock_incremental_upload
-
-        annotations_file = tmpdir.join('build_annotations.json').strpath
-        cct = builder_containerbuild.BuildContainerTask(id=1,
-                                                        method='buildContainer',
-                                                        params='params',
-                                                        session='session',
-                                                        workdir='workdir',
-                                                        options='options')
-        flexmock(cct).should_receive('getUploadPath').and_return(tmpdir.strpath)
-
-        cct.upload_build_results_as_annotations(build_results)
-
-        if not build_results:
-            assert not os.path.exists(annotations_file)
-        else:
-            assert os.path.exists(annotations_file)
-            with open(annotations_file) as f:
-                build_annotations = json.load(f)
-            assert build_annotations == {'remote_sources': '[{"name": null, "url": "stub_url"}]'}
 
     def test_raise_OsbsValidationException(self, tmpdir):
         df_content = """\

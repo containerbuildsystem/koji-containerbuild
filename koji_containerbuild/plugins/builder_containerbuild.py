@@ -35,9 +35,7 @@ import shutil
 from distutils.version import LooseVersion
 
 import dockerfile_parse
-import json
 import jsonschema
-from six import StringIO
 
 # this is present because in some versions of koji, callback functions assume koji.plugin is
 # imported
@@ -93,9 +91,6 @@ LABEL_NAME_MAP = {
 
 
 METADATA_TAG = "platform:_metadata_"
-
-ANNOTATIONS_FILENAME = 'build_annotations.json'
-ANNOTATIONS_FROM_BUILD_RESULTS = ['remote_sources']
 
 DEFAULT_CONF_BINARY_SECTION = "default_binary"
 DEFAULT_CONF_SOURCE_SECTION = "default_source"
@@ -504,20 +499,6 @@ class BaseContainerTask(BaseTaskHandler):
             raise koji.BuildError("package (container)  %s is blocked for tag %s" %
                                   (name, target_info['dest_tag_name']))
 
-    def upload_build_results_as_annotations(self, build_results):
-        task_annotations = {
-            # For backward compatibility reasons, the values should be JSON-encoded
-            name: json.dumps(build_results[name])
-            for name in ANNOTATIONS_FROM_BUILD_RESULTS
-            if name in build_results
-        }
-        if task_annotations:
-            f = StringIO()
-            json.dump(task_annotations, f, sort_keys=True, indent=4)
-            f.seek(0)
-            incremental_upload(self.session, ANNOTATIONS_FILENAME, f, self.getUploadPath(),
-                               logger=self.logger)
-
     def handle_build_response(self, build_id, platforms: list = None):
         try:
             return self._handle_build_response(build_id, platforms)
@@ -568,9 +549,6 @@ class BaseContainerTask(BaseTaskHandler):
 
         has_succeeded = self.osbs().build_has_succeeded(build_id)
         build_results = self.osbs().get_build_results(build_id)
-
-        if has_succeeded:
-            self.upload_build_results_as_annotations(build_results)
 
         self.logger.debug("OSBS build finished with status: %s. Build "
                           "response: %s.", self.osbs().get_build_reason(build_id),

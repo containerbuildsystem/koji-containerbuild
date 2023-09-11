@@ -28,7 +28,7 @@ jobs:
             engine: docker
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -47,7 +47,7 @@ jobs:
 
     steps:
       - name: Check out repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Run flake8 for Python 3
         uses: containerbuildsystem/actions/flake8@master
@@ -58,7 +58,7 @@ jobs:
 
     steps:
       - name: Check out repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Run markdownlint
         uses: containerbuildsystem/actions/markdownlint@master
@@ -81,7 +81,7 @@ jobs:
             engine: docker
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - run: ./test.sh
         env:
@@ -97,7 +97,7 @@ jobs:
 
     steps:
       - name: Check out repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Run ShellCheck
         uses: containerbuildsystem/actions/shellcheck@master

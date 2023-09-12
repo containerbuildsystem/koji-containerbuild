@@ -1,3 +1,4 @@
 jsonschema
 six
 koji>=1.26
+otel-extensions

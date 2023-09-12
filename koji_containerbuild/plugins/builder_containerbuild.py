@@ -316,9 +316,10 @@ class BaseContainerTask(BaseTaskHandler):
                 conf_section = DEFAULT_CONF_BINARY_SECTION
             elif self.method in BuildSourceContainerTask.Methods:
                 conf_section = DEFAULT_CONF_SOURCE_SECTION
-
             os_conf = Configuration(conf_section=conf_section)
-            self._osbs = OSBS(os_conf)
+            # figure out where to get this from brew otel
+            traceparent = ''
+            self._osbs = OSBS(os_conf, traceparent=traceparent)
             if not self._osbs:
                 msg = 'Could not successfully instantiate `osbs`'
                 raise ContainerError(msg)
@@ -1011,6 +1012,13 @@ class BuildContainerTask(BaseContainerTask):
             userdata=opts.get('userdata', None),
         )
 
+        # need brew instrumentation to be completed to know where we will get this from
+        traceparent = ''
+        if traceparent:
+            kwargs.update({
+                'traceparent': traceparent,
+            })
+
         result = self.createContainer(**kwargs)
 
         self.logger.debug("Result: %r", result)
@@ -1189,6 +1197,13 @@ class BuildSourceContainerTask(BaseContainerTask):
             signing_intent=opts.get('signing_intent', None),
             userdata=opts.get('userdata', None),
         )
+
+        # need brew instrumentation to be completed to know where we will get this from
+        traceparent = ''
+        if traceparent:
+            kwargs.update({
+                'traceparent': traceparent,
+            })
 
         result = self.createSourceContainer(**kwargs)
 

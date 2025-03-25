@@ -95,6 +95,9 @@ METADATA_TAG = "platform:_metadata_"
 DEFAULT_CONF_BINARY_SECTION = "default_binary"
 DEFAULT_CONF_SOURCE_SECTION = "default_source"
 
+REMOTE_SOURCES_LOGNAME = 'remote-sources'
+REMOTE_SOURCES_TASKNAME = 'binary-container-hermeto'
+
 
 def _concat(iterables):
     return [x for iterable in iterables for x in iterable]
@@ -441,9 +444,22 @@ class BaseContainerTask(BaseTaskHandler):
 
             outfile = logfiles[task_platform]
 
+            remote_sources_log = None
+            if task_run_name == REMOTE_SOURCES_TASKNAME:
+                if REMOTE_SOURCES_LOGNAME in logfiles:
+                    remote_sources_log = logfiles[REMOTE_SOURCES_LOGNAME]
+                else:
+                    log_filename = f"{REMOTE_SOURCES_LOGNAME}.log"
+                    remote_sources_log = open(os.path.join(logs_dir, log_filename),
+                                              'wb')
+                    logfiles[REMOTE_SOURCES_LOGNAME] = remote_sources_log
+
             try:
                 outfile.write(("%s\n" % line).encode('utf-8'))
                 outfile.flush()
+                if remote_sources_log:
+                    remote_sources_log.write(("%s\n" % line).encode('utf-8'))
+                    remote_sources_log.flush()
             except Exception as error:
                 msg = "Exception (%s) while writing build logs: %s" % (type(error), error)
                 raise ContainerError(msg)
